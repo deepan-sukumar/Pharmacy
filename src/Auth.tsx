@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Stethoscope, ArrowLeft, ShieldCheck, Lock, Mail, CheckCircle2, ChevronRight,
-  Boxes, Activity, Clock3, AlertTriangle, BrainCircuit
+  Boxes, Activity, Clock3, AlertTriangle, BrainCircuit, Sparkles
 } from 'lucide-react';
 import type { Role } from './data';
 
@@ -11,7 +11,6 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
   onSwitch: () => void;
   onBack: () => void;
 }) {
-  const [role, setRole] = useState<Role>('Pharmacist');
   const [email, setEmail] = useState('pharmacist@demo.com');
   const [password, setPassword] = useState('demo123');
   const [remember, setRemember] = useState(true);
@@ -30,26 +29,25 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(role);
+    onLogin('Pharmacist');
   };
 
-  const setDemoRole = (targetRole: Role) => {
-    setRole(targetRole);
-    setEmail(targetRole === 'Administrator' ? 'admin@demo.com' : 'pharmacist@demo.com');
+  const handleDemoAccess = () => {
+    setEmail('pharmacist@demo.com');
     setPassword('demo123');
-    onLogin(targetRole);
+    onLogin('Pharmacist');
   };
 
   const tiltX = mousePos.y * -6;
   const tiltY = mousePos.x * 6;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: '520px 1fr', background: '#FFFFFF', color: '#111111', fontFamily: 'Inter, -apple-system, sans-serif' }}>
+    <div className="auth-container-grid">
       
-      {/* LEFT SIDE: Premium Compact Login / Signup Form */}
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '40px 48px', borderRight: '1px solid #F1F2EE', background: '#FFFFFF', zIndex: 10 }}>
+      {/* LEFT SIDE: Premium Compact Pharmacist Login / Signup Form */}
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 'clamp(24px, 5vw, 48px)', borderRight: '1px solid #F1F2EE', background: '#FFFFFF', zIndex: 10 }}>
         <div>
-          <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#5F6360', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 32, transition: 'color 0.15s' }}
+          <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#5F6360', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 28, transition: 'color 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.color = '#111111')}
             onMouseLeave={e => (e.currentTarget.style.color = '#5F6360')}>
             <ArrowLeft size={16}/> Back to Home
@@ -65,26 +63,18 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
             </span>
           </div>
 
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 99, background: '#E8EFE7', color: '#526350', fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12 }}>
+            <Sparkles size={13}/> Pharmacist Portal
+          </div>
+
           <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111111', letterSpacing: '-0.5px' }}>
-            {mode === 'signin' ? 'Welcome to PharmaFlow' : 'Create your PharmaFlow account'}
+            {mode === 'signin' ? 'Welcome to PharmaFlow' : 'Create Pharmacist Account'}
           </h1>
           <p style={{ fontSize: 13.5, color: '#5F6360', marginTop: 6, marginBottom: 28, lineHeight: 1.5 }}>
             {mode === 'signin'
-              ? 'Secure access to your pharmacy medication operations.'
-              : 'Set up secure access to your pharmacy operations.'}
+              ? 'Secure access to your pharmacy medication and dispensing operations.'
+              : 'Set up your pharmacy workspace with full batch and audit traceability.'}
           </p>
-
-          {/* Role selector */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, background: '#F1F2EE', padding: 4, borderRadius: 12, marginBottom: 24 }}>
-            <button type="button" onClick={() => { setRole('Pharmacist'); setEmail('pharmacist@demo.com'); }}
-              style={{ padding: '9.5px 12px', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: 'pointer', transition: 'all 0.15s', background: role === 'Pharmacist' ? 'white' : 'transparent', color: role === 'Pharmacist' ? '#111111' : '#5F6360', boxShadow: role === 'Pharmacist' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none' }}>
-              Pharmacist
-            </button>
-            <button type="button" onClick={() => { setRole('Administrator'); setEmail('admin@demo.com'); }}
-              style={{ padding: '9.5px 12px', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: 'pointer', transition: 'all 0.15s', background: role === 'Administrator' ? 'white' : 'transparent', color: role === 'Administrator' ? '#111111' : '#5F6360', boxShadow: role === 'Administrator' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none' }}>
-              Administrator
-            </button>
-          </div>
 
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
@@ -111,21 +101,16 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
             </div>
 
             <button type="submit" className="btn btn-sage" style={{ width: '100%', justifyContent: 'center', height: 44, borderRadius: 12, fontSize: 14, fontWeight: 700, marginTop: 6, background: '#6B8068', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(107,128,104,0.25)' }}>
-              {mode === 'signin' ? 'Sign In' : 'Create Account'} <ChevronRight size={16}/>
+              {mode === 'signin' ? 'Sign In as Pharmacist' : 'Create Pharmacist Account'} <ChevronRight size={16}/>
             </button>
           </form>
 
-          {/* Quick Demo Access Buttons */}
+          {/* Quick Demo Access Button */}
           <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #F1F2EE' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#888888', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 12 }}>Quick Demo Access</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <button type="button" className="btn btn-secondary" style={{ justifyContent: 'center', fontSize: 12.5, height: 38, borderRadius: 10, background: '#F7F7F4', border: '1px solid #E5E5E0', color: '#111111', fontWeight: 600 }} onClick={() => setDemoRole('Pharmacist')}>
-                Pharmacist Demo
-              </button>
-              <button type="button" className="btn btn-secondary" style={{ justifyContent: 'center', fontSize: 12.5, height: 38, borderRadius: 10, background: '#F7F7F4', border: '1px solid #E5E5E0', color: '#111111', fontWeight: 600 }} onClick={() => setDemoRole('Administrator')}>
-                Administrator Demo
-              </button>
-            </div>
+            <p style={{ fontSize: 11, fontWeight: 800, color: '#888888', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 12 }}>One-Click Instant Access</p>
+            <button type="button" className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', fontSize: 13, height: 40, borderRadius: 11, background: '#F7F7F4', border: '1px solid #E5E5E0', color: '#111111', fontWeight: 700 }} onClick={handleDemoAccess}>
+              Launch Pharmacist Demo Workspace
+            </button>
           </div>
         </div>
 
@@ -139,7 +124,7 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
       </div>
 
       {/* RIGHT SIDE: Bright Premium Interactive Product Showcase */}
-      <div style={{ background: '#F7F7F4', padding: '48px 56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
+      <div className="auth-showcase-panel" style={{ background: '#F7F7F4', padding: '48px 56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
         
         {/* Top Header Text */}
         <div style={{ position: 'relative', zIndex: 10, maxWidth: 620 }}>
@@ -150,7 +135,7 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
             Pharmacy Medication Dispensing Audit & Expiry Tracking Portal
           </h2>
           <p style={{ fontSize: 14, color: '#5F6360', lineHeight: 1.6, maxWidth: 540 }}>
-            Complete traceability, intelligent expiry monitoring and secure dispensing audit — all in one platform.
+            Complete traceability, intelligent expiry monitoring, and secure dispensing audit — all in one platform.
           </p>
         </div>
 
@@ -216,7 +201,7 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 14, borderBottom: '1px solid #F1F2EE' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#6B8068' }} />
-                <span style={{ fontSize: 12, fontWeight: 800, color: '#111111' }}>PharmaFlow Control Center</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#111111' }}>PharmaFlow Pharmacist Control Center</span>
               </div>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#52796F', background: '#E6EFEA', padding: '3px 8px', borderRadius: 99 }}>LIVE SYSTEM</span>
             </div>
@@ -260,8 +245,8 @@ export default function Auth({ mode = 'signin', onLogin, onSwitch, onBack }: {
             'FEFO Dispensing & Batch Management',
             'Real-Time Expiry & Low Stock Alerts',
             'Complete Dispensing Audit Trail',
-            'AI Pharmacy Intelligence',
-            'Role-Based Administration'
+            'AI Pharmacy Intelligence & Simulation',
+            'Batch Recall & Supplier Return Protection'
           ].map(item => (
             <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, color: '#222222' }}>
               <CheckCircle2 size={16} color="#6B8068" style={{ flexShrink: 0 }} /> {item}

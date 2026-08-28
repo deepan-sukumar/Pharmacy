@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Stethoscope, ArrowRight, CheckCircle2, ShieldCheck, Boxes, ClipboardList,
-  RotateCcw, BrainCircuit, Bell, BarChart3, Lock, PackagePlus,
+  RotateCcw, BrainCircuit, Bell, BarChart3, PackagePlus,
   ChevronRight, Activity, FileText, SlidersHorizontal, AlertTriangle,
   Clock3, Sparkles
 } from 'lucide-react';
@@ -47,9 +47,17 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
     },
     {
       id: "dispensing",
-      title: "Medication Dispensing Audit",
-      desc: "Record every dispensing transaction with medicine, batch, quantity, customer and pharmacist details.",
+      title: "Medication Dispensing",
+      desc: "Dispense prescriptions with automatic FEFO batch selection and dosage safety checks.",
       icon: ClipboardList,
+      badge: "PATIENT SAFETY",
+      preview: { metric: "42 Dispensed", label: "Logged Today", detail: "100% FEFO Compliance" }
+    },
+    {
+      id: "audit",
+      title: "Dispensing Audit Trail",
+      desc: "Record every dispensing transaction with medicine, batch, quantity, customer and pharmacist details.",
+      icon: ShieldCheck,
       badge: "COMPLIANCE",
       preview: { metric: "1,240", label: "Dispensed Records Logged", detail: "100% Audit Readiness" }
     },
@@ -68,14 +76,6 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       icon: BrainCircuit,
       badge: "INTELLIGENCE",
       preview: { metric: "Instant", label: "Data Queries & Answers", detail: "Trained on Pharmacy Operations" }
-    },
-    {
-      id: "audit-ai",
-      title: "AI Audit Conversation",
-      desc: "Explore dispensing activity and identify unusual or important transactions through natural dialogue.",
-      icon: FileText,
-      badge: "SMART AUDIT",
-      preview: { metric: "100% Trace", label: "Full Transaction Analysis", detail: "Automated Compliance Checks" }
     },
     {
       id: "simulator",
@@ -108,14 +108,6 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       icon: BarChart3,
       badge: "ANALYTICS",
       preview: { metric: "+12.4%", label: "Dispensing Efficiency Growth", detail: "Custom Automated Reports" }
-    },
-    {
-      id: "admin",
-      title: "Security & Administration",
-      desc: "Manage users, permissions, audit trails, backups and system controls securely.",
-      icon: Lock,
-      badge: "ENTERPRISE GRADE",
-      preview: { metric: "AES-256", label: "Encrypted Daily Backups", detail: "Role-Based Access Control" }
     }
   ];
 
@@ -139,7 +131,7 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
             </span>
           </div>
           <nav style={{ display: 'flex', gap: 28, alignItems: 'center' }} className="hidden-mobile">
-            {['Capabilities', 'Workflow', 'AI Intelligence', 'Security'].map(item => (
+            {['Capabilities', 'Workflow', 'AI Intelligence', 'Compliance'].map(item => (
               <a key={item} href={`#${item.toLowerCase().replace(/\s+/g, '-')}`} style={{ fontSize: 13.5, fontWeight: 600, color: '#555555', textDecoration: 'none', transition: 'color 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#111111')}
                 onMouseLeave={e => (e.currentTarget.style.color = '#555555')}>
@@ -229,7 +221,7 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: 64 }}>
             <p className="section-eyebrow">PRODUCT CAPABILITIES</p>
-            <h2 className="section-title">11 Core Pillars of Smart Pharmacy Operations</h2>
+            <h2 className="section-title">10 Core Pillars of Smart Pharmacy Operations</h2>
             <p className="section-desc" style={{ margin: '14px auto 0' }}>Explore every capability designed to protect inventory, simplify audits, and elevate patient care.</p>
           </div>
 
@@ -350,6 +342,37 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Compliance / Safety Section */}
+      <section id="compliance" className="section-padding" style={{ background: '#FAFAF8' }}>
+        <div className="container">
+          <div style={{ textAlign: 'center', marginBottom: 56 }}>
+            <p className="section-eyebrow">AUDIT & COMPLIANCE</p>
+            <h2 className="section-title">Built for Pharmacists, Designed for Safety</h2>
+            <p className="section-desc" style={{ margin: '12px auto 0' }}>Every prescription dispensed is logged with immutable batch traceability and patient safety verification.</p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+            {[
+              { icon: ShieldCheck, title: "100% Dispensing Audit Trail", desc: "Every transaction logs medicine, batch, quantity, patient name, and pharmacist ID." },
+              { icon: Activity, title: "FEFO First-Expiry Enforcement", desc: "Prevents dispensing younger stock while near-expiry batches remain available." },
+              { icon: RotateCcw, title: "Instant Batch Recall Isolation", desc: "Quarantine hazardous or recalled batches instantly across the entire inventory." },
+              { icon: FileText, title: "Automated Regulatory Reports", desc: "One-click generation of audit-ready compliance and stock movement logs." }
+            ].map((c, i) => {
+              const Icon = c.icon;
+              return (
+                <div key={i} className="card card-hover" style={{ padding: 24, background: 'white' }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                    <Icon size={20} color="#526350" />
+                  </div>
+                  <h4 style={{ fontSize: 15, fontWeight: 800, color: '#111111', marginBottom: 8 }}>{c.title}</h4>
+                  <p style={{ fontSize: 13, color: '#555555', lineHeight: 1.6 }}>{c.desc}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
