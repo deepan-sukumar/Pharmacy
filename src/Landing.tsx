@@ -5,15 +5,16 @@ import {
   ChevronRight, Activity, FileText, SlidersHorizontal, AlertTriangle,
   Clock3, Sparkles
 } from 'lucide-react';
+import { ThemeToggle } from './components/ThemeContext';
 
-export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void; onGetStarted:()=>void }) {
+export default function Landing({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: () => void }) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [activeFeature, setActiveFeature] = useState(0);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       const { innerWidth, innerHeight } = window;
-      const x = (e.clientX / innerWidth - 0.5) * 2; // -1 to 1
+      const x = (e.clientX / innerWidth - 0.5) * 2;
       const y = (e.clientY / innerHeight - 0.5) * 2;
       setMousePos({ x, y });
     };
@@ -22,10 +23,10 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
   }, []);
 
   const heroFloatingBadges = [
-    { title: "12 Near Expiry", sub: "Action required", icon: Clock3, color: "#B5838D", bg: "#F7EDE2", pos: { top: "18%", left: "6%" }, move: 15 },
-    { title: "7 Low Stock", sub: "Paracetamol & 6 more", icon: AlertTriangle, color: "#B86B35", bg: "#F7EBE3", pos: { top: "62%", left: "4%" }, move: -20 },
-    { title: "Audit Complete", sub: "100% Traceability", icon: ShieldCheck, color: "#52796F", bg: "#E6EFEA", pos: { top: "22%", right: "6%" }, move: -15 },
-    { title: "AI Risk Detected", sub: "VD102 overstock predicted", icon: BrainCircuit, color: "#6B8068", bg: "#E8EFE7", pos: { top: "66%", right: "4%" }, move: 22 }
+    { title: "12 Near Expiry", sub: "Action required", icon: Clock3, color: "#D97706", bg: "var(--warning-light)", pos: { top: "18%", left: "6%" }, move: 15 },
+    { title: "7 Low Stock", sub: "Paracetamol & 6 more", icon: AlertTriangle, color: "#EA580C", bg: "var(--orange-light)", pos: { top: "62%", left: "4%" }, move: -20 },
+    { title: "Audit Complete", sub: "100% Traceability", icon: ShieldCheck, color: "#16A34A", bg: "var(--success-light)", pos: { top: "22%", right: "6%" }, move: -15 },
+    { title: "AI Risk Detected", sub: "VD102 overstock predicted", icon: BrainCircuit, color: "#0D9488", bg: "var(--primary-light)", pos: { top: "66%", right: "4%" }, move: 22 }
   ];
 
   const features = [
@@ -98,8 +99,8 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       title: "Supplier Returns",
       desc: "Identify eligible batches and manage supplier return workflows seamlessly.",
       icon: PackagePlus,
-      badge: "PROCUREMENT",
-      preview: { metric: "₹ 1.82L", label: "Eligible Returns Processed", detail: "4 Pending Supplier Claims" }
+      badge: "SUPPLIER RECOVERY",
+      preview: { metric: "₹ 82,400", label: "Processed Returns", detail: "4 Active Credit Notes" }
     },
     {
       id: "reports",
@@ -112,60 +113,60 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
   ];
 
   return (
-    <div style={{ background: '#FFFFFF', color: '#111111', minHeight: '100vh', overflowX: 'hidden' }}>
-      {/* Top Banner */}
-      <div style={{ background: '#111111', color: '#FAFAF8', padding: '10px 16px', textAlign: 'center', fontSize: 13, fontWeight: 500 }}>
-        <span>✨ Commercial-Grade Healthcare SaaS · </span>
-        <span style={{ color: '#A3B19B', fontWeight: 600 }}>Pharmacy Medication Dispensing Audit & Expiry Tracking Portal</span>
+    <div style={{ background: 'var(--bg)', color: 'var(--text)', minHeight: '100vh', transition: 'background-color 0.2s ease, color 0.2s ease' }}>
+      {/* Top Notice Bar */}
+      <div style={{ background: '#0F172A', color: '#F8FAFC', padding: '10px 24px', fontSize: 12.5, fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+          Live Pharmacy Dispensing, Expiry Prediction & Regulatory Compliance System
+        </span>
+        <span style={{ color: '#94A3B8' }}>·</span>
+        <button onClick={onGetStarted} style={{ background: 'none', border: 'none', color: '#5EEAD4', cursor: 'pointer', fontWeight: 700, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          Launch Portal <ArrowRight size={13}/>
+        </button>
       </div>
 
-      {/* Navigation */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #EFEFEA' }}>
+      {/* Navigation Header */}
+      <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'var(--surface)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)' }}>
         <div className="container" style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: '#6B8068', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(107,128,104,0.25)' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px var(--primary-glow)' }}>
               <Stethoscope size={20} color="white" />
             </div>
-            <span style={{ fontWeight: 900, fontSize: 19, letterSpacing: '-0.5px', color: '#111111' }}>
-              PHARMA<span style={{ color: '#6B8068' }}>FLOW</span>
+            <span style={{ fontWeight: 900, fontSize: 19, letterSpacing: '-0.5px', color: 'var(--text)' }}>
+              PHARMA<span style={{ color: 'var(--primary)' }}>FLOW</span>
             </span>
           </div>
           <nav style={{ display: 'flex', gap: 28, alignItems: 'center' }} className="hidden-mobile">
             {['Capabilities', 'Workflow', 'AI Intelligence', 'Compliance'].map(item => (
-              <a key={item} href={`#${item.toLowerCase().replace(/\s+/g, '-')}`} style={{ fontSize: 13.5, fontWeight: 600, color: '#555555', textDecoration: 'none', transition: 'color 0.15s' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#111111')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#555555')}>
+              <a key={item} href={`#${item.toLowerCase().replace(/\s+/g, '-')}`} style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-3)', textDecoration: 'none', transition: 'color 0.15s' }}>
                 {item}
               </a>
             ))}
           </nav>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button className="btn btn-secondary" style={{ padding: '9px 18px' }} onClick={onSignIn}>Sign In</button>
-            <button className="btn btn-sage" style={{ padding: '9px 20px' }} onClick={onGetStarted}>Launch Demo <ArrowRight size={14}/></button>
+            <ThemeToggle size="sm" />
+            <button className="btn btn-secondary" style={{ padding: '8px 16px' }} onClick={onSignIn}>Sign In</button>
+            <button className="btn btn-teal" style={{ padding: '8px 18px' }} onClick={onGetStarted}>Launch Demo <ArrowRight size={14}/></button>
           </div>
         </div>
       </header>
 
       {/* Interactive Floating Hero Section */}
-      <section style={{ position: 'relative', padding: '110px 0 100px', background: 'radial-gradient(ellipse at 50% 10%, #F0F4EF 0%, #FAFAF8 65%, #FFFFFF 100%)', borderBottom: '1px solid #EFEFEA' }}>
-        
+      <section style={{ position: 'relative', padding: '100px 0 90px', borderBottom: '1px solid var(--border)', background: 'radial-gradient(ellipse at top, var(--primary-light) 0%, var(--bg) 70%)' }}>
         {/* Parallax Floating Metric Badges */}
         {heroFloatingBadges.map((b, i) => {
           const Icon = b.icon;
           const offsetX = mousePos.x * b.move;
           const offsetY = mousePos.y * b.move;
           return (
-            <div key={i} className="hidden-mobile"
+            <div key={i} className="hidden-mobile card"
               style={{
                 position: 'absolute',
                 ...b.pos,
                 transform: `translate3d(${offsetX}px, ${offsetY}px, 0px)`,
                 transition: 'transform 0.1s ease-out',
-                background: 'white',
-                border: '1px solid #E5E5E0',
-                borderRadius: 14,
                 padding: '12px 18px',
-                boxShadow: '0 12px 32px rgba(0,0,0,0.06), 0 2px 6px rgba(0,0,0,0.02)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
@@ -176,40 +177,40 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
                 <Icon size={18} color={b.color} />
               </div>
               <div>
-                <p style={{ fontWeight: 800, fontSize: 13.5, color: '#111111', lineHeight: 1.2 }}>{b.title}</p>
-                <p style={{ fontSize: 11.5, color: '#666666', marginTop: 2 }}>{b.sub}</p>
+                <p style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--text)', lineHeight: 1.2 }}>{b.title}</p>
+                <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{b.sub}</p>
               </div>
             </div>
           );
         })}
 
-        <div className="container" style={{ textAlign: 'center', maxWidth: 860, position: 'relative', zIndex: 15 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 18px', borderRadius: 99, background: '#E8EFE7', color: '#526350', fontSize: 12.5, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 28, boxShadow: '0 2px 8px rgba(107,128,104,0.1)' }}>
-            <Sparkles size={15}/> Healthcare Technology Platform
+        <div className="container" style={{ textAlign: 'center', maxWidth: 880, position: 'relative', zIndex: 15 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 99, background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary-border)', fontSize: 12, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 24 }}>
+            <Sparkles size={14}/> Healthcare Technology Platform
           </div>
 
-          <h1 style={{ fontSize: 'clamp(34px, 4.8vw, 58px)', fontWeight: 900, letterSpacing: '-1.4px', lineHeight: 1.1, color: '#111111', marginBottom: 24 }}>
+          <h1 style={{ fontSize: 'clamp(32px, 4.5vw, 54px)', fontWeight: 900, letterSpacing: '-1.4px', lineHeight: 1.15, color: 'var(--text)', marginBottom: 20 }}>
             Pharmacy Medication Dispensing Audit & Expiry Tracking Portal
           </h1>
 
-          <p style={{ fontSize: 18.5, color: '#444444', lineHeight: 1.65, maxWidth: 720, margin: '0 auto 40px', fontWeight: 400 }}>
+          <p style={{ fontSize: 17, color: 'var(--text-3)', lineHeight: 1.65, maxWidth: 700, margin: '0 auto 36px', fontWeight: 400 }}>
             One intelligent platform to manage medicines, monitor batch expiry, track dispensing activity and maintain a complete pharmacy audit trail.
           </p>
 
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button className="btn btn-sage" style={{ padding: '14px 32px', fontSize: 15, borderRadius: 14 }} onClick={onGetStarted}>
-              Explore PharmaFlow <ArrowRight size={16}/>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn-teal" style={{ padding: '12px 28px', fontSize: 14.5, borderRadius: 12 }} onClick={onGetStarted}>
+              Explore PharmaFlow <ArrowRight size={15}/>
             </button>
-            <button className="btn btn-secondary" style={{ padding: '14px 32px', fontSize: 15, borderRadius: 14 }} onClick={onSignIn}>
+            <button className="btn btn-secondary" style={{ padding: '12px 28px', fontSize: 14.5, borderRadius: 12 }} onClick={onSignIn}>
               Launch Demo
             </button>
           </div>
 
-          {/* Clean Trust Indicators */}
-          <div style={{ display: 'flex', gap: 28, justifyContent: 'center', marginTop: 56, flexWrap: 'wrap', fontSize: 13.5, color: '#555555', fontWeight: 600 }}>
+          {/* Trust Indicators */}
+          <div style={{ display: 'flex', gap: 24, justifyContent: 'center', marginTop: 48, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-3)', fontWeight: 600 }}>
             {['FEFO Batch Expiry Logic', 'Complete Audit Traceability', 'AI Operational Intelligence', 'Zero Data Loss Protocol'].map(item => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CheckCircle2 size={17} color="#6B8068" /> {item}
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <CheckCircle2 size={16} color="var(--primary)" /> {item}
               </div>
             ))}
           </div>
@@ -217,7 +218,7 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       </section>
 
       {/* Floating Interactive Product Showcase Grid */}
-      <section id="capabilities" className="section-padding" style={{ background: '#FAFAF8' }}>
+      <section id="capabilities" className="section-padding" style={{ background: 'var(--bg-alt)' }}>
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: 64 }}>
             <p className="section-eyebrow">PRODUCT CAPABILITIES</p>
@@ -236,13 +237,13 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
                 <div key={f.id}
                   onMouseEnter={() => setActiveFeature(i)}
                   style={{
-                    background: 'white',
-                    border: `1.5px solid ${isHovered ? '#6B8068' : '#EFEFEA'}`,
+                    background: 'var(--surface)',
+                    border: `1.5px solid ${isHovered ? 'var(--primary)' : 'var(--border)'}`,
                     borderRadius: 20,
                     padding: 28,
                     transition: 'all 0.2s ease-out',
                     transform: `perspective(1000px) rotateX(${cardTiltX}deg) rotateY(${cardTiltY}deg) translateY(${isHovered ? '-4px' : '0px'})`,
-                    boxShadow: isHovered ? '0 20px 40px rgba(0,0,0,0.08), 0 4px 12px rgba(107,128,104,0.1)' : '0 2px 10px rgba(0,0,0,0.02)',
+                    boxShadow: isHovered ? '0 20px 40px rgba(0,0,0,0.1), 0 4px 12px var(--primary-glow)' : 'var(--shadow-sm)',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
@@ -252,23 +253,23 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
                   
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                      <div style={{ width: 46, height: 46, borderRadius: 12, background: isHovered ? '#6B8068' : '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}>
-                        <Icon size={22} color={isHovered ? 'white' : '#526350'} />
+                      <div style={{ width: 46, height: 46, borderRadius: 12, background: isHovered ? 'var(--primary)' : 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}>
+                        <Icon size={22} color={isHovered ? 'white' : 'var(--primary)'} />
                       </div>
                       <span className="chip badge-blue" style={{ fontSize: 11 }}>{f.badge}</span>
                     </div>
 
-                    <h3 style={{ fontSize: 17, fontWeight: 800, color: '#111111', marginBottom: 10 }}>{f.title}</h3>
-                    <p style={{ fontSize: 14, color: '#555555', lineHeight: 1.6, marginBottom: 24 }}>{f.desc}</p>
+                    <h3 style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', marginBottom: 10 }}>{f.title}</h3>
+                    <p style={{ fontSize: 14, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 24 }}>{f.desc}</p>
                   </div>
 
                   {/* Small Live Realistic Data Preview */}
-                  <div style={{ background: '#F4F4F0', borderRadius: 12, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #E5E5E0' }}>
+                  <div style={{ background: 'var(--bg-alt)', borderRadius: 12, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border)' }}>
                     <div>
-                      <p style={{ fontSize: 16, fontWeight: 900, color: '#111111' }}>{f.preview.metric}</p>
-                      <p style={{ fontSize: 11.5, color: '#666666', fontWeight: 500 }}>{f.preview.label}</p>
+                      <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)' }}>{f.preview.metric}</p>
+                      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500 }}>{f.preview.label}</p>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6B8068', background: 'white', padding: '4px 8px', borderRadius: 6, border: '1px solid #E5E5E0' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', background: 'var(--surface)', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}>
                       {f.preview.detail}
                     </span>
                   </div>
@@ -280,7 +281,7 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       </section>
 
       {/* How It Works Section */}
-      <section id="workflow" style={{ padding: '90px 0', background: '#F4F4F0', borderTop: '1px solid #E5E5E0', borderBottom: '1px solid #E5E5E0' }}>
+      <section id="workflow" style={{ padding: '90px 0', background: 'var(--bg)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <p className="section-eyebrow">HOW IT WORKS</p>
@@ -298,10 +299,10 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
               { step: "06", title: "Alerts", desc: "Automated warnings for stock thresholds & recalls." },
               { step: "07", title: "Action", desc: "Execute supplier returns, reorders, or quarantine." }
             ].map((w, i) => (
-              <div key={i} className="card card-hover" style={{ padding: 22, textAlign: 'center', background: 'white', border: '1px solid #E5E5E0', borderRadius: 16 }}>
-                <span style={{ fontSize: 22, fontWeight: 900, color: '#6B8068', display: 'block', marginBottom: 8 }}>{w.step}</span>
-                <h4 style={{ fontSize: 14, fontWeight: 800, color: '#111111', marginBottom: 6 }}>{w.title}</h4>
-                <p style={{ fontSize: 12, color: '#666666', lineHeight: 1.5 }}>{w.desc}</p>
+              <div key={i} className="card card-hover" style={{ padding: 22, textAlign: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }}>
+                <span style={{ fontSize: 22, fontWeight: 900, color: 'var(--primary)', display: 'block', marginBottom: 8 }}>{w.step}</span>
+                <h4 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', marginBottom: 6 }}>{w.title}</h4>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>{w.desc}</p>
               </div>
             ))}
           </div>
@@ -311,33 +312,33 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       {/* AI Assistant Showcase */}
       <section id="ai-intelligence" className="section-padding">
         <div className="container">
-          <div style={{ borderRadius: 24, background: '#111111', color: 'white', padding: '64px 48px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)' }}>
+          <div style={{ borderRadius: 24, background: '#0F172A', color: 'white', padding: '64px 48px', boxShadow: '0 24px 60px rgba(0,0,0,0.25)', border: '1px solid #1E293B' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'center' }}>
               <div>
-                <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', color: '#A3B19B', textTransform: 'uppercase' }}>AI PHARMACY ASSISTANT</span>
+                <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', color: '#5EEAD4', textTransform: 'uppercase' }}>AI PHARMACY ASSISTANT</span>
                 <h2 style={{ fontSize: 36, fontWeight: 900, color: 'white', margin: '14px 0 18px', letterSpacing: '-0.6px', lineHeight: 1.2 }}>
                   Natural language insights for smarter pharmacy management
                 </h2>
-                <p style={{ fontSize: 16, color: '#CCCCCC', lineHeight: 1.65, marginBottom: 32 }}>
+                <p style={{ fontSize: 16, color: '#94A3B8', lineHeight: 1.65, marginBottom: 32 }}>
                   Ask questions in plain language to get instant answers about stock levels, expiring batches, supplier returns, and dispensing history.
                 </p>
-                <button className="btn btn-sage" style={{ padding: '13px 28px', fontSize: 14.5, borderRadius: 12 }} onClick={onGetStarted}>
+                <button className="btn btn-teal" style={{ padding: '13px 28px', fontSize: 14.5, borderRadius: 12 }} onClick={onGetStarted}>
                   Ask AI Assistant <ChevronRight size={16}/>
                 </button>
               </div>
 
               {/* Mock AI Conversation Floating Box */}
-              <div style={{ background: '#1A1A1A', borderRadius: 18, border: '1px solid #333333', padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14, borderBottom: '1px solid #2A2A2A' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: '#6B8068', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ background: '#1E293B', borderRadius: 18, border: '1px solid #334155', padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14, borderBottom: '1px solid #334155' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: '#0D9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <BrainCircuit size={18} color="white" />
                   </div>
                   <span style={{ fontWeight: 700, fontSize: 14, color: 'white' }}>PharmaFlow AI</span>
                 </div>
-                <div style={{ background: '#252525', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#DDDDDD' }}>
+                <div style={{ background: '#0F172A', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#E2E8F0', border: '1px solid #334155' }}>
                   "Which medicines expire within 30 days?"
                 </div>
-                <div style={{ background: '#6B8068', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: 'white', lineHeight: 1.5 }}>
+                <div style={{ background: '#0D9488', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: 'white', lineHeight: 1.5 }}>
                   "12 batches identified. Vitamin D3 60K (VD102) is highest priority with 180 units expiring in 12 days."
                 </div>
               </div>
@@ -347,7 +348,7 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       </section>
 
       {/* Compliance / Safety Section */}
-      <section id="compliance" className="section-padding" style={{ background: '#FAFAF8' }}>
+      <section id="compliance" className="section-padding" style={{ background: 'var(--bg-alt)' }}>
         <div className="container">
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <p className="section-eyebrow">AUDIT & COMPLIANCE</p>
@@ -364,12 +365,12 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
             ].map((c, i) => {
               const Icon = c.icon;
               return (
-                <div key={i} className="card card-hover" style={{ padding: 24, background: 'white' }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                    <Icon size={20} color="#526350" />
+                <div key={i} className="card card-hover" style={{ padding: 24, background: 'var(--surface)' }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                    <Icon size={20} color="var(--primary)" />
                   </div>
-                  <h4 style={{ fontSize: 15, fontWeight: 800, color: '#111111', marginBottom: 8 }}>{c.title}</h4>
-                  <p style={{ fontSize: 13, color: '#555555', lineHeight: 1.6 }}>{c.desc}</p>
+                  <h4 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>{c.title}</h4>
+                  <p style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.6 }}>{c.desc}</p>
                 </div>
               );
             })}
@@ -378,16 +379,16 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       </section>
 
       {/* Final CTA */}
-      <section className="section-padding" style={{ background: '#FFFFFF', textAlign: 'center', borderTop: '1px solid #EFEFEA' }}>
+      <section className="section-padding" style={{ background: 'var(--surface)', textAlign: 'center', borderTop: '1px solid var(--border)' }}>
         <div className="container" style={{ maxWidth: 740 }}>
-          <h2 style={{ fontSize: 40, fontWeight: 900, color: '#111111', letterSpacing: '-1px', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 40, fontWeight: 900, color: 'var(--text)', letterSpacing: '-1px', marginBottom: 16 }}>
             Make Every Medication Decision Smarter.
           </h2>
-          <p style={{ fontSize: 17, color: '#555555', lineHeight: 1.6, marginBottom: 36 }}>
+          <p style={{ fontSize: 17, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 36 }}>
             PharmaFlow brings pharmacy operations, medication safety and intelligent decision support together.
           </p>
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center' }}>
-            <button className="btn btn-sage" style={{ padding: '14px 32px', fontSize: 15, borderRadius: 14 }} onClick={onGetStarted}>
+            <button className="btn btn-teal" style={{ padding: '14px 32px', fontSize: 15, borderRadius: 14 }} onClick={onGetStarted}>
               Launch Demo <ArrowRight size={16}/>
             </button>
             <button className="btn btn-secondary" style={{ padding: '14px 32px', fontSize: 15, borderRadius: 14 }} onClick={onSignIn}>
@@ -398,10 +399,10 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn:()=>void;
       </section>
 
       {/* Footer */}
-      <footer style={{ padding: '32px 0', borderTop: '1px solid #EFEFEA', background: '#F4F4F0', fontSize: 13, color: '#666666' }}>
+      <footer style={{ padding: '32px 0', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', fontSize: 13, color: 'var(--text-3)' }}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <span style={{ fontWeight: 900, color: '#111111' }}>PHARMAFLOW</span> · Pharmacy Medication Dispensing Audit & Expiry Tracking Portal
+            <span style={{ fontWeight: 900, color: 'var(--text)' }}>PHARMAFLOW</span> · Pharmacy Medication Dispensing Audit & Expiry Tracking Portal
           </div>
           <div>© 2026 PharmaFlow Inc. All rights reserved.</div>
         </div>

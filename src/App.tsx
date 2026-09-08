@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Landing from './Landing';
 import Auth from './Auth';
 import PharmacistPortal from './PharmacistPortal';
+import { ThemeProvider } from './components/ThemeContext';
 
 type AppView = 'landing' | 'login' | 'signup' | 'pharmacist';
 
@@ -13,9 +14,12 @@ export default function App() {
   };
   const handleLogout = () => setView('landing');
 
-  if (view === 'landing') return <Landing onSignIn={() => setView('login')} onGetStarted={() => setView('signup')} />;
-  if (view === 'login') return <Auth mode="signin" onLogin={handleLogin} onSwitch={() => setView('signup')} onBack={() => setView('landing')} />;
-  if (view === 'signup') return <Auth mode="signup" onLogin={handleLogin} onSwitch={() => setView('login')} onBack={() => setView('landing')} />;
-  if (view === 'pharmacist') return <PharmacistPortal onLogout={handleLogout} />;
-  return null;
+  return (
+    <ThemeProvider>
+      {view === 'landing' && <Landing onSignIn={() => setView('login')} onGetStarted={() => setView('signup')} />}
+      {view === 'login' && <Auth mode="signin" onLogin={handleLogin} onSwitch={() => setView('signup')} onBack={() => setView('landing')} />}
+      {view === 'signup' && <Auth mode="signup" onLogin={handleLogin} onSwitch={() => setView('login')} onBack={() => setView('landing')} />}
+      {view === 'pharmacist' && <PharmacistPortal onLogout={handleLogout} />}
+    </ThemeProvider>
+  );
 }

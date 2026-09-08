@@ -6,10 +6,19 @@ import {
   AlertTriangle, AlertCircle, ArrowUpRight, ArrowDownRight, Clock3, Package, Filter,
   Check, Send, QrCode, FileText, MoreHorizontal, ChevronRight,
   Activity, CheckCircle2, ShieldCheck, Sparkles, RefreshCw,
-  Camera, Zap, UploadCloud, Printer, Settings as SettingsIcon, LayoutDashboard
+  Camera, Zap, UploadCloud, Printer, Settings as SettingsIcon, LayoutDashboard,
+  RotateCcw, ClipboardCheck, Ban
 } from 'lucide-react';
 import type { Page, Medicine, Audit, Status, CustomerItem, SupplierItem } from './data';
 import { initialInventory, initialCustomers, initialSuppliers } from './data';
+import Sidebar, { MobileSidebarDrawer } from './components/Sidebar';
+import WorkspaceTabs, { type TabItem } from './components/WorkspaceTabs';
+import { ExpiryRiskChart, StockMovementChart, MostDispensedRanking, DispensingTrendsChart } from './components/Charts';
+import WorkflowFlowchart from './components/WorkflowFlowchart';
+import EnhancedWhatIfSimulator from './components/WhatIfSimulator';
+import EnhancedAIAssistant from './components/AIAssistant';
+import ExpiryTimeline from './components/ExpiryTimeline';
+import { ThemeToggle } from './components/ThemeContext';
 
 interface NavItem {
   id: Page;
@@ -34,309 +43,6 @@ const navItems: NavItem[] = [
   { id: 'reports', label: 'Reports', icon: BarChart3 },
 ];
 
-/* ─────────── SIDEBAR WITH EXACT SQUIRCLE BLOOMING & DARK ARROW TOOLTIP ─────────── */
-function Sidebar({
-  open,
-  page,
-  onNavigate,
-  onLogout,
-}: {
-  open: boolean;
-  page: Page;
-  onNavigate: (p: string) => void;
-  onLogout: () => void;
-  onToggle?: () => void;
-}) {
-  const [activeTooltip, setActiveTooltip] = useState<{ label: string; count?: number; top: number; left: number } | null>(null);
-
-  const handleShowTooltip = (e: React.MouseEvent | React.TouchEvent, label: string, count?: number) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setActiveTooltip({
-      label,
-      count,
-      top: rect.top + rect.height / 2,
-      left: rect.right + 12,
-    });
-  };
-
-  const handleHideTooltip = () => {
-    setActiveTooltip(null);
-  };
-
-  return (
-    <>
-      <aside
-        style={{
-          width: 68,
-          flexShrink: 0,
-          position: 'fixed',
-          inset: '0 auto 0 0',
-          zIndex: 30,
-          background: '#FFFFFF',
-          borderRight: '1px solid #ECECE8',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          height: '100vh',
-          padding: '14px 0 14px',
-          boxShadow: '1px 0 10px rgba(0,0,0,0.02)',
-        }}
-        className="hidden-mobile-aside"
-      >
-        {/* Project Brand Mark Icon on Top (As per before) */}
-        <button
-          onClick={() => onNavigate('dashboard')}
-          onMouseEnter={e => handleShowTooltip(e, 'PharmaFlow Portal')}
-          onMouseLeave={handleHideTooltip}
-          onTouchStart={e => handleShowTooltip(e, 'PharmaFlow Portal')}
-          onTouchEnd={() => setTimeout(handleHideTooltip, 2000)}
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 11,
-            background: '#526350',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(82,99,80,0.25)',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 0,
-            outline: 'none',
-            transition: 'transform 0.15s ease',
-          }}
-          title="PharmaFlow Portal"
-        >
-          <Stethoscope size={19} color="white" />
-        </button>
-
-        <div style={{ width: 28, height: 1, background: '#EAEAE6', margin: '10px 0 6px' }} />
-
-        {/* Continuous Uniform Icon List - Clean & Beautiful */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 10,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            width: '100%',
-            padding: '4px 0',
-          }}
-        >
-          {navItems.map(({ id, label, icon: Icon, count }) => {
-            const active = page === id;
-            return (
-              <button
-                key={id}
-                onClick={() => onNavigate(id)}
-                onMouseEnter={e => handleShowTooltip(e, label, count)}
-                onMouseLeave={handleHideTooltip}
-                onTouchStart={e => handleShowTooltip(e, label, count)}
-                onTouchEnd={() => setTimeout(handleHideTooltip, 2000)}
-                className={`squircle-rail-item ${active ? 'active' : ''}`}
-                title={label}
-              >
-                <Icon
-                  size={20}
-                  strokeWidth={active ? 2.3 : 1.85}
-                  color={active ? '#526350' : '#4A5568'}
-                />
-
-                {count ? (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: 7,
-                      right: 7,
-                      width: 7,
-                      height: 7,
-                      borderRadius: '50%',
-                      background: '#A63A50',
-                      border: '1.5px solid white',
-                    }}
-                  />
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Bottom Section: Settings & Sign Out (Matching Screenshot) */}
-        <div
-          style={{
-            marginTop: 'auto',
-            paddingTop: 12,
-            borderTop: '1px solid #ECECE8',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 10,
-            width: '100%',
-          }}
-        >
-          <button
-            onClick={() => onNavigate('settings')}
-            onMouseEnter={e => handleShowTooltip(e, 'Settings')}
-            onMouseLeave={handleHideTooltip}
-            onTouchStart={e => handleShowTooltip(e, 'Settings')}
-            onTouchEnd={() => setTimeout(handleHideTooltip, 2000)}
-            className={`squircle-rail-item ${page === 'settings' ? 'active' : ''}`}
-            title="Settings"
-          >
-            <UserCog
-              size={20}
-              strokeWidth={page === 'settings' ? 2.3 : 1.85}
-              color={page === 'settings' ? '#526350' : '#4A5568'}
-            />
-          </button>
-
-          <button
-            onClick={onLogout}
-            onMouseEnter={e => handleShowTooltip(e, 'Sign out')}
-            onMouseLeave={handleHideTooltip}
-            onTouchStart={e => handleShowTooltip(e, 'Sign out')}
-            onTouchEnd={() => setTimeout(handleHideTooltip, 2000)}
-            className="squircle-rail-item logout-item"
-            title="Sign out"
-          >
-            <LogOut size={19} strokeWidth={1.85} color="#A63A50" />
-          </button>
-        </div>
-      </aside>
-
-      {/* Floating Dark Arrow Tooltip (Exactly matching Screenshot 2) */}
-      {activeTooltip && (
-        <div
-          className="dark-arrow-tooltip"
-          style={{
-            left: `${activeTooltip.left}px`,
-            top: `${activeTooltip.top}px`,
-          }}
-        >
-          <span>{activeTooltip.label}</span>
-          {activeTooltip.count ? (
-            <span
-              style={{
-                fontSize: 10.5,
-                background: '#A63A50',
-                color: 'white',
-                padding: '1px 6px',
-                borderRadius: 99,
-                fontWeight: 800,
-              }}
-            >
-              {activeTooltip.count}
-            </span>
-          ) : null}
-        </div>
-      )}
-    </>
-  );
-}
-
-function MobileDrawer({ open, onClose, page, onNavigate, onLogout }: { open: boolean; onClose: () => void; page: Page; onNavigate: (p: string) => void; onLogout: () => void }) {
-  if (!open) return null;
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex' }}>
-      <div
-        style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-      />
-
-      <div
-        className="animate-scale-in"
-        style={{
-          position: 'relative',
-          width: '84%',
-          maxWidth: 300,
-          background: '#FFFFFF',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
-          zIndex: 101,
-        }}
-      >
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', borderBottom: '1px solid #EFEFEA' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 9, background: '#526350', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Stethoscope size={18} color="white" />
-            </div>
-            <div>
-              <div style={{ fontWeight: 900, fontSize: 15, color: '#111111' }}>
-                PHARMA<span style={{ color: '#526350' }}>FLOW</span>
-              </div>
-              <div style={{ fontSize: 9.5, color: '#526350', fontWeight: 700, textTransform: 'uppercase' }}>
-                Pharmacist Portal
-              </div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background: '#F7F7F4', border: '1px solid #E5E5E0', borderRadius: 8, padding: 6, cursor: 'pointer', display: 'flex' }}>
-            <X size={17} color="#555555" />
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {navItems.map(({ id, label, icon: Icon, count }) => {
-            const active = page === id;
-            return (
-              <button
-                key={id}
-                onClick={() => { onNavigate(id); onClose(); }}
-                className={`sidebar-item ${active ? 'active' : ''}`}
-                style={{
-                  height: 42,
-                  padding: '0 12px',
-                  borderRadius: 10,
-                  background: active ? '#E8EFE7' : 'transparent',
-                  color: active ? '#526350' : '#333333',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  border: 'none',
-                  cursor: 'pointer',
-                  width: '100%',
-                }}
-              >
-                <Icon size={18} strokeWidth={active ? 2.4 : 1.8} color={active ? '#526350' : '#555555'} />
-                <span style={{ fontSize: 13.5, fontWeight: active ? 700 : 500, flex: 1, textAlign: 'left' }}>{label}</span>
-                {count ? (
-                  <span style={{ fontSize: 10.5, background: '#F9ECEF', color: '#A63A50', padding: '2px 7px', borderRadius: 99, fontWeight: 800 }}>
-                    {count}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ padding: 12, borderTop: '1px solid #EFEFEA', background: '#FAFAF8', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <button
-            onClick={() => { onNavigate('settings'); onClose(); }}
-            className="sidebar-item"
-            style={{ height: 40, padding: '0 12px', borderRadius: 8 }}
-          >
-            <SettingsIcon size={17} />
-            <span style={{ fontSize: 13 }}>Settings</span>
-          </button>
-          <button
-            onClick={onLogout}
-            className="sidebar-item"
-            style={{ height: 40, padding: '0 12px', borderRadius: 8, color: '#A63A50' }}
-          >
-            <LogOut size={17} />
-            <span style={{ fontSize: 13 }}>Sign out</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─────────── 0. TOPBAR & REALTIME SMART SEARCH ─────────── */
 function Topbar({
@@ -356,21 +62,37 @@ function Topbar({
   suppliersList: SupplierItem[];
   onNavigateWithFilter: (p: Page, query?: string) => void;
 }) {
-  const activeItem = navItems.find(x => x.id === page);
-  const label = activeItem?.label || (page === 'settings' ? 'Settings' : 'PharmaFlow');
-
-  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  const labelMap: Record<Page, string> = {
+    dashboard: 'Dashboard & Key Metrics',
+    inventory: 'Medicines & Stock Inventory',
+    'add-stock': 'Add New Medicine Batch',
+    expiry: 'Batch Tracking & Expiry Timeline',
+    dispensing: 'Prescription Dispensing & Billing',
+    audit: 'Dispensing Audit Trails',
+    customers: 'Customer & Patient Records',
+    alerts: 'Operational Safety Alerts',
+    suppliers: 'Supplier Performance & Return Claims',
+    recall: 'Batch Recall Management',
+    ai: 'PharmaFlow AI Clinical Assistant',
+    simulator: 'What-If Expiry Risk Simulator',
+    reports: 'Compliance Reports & Analytics',
+    settings: 'Pharmacy & System Settings',
+  };
+
+  const label = labelMap[page] || 'Dashboard';
+
   useEffect(() => {
-    const handleDocClick = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setSearchOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleDocClick);
-    return () => document.removeEventListener('mousedown', handleDocClick);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const q = query.trim().toLowerCase();
@@ -385,8 +107,8 @@ function Topbar({
     <header
       style={{
         height: 68,
-        background: '#FFFFFF',
-        borderBottom: '1px solid #E5E5E0',
+        background: 'var(--surface)',
+        borderBottom: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -394,6 +116,7 @@ function Topbar({
         position: 'sticky',
         top: 0,
         zIndex: 20,
+        transition: 'background-color 0.2s ease, border-color 0.2s ease',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -401,12 +124,12 @@ function Topbar({
           onClick={onMenu}
           className="mobile-only-btn"
           style={{
-            background: '#F7F7F4',
-            border: '1px solid #E5E5E0',
+            background: 'var(--bg-alt)',
+            border: '1px solid var(--border)',
             cursor: 'pointer',
             padding: '7px 9px',
             borderRadius: 9,
-            color: '#333333',
+            color: 'var(--text)',
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -419,7 +142,7 @@ function Topbar({
             style={{
               fontSize: 17.5,
               fontWeight: 800,
-              color: '#111111',
+              color: 'var(--text)',
               letterSpacing: '-0.3px',
               cursor: page === 'dashboard' ? 'pointer' : 'default',
             }}
@@ -427,7 +150,7 @@ function Topbar({
           >
             {page === 'dashboard' ? 'Good morning, Dr. Anita 👋' : label}
           </h1>
-          <p style={{ fontSize: 11.5, color: '#777777', marginTop: 1 }}>
+          <p style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 1 }}>
             {page === 'dashboard' ? "Here's what's happening across your pharmacy today." : 'Pharmacy Medication Dispensing & Expiry Portal'}
           </p>
         </div>
@@ -435,8 +158,8 @@ function Topbar({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div ref={searchRef} style={{ position: 'relative' }}>
-          <div className="search-input" style={{ width: 'clamp(170px, 22vw, 280px)', padding: '7px 11px' }}>
-            <Search size={14} color="#888888" />
+          <div className="search-input" style={{ width: 'clamp(170px, 20vw, 270px)', padding: '7px 11px' }}>
+            <Search size={14} color="var(--text-muted)" />
             <input
               placeholder="Search meds, batches, customers..."
               value={query}
@@ -451,7 +174,7 @@ function Topbar({
               style={{ fontSize: 13 }}
             />
             {query && (
-              <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: '#888888' }}>
+              <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-muted)' }}>
                 <X size={13} />
               </button>
             )}
@@ -459,20 +182,20 @@ function Topbar({
 
           {searchOpen && q && (
             <div className="search-popover-dropdown">
-              <div style={{ padding: '10px 16px', background: '#FAFAF8', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#8C928A', textTransform: 'uppercase' }}>Quick Search Results</span>
-                <span style={{ fontSize: 11, color: '#888888' }}>Esc to close</span>
+              <div style={{ padding: '10px 16px', background: 'var(--bg-alt)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase' }}>Quick Search Results</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Esc to close</span>
               </div>
 
               {!hasResults && (
-                <div style={{ padding: '24px 20px', textAlign: 'center', color: '#888888', fontSize: 13 }}>
-                  No matches found for "<b style={{ color: '#111111' }}>{query}</b>"
+                <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+                  No matches found for "<b style={{ color: 'var(--text)' }}>{query}</b>"
                 </div>
               )}
 
               {matchedMeds.length > 0 && (
                 <div>
-                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: '#6B8068', background: '#F8FAF8', textTransform: 'uppercase' }}>
+                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: 'var(--primary)', background: 'var(--bg-alt)', textTransform: 'uppercase' }}>
                     Medicines & Batches
                   </div>
                   {matchedMeds.map(m => (
@@ -485,12 +208,12 @@ function Topbar({
                         setQuery('');
                       }}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: 7, background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Package size={14} color="#526350" />
+                      <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Package size={14} color="var(--primary)" />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: 12.5, fontWeight: 700, color: '#111111' }}>{m.medicine}</p>
-                        <p style={{ fontSize: 11, color: '#777777' }}>Batch: {m.batch} · {m.quantity} units · Exp: {m.expiry}</p>
+                        <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{m.medicine}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-4)' }}>Batch: {m.batch} · {m.quantity} units · Exp: {m.expiry}</p>
                       </div>
                       <Badge status={m.status} />
                     </div>
@@ -500,7 +223,7 @@ function Topbar({
 
               {matchedCustomers.length > 0 && (
                 <div>
-                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: '#4A6B5D', background: '#F8FAF8', textTransform: 'uppercase' }}>
+                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: 'var(--info)', background: 'var(--bg-alt)', textTransform: 'uppercase' }}>
                     Customers
                   </div>
                   {matchedCustomers.map(c => (
@@ -513,12 +236,12 @@ function Topbar({
                         setQuery('');
                       }}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: 7, background: '#E3ECE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Users size={14} color="#4A6B5D" />
+                      <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--info-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Users size={14} color="var(--info)" />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: 12.5, fontWeight: 700, color: '#111111' }}>{c.name}</p>
-                        <p style={{ fontSize: 11, color: '#777777' }}>{c.phone} · {c.visits} visits</p>
+                        <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{c.name}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-4)' }}>{c.phone} · {c.visits} visits</p>
                       </div>
                     </div>
                   ))}
@@ -527,7 +250,7 @@ function Topbar({
 
               {matchedSuppliers.length > 0 && (
                 <div>
-                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: '#8C5E3C', background: '#F8FAF8', textTransform: 'uppercase' }}>
+                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: 'var(--warning)', background: 'var(--bg-alt)', textTransform: 'uppercase' }}>
                     Suppliers
                   </div>
                   {matchedSuppliers.map(s => (
@@ -540,12 +263,12 @@ function Topbar({
                         setQuery('');
                       }}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: 7, background: '#F7EDE2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Truck size={14} color="#8C5E3C" />
+                      <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--warning-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Truck size={14} color="var(--warning)" />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: 12.5, fontWeight: 700, color: '#111111' }}>{s.name}</p>
-                        <p style={{ fontSize: 11, color: '#777777' }}>{s.batches} batches · {s.purchases}</p>
+                        <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{s.name}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-4)' }}>{s.batches} batches · {s.purchases}</p>
                       </div>
                     </div>
                   ))}
@@ -554,7 +277,7 @@ function Topbar({
 
               {matchedPages.length > 0 && (
                 <div>
-                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: '#555555', background: '#F8FAF8', textTransform: 'uppercase' }}>
+                  <div style={{ padding: '6px 16px', fontSize: 10, fontWeight: 800, color: 'var(--text-3)', background: 'var(--bg-alt)', textTransform: 'uppercase' }}>
                     Quick Navigation
                   </div>
                   {matchedPages.map(p => (
@@ -567,11 +290,11 @@ function Topbar({
                         setQuery('');
                       }}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: 7, background: '#F2F2EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <p.icon size={14} color="#555555" />
+                      <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <p.icon size={14} color="var(--text-2)" />
                       </div>
-                      <p style={{ fontSize: 12.5, fontWeight: 600, color: '#111111', flex: 1 }}>Open {p.label}</p>
-                      <ChevronRight size={13} color="#888888" />
+                      <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', flex: 1 }}>Open {p.label}</p>
+                      <ChevronRight size={13} color="var(--text-muted)" />
                     </div>
                   ))}
                 </div>
@@ -580,21 +303,40 @@ function Topbar({
           )}
         </div>
 
-        <button onClick={onAlerts} style={{ position: 'relative', background: '#F7F7F4', border: '1px solid #E5E5E0', cursor: 'pointer', padding: '7px 9px', borderRadius: 9, color: '#333333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Bell size={17} />
-          <span style={{ position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: '50%', background: '#A63A50', border: '1.5px solid white' }} />
+        <ThemeToggle size="sm" />
+
+        <button
+          onClick={onAlerts}
+          style={{
+            position: 'relative',
+            background: 'var(--bg-alt)',
+            border: '1px solid var(--border)',
+            cursor: 'pointer',
+            padding: '7px 9px',
+            borderRadius: 9,
+            color: 'var(--text)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          title="View Alerts & Recalls"
+        >
+          <Bell size={16} />
+          <span style={{ position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)', border: '1.5px solid var(--surface)' }} />
         </button>
-        <div style={{ width: 1, height: 28, background: '#E5E5E0' }} />
+
+        <div style={{ width: 1, height: 26, background: 'var(--border)' }} />
+
         <button
           onClick={() => onNavigateWithFilter('settings')}
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 9,
-            background: '#FAFAF8',
+            gap: 8,
+            background: 'var(--surface)',
             padding: '3px 12px 3px 5px',
             borderRadius: 99,
-            border: '1.5px solid #EAEAE6',
+            border: '1px solid var(--border)',
             cursor: 'pointer',
             outline: 'none',
             transition: 'all 0.15s ease',
@@ -602,12 +344,12 @@ function Topbar({
           className="card-hover"
           title="Click to view & edit Pharmacist Profile / Settings"
         >
-          <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, color: '#526350' }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#FFFFFF' }}>
             AR
           </div>
           <div className="hidden-mobile" style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#111111', lineHeight: 1.1 }}>Dr. Anita Rao</p>
-            <p style={{ fontSize: 10, color: '#6B8068', fontWeight: 600 }}>Pharmacist</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', lineHeight: 1.1 }}>Dr. Anita Rao</p>
+            <p style={{ fontSize: 9.5, color: 'var(--primary)', fontWeight: 600 }}>Pharmacist</p>
           </div>
         </button>
       </div>
@@ -629,11 +371,11 @@ function downloadCSV(filename: string, headers: string[], rows: (string | number
 
 function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 14 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22, flexWrap: 'wrap', gap: 14 }}>
       <div>
         {eyebrow && <p className="section-eyebrow">{eyebrow}</p>}
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: '#111111', letterSpacing: '-0.3px' }}>{title}</h2>
-        {description && <p style={{ fontSize: 13.5, color: '#555555', marginTop: 3 }}>{description}</p>}
+        <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.5px' }}>{title}</h2>
+        {description && <p style={{ fontSize: 13.5, color: '#475569', marginTop: 3 }}>{description}</p>}
       </div>
       {action}
     </div>
@@ -641,29 +383,56 @@ function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string;
 }
 
 function Stat({ label, value, change, icon: Icon, tone = 'sage' }: { label: string; value: string; change?: string; icon: React.ElementType; tone?: string }) {
-  const bg: Record<string, string> = { sage: '#E8EFE7', teal: '#E3ECE7', green: '#E6EFEA', amber: '#F7EDE2', red: '#F9ECEF', orange: '#F7EBE3' };
-  const fg: Record<string, string> = { sage: '#526350', teal: '#4A6B5D', green: '#52796F', amber: '#8C5E3C', red: '#A63A50', orange: '#B86B35' };
+  const bg: Record<string, string> = {
+    sage: '#F0FDFA',
+    teal: '#F0FDFA',
+    green: '#F0FDF4',
+    amber: '#FFFBEB',
+    red: '#FEF2F2',
+    orange: '#FFF7ED',
+  };
+  const fg: Record<string, string> = {
+    sage: '#0D9488',
+    teal: '#0D9488',
+    green: '#16A34A',
+    amber: '#D97706',
+    red: '#DC2626',
+    orange: '#EA580C',
+  };
+  const borders: Record<string, string> = {
+    sage: '#CCFBF1',
+    teal: '#CCFBF1',
+    green: '#BBF7D0',
+    amber: '#FDE68A',
+    red: '#FECACA',
+    orange: '#FFEDD5',
+  };
+
   return (
-    <div className="card" style={{ padding: 18 }}>
+    <div className="card" style={{ padding: '16px 18px', minHeight: 104, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <p style={{ fontSize: 11.5, color: '#555555', fontWeight: 500 }}>{label}</p>
-          <p className="stat-value" style={{ marginTop: 4 }}>{value}</p>
-          {change && <p style={{ fontSize: 11.5, color: '#52796F', marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }}><ArrowUpRight size={12}/>{change}</p>}
+          <p style={{ fontSize: 11.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+          <p className="stat-value" style={{ marginTop: 4, color: '#0F172A' }}>{value}</p>
         </div>
-        <div style={{ width: 38, height: 38, borderRadius: 9, background: bg[tone] || bg.sage, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={19} color={fg[tone] || fg.sage} />
+        <div style={{ width: 38, height: 38, borderRadius: 10, background: bg[tone] || bg.sage, border: `1px solid ${borders[tone] || borders.sage}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon size={19} color={fg[tone] || fg.sage} strokeWidth={2} />
         </div>
       </div>
+      {change && (
+        <p style={{ fontSize: 11, color: tone === 'red' ? '#DC2626' : tone === 'amber' ? '#D97706' : '#16A34A', marginTop: 4, display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+          <ArrowUpRight size={12} /> {change}
+        </p>
+      )}
     </div>
   );
 }
 
 function Panel({ title, action, children, className }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <div className={`card ${className || ''}`}>
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ fontSize: 13.5, fontWeight: 700, color: '#111111' }}>{title}</h3>
+    <div className={`card ${className || ''}`} style={{ overflow: 'hidden' }}>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -673,47 +442,28 @@ function Panel({ title, action, children, className }: { title: string; action?:
 
 function Badge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    Available: 'badge-green', 'Near Expiry': 'badge-amber', Recalled: 'badge-red', 'Low Stock': 'badge-orange', Expired: 'badge-gray', Completed: 'badge-green', Active: 'badge-green', Invited: 'badge-blue'
+    Available: 'badge-green', 'Near Expiry': 'badge-amber', Recalled: 'badge-red', 'Low Stock': 'badge-orange', Expired: 'badge-red', Completed: 'badge-green', Active: 'badge-green', Invited: 'badge-blue'
   };
-  return <span className={`chip ${map[status] || 'badge-gray'}`}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }}/>{status}</span>;
-}
-
-function SimpleChart({ type = 'line' }: { type?: string }) {
-  return (
-    <div style={{ padding: '16px 20px 24px', height: 180, position: 'relative' }}>
-      <svg viewBox="0 0 600 160" style={{ width: '100%', height: '100%' }} preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#6B8068" stopOpacity=".2"/>
-            <stop offset="1" stopColor="#6B8068" stopOpacity="0"/>
-          </linearGradient>
-        </defs>
-        {type === 'bar' ? [42, 65, 48, 75, 58, 82, 70, 92, 61, 76, 48, 68].map((h, i) => (
-          <rect key={i} x={i * 50 + 5} y={160 - h * 1.5} width="22" height={h * 1.5} rx="4" fill={i % 3 === 1 ? '#6B8068' : '#E8EFE7'} />
-        )) : <>
-          <path d="M0 130 C50 110 70 135 120 95 S180 120 220 75 S280 105 320 60 S390 85 430 40 S490 60 540 28 S570 50 600 15 L600 160 L0 160Z" fill="url(#grad)"/>
-          <path d="M0 130 C50 110 70 135 120 95 S180 120 220 75 S280 105 320 60 S390 85 430 40 S490 60 540 28 S570 50 600 15" fill="none" stroke="#6B8068" strokeWidth="2.5" strokeLinecap="round"/>
-        </>}
-      </svg>
-    </div>
-  );
+  return <span className={`chip ${map[status] || 'badge-gray'}`}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }}/>{status}</span>;
 }
 
 function AlertRow({ icon: Icon, tone, title, detail }: { icon: React.ElementType; tone: string; title: string; detail: string }) {
-  const c: Record<string, string> = { amber: '#F7EDE2', red: '#F9ECEF', orange: '#F7EBE3' };
-  const tc: Record<string, string> = { amber: '#8C5E3C', red: '#A63A50', orange: '#B86B35' };
+  const c: Record<string, string> = { amber: '#FFFBEB', red: '#FEF2F2', orange: '#FFF7ED' };
+  const tc: Record<string, string> = { amber: '#D97706', red: '#DC2626', orange: '#EA580C' };
+  const bc: Record<string, string> = { amber: '#FDE68A', red: '#FECACA', orange: '#FFEDD5' };
   return (
-    <div style={{ display: 'flex', gap: 12 }}>
-      <div style={{ width: 34, height: 34, borderRadius: 8, background: c[tone] || '#F2F2EE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon size={16} color={tc[tone] || '#555555'} />
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ width: 34, height: 34, borderRadius: 8, background: c[tone] || '#F1F5F9', border: `1px solid ${bc[tone] || '#E2E8F0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon size={16} color={tc[tone] || '#64748B'} strokeWidth={2} />
       </div>
       <div>
-        <p style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{title}</p>
-        <p style={{ fontSize: 11.5, color: '#888888', marginTop: 2 }}>{detail}</p>
+        <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{title}</p>
+        <p style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>{detail}</p>
       </div>
     </div>
   );
 }
+
 
 /* ─────────── INTERACTIVE QR SCANNER MODAL (WITH QUIT OPTION) ─────────── */
 function QRScannerModal({
@@ -1190,73 +940,161 @@ function DispenseReceiptModal({
 }
 
 /* ─────────── 1. PHARMACIST DASHBOARD ─────────── */
-function Dashboard({ onNavigate }: { onNavigate: (p: string) => void }) {
+function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void; inventory: Medicine[] }) {
+  const expiredCount = inventory.filter(m => m.status === 'Expired').length;
+  const nearExpiryCount = inventory.filter(m => m.status === 'Near Expiry').length;
+  const lowStockCount = inventory.filter(m => m.status === 'Low Stock' || m.quantity < 80).length;
+  const totalUnits = inventory.reduce((sum, m) => sum + m.quantity, 0);
+
   return (
     <>
       <PageHeader
-        eyebrow="OVERVIEW"
-        title="Good morning, Dr. Anita"
-        description="Here's what's happening across your pharmacy today."
+        eyebrow="OPERATIONAL COMMAND CENTER"
+        title="Good morning, Dr. Anita 👋"
+        description="Live overview of prescription dispensing velocity, inventory buffer levels, and batch expiry containment."
         action={
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn btn-secondary" onClick={() => onNavigate('add-stock')}>
               <PackagePlus size={15} /> Add Stock
             </button>
-            <button className="btn btn-sage" onClick={() => onNavigate('dispensing')}>
+            <button className="btn btn-teal" onClick={() => onNavigate('dispensing')}>
               <Plus size={15} /> New Dispensing
             </button>
           </div>
         }
       />
+
+      {/* Top 6 KPI Cards with High Contrast & Semantic Statuses */}
       <div className="responsive-stats-grid">
-        <Stat label="Medicines" value="128" change="4.2% this month" icon={Package} tone="sage" />
-        <Stat label="Batches" value="246" change="2.1% this month" icon={Boxes} tone="teal" />
-        <Stat label="Total Stock" value="18,420" change="8.4% this month" icon={Activity} tone="green" />
-        <Stat label="Low Stock" value="7" icon={AlertTriangle} tone="amber" />
-        <Stat label="Near Expiry" value="12" icon={Clock3} tone="amber" />
-        <Stat label="Expired" value="3" icon={AlertCircle} tone="red" />
+        <Stat label="Medicines" value={String(inventory.length || 128)} change="+4.2% formulary" icon={Package} tone="teal" />
+        <Stat label="Batches" value="246" change="Tracked across distributors" icon={Boxes} tone="sage" />
+        <Stat label="Total Stock" value={totalUnits.toLocaleString() || '18,420'} change="+8.4% buffer" icon={Activity} tone="green" />
+        <Stat label="Low Stock" value={String(lowStockCount || 7)} change="Reorder trigger" icon={AlertTriangle} tone="orange" />
+        <Stat label="Near Expiry" value={String(nearExpiryCount || 12)} change="<90d FEFO action" icon={Clock3} tone="amber" />
+        <Stat label="Expired" value={String(expiredCount || 3)} change="Quarantined" icon={AlertCircle} tone="red" />
       </div>
+
+      {/* Main Charts & Critical Alerts Row */}
       <div className="responsive-dashboard-grid">
-        <Panel title="Expiry Risk Overview" action={<button style={{ fontSize: 12, color: '#6B8068', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => onNavigate('expiry')}>View report</button>}>
-          <SimpleChart />
+        <Panel
+          title="Expiry Risk Distribution"
+          action={
+            <button
+              style={{ fontSize: 12, color: '#0D9488', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={() => onNavigate('expiry')}
+            >
+              Full Expiry Table →
+            </button>
+          }
+        >
+          <ExpiryRiskChart inventory={inventory} onNavigateExpiry={() => onNavigate('expiry')} />
         </Panel>
-        <Panel title="Critical Alerts" action={<button style={{ fontSize: 12, color: '#6B8068', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => onNavigate('alerts')}>See all</button>}>
+
+        <Panel
+          title="Critical Alerts & Risk Escalation"
+          action={
+            <button
+              style={{ fontSize: 12, color: '#0D9488', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={() => onNavigate('alerts')}
+            >
+              See all 3 alerts →
+            </button>
+          }
+        >
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <AlertRow icon={AlertTriangle} tone="amber" title="Vitamin D3 expires soon" detail="Batch VD102 · 12 days left" />
-            <AlertRow icon={AlertCircle} tone="red" title="Batch AMX204 recalled" detail="45 units · Action required" />
-            <AlertRow icon={ArrowDownRight} tone="orange" title="Paracetamol low stock" detail="Only 12 units remaining" />
-          </div>
-        </Panel>
-      </div>
-      <div className="responsive-split-grid" style={{ marginBottom: 20 }}>
-        <Panel title="Stock Movement" action={<span style={{ fontSize: 12, color: '#888888' }}>Last 6 months</span>}>
-          <SimpleChart type="bar" />
-        </Panel>
-        <Panel title="Most Dispensed" action={<button style={{ fontSize: 12, color: '#6B8068', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => onNavigate('reports')}>Full report</button>}>
-          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[['Paracetamol 500mg', '2,480', '32%', '#6B8068'], ['Cetirizine 10mg', '1,842', '24%', '#4A6B5D'], ['Metformin 500mg', '1,490', '19%', '#555555'], ['Vitamin D3 60K', '988', '13%', '#B5838D']].map(([n, v, p, c]) => (
-              <div key={n}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{n}</span>
-                  <span style={{ fontSize: 12.5, color: '#555555' }}>{v} <span style={{ fontSize: 10.5 }}>({p})</span></span>
-                </div>
-                <div className="progress-bar"><div className="progress-fill" style={{ width: p, background: c }} /></div>
-              </div>
-            ))}
+            <AlertRow icon={AlertTriangle} tone="amber" title="Vitamin D3 60K expires soon" detail="Batch VD102 · 180 units · FEFO priority" />
+            <AlertRow icon={AlertCircle} tone="red" title="Batch AMX204 under recall" detail="45 units remaining · Locked from dispensing" />
+            <AlertRow icon={ArrowDownRight} tone="orange" title="Azithromycin 250mg low stock" detail="Only 68 units · Supplier reorder pending" />
+            <div style={{ paddingTop: 12, borderTop: '1px solid #E2E8F0', display: 'flex', gap: 8 }}>
+              <button onClick={() => onNavigate('recall')} className="btn btn-danger" style={{ fontSize: 11, padding: '5px 10px', flex: 1, justifyContent: 'center' }}>
+                Batch Recall Action
+              </button>
+              <button onClick={() => onNavigate('expiry')} className="btn btn-secondary" style={{ fontSize: 11, padding: '5px 10px', flex: 1, justifyContent: 'center' }}>
+                View Expiry Batches
+              </button>
+            </div>
           </div>
         </Panel>
       </div>
 
-      <div style={{ borderRadius: 16, background: '#111111', padding: 22, display: 'flex', alignItems: 'center', gap: 18 }}>
-        <div style={{ width: 42, height: 42, borderRadius: 11, background: '#6B8068', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <BrainCircuit size={20} color="white" />
+      {/* Stock Movement & Most Dispensed Row */}
+      <div className="responsive-split-grid" style={{ marginBottom: 20 }}>
+        <Panel
+          title="Stock Movement (Inflow vs Outflow)"
+          action={<span style={{ fontSize: 12, color: '#64748B' }}>Apr – Sep 2026</span>}
+        >
+          <StockMovementChart />
+        </Panel>
+
+        <Panel
+          title="Most Dispensed Medicines Ranking"
+          action={
+            <button
+              style={{ fontSize: 12, color: '#0D9488', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={() => onNavigate('reports')}
+            >
+              Full analytics report →
+            </button>
+          }
+        >
+          <MostDispensedRanking onViewReport={() => onNavigate('reports')} />
+        </Panel>
+      </div>
+
+      {/* Comprehensive SOP & Compliance Flowchart Embedded into Dashboard */}
+      <div style={{ marginBottom: 20 }}>
+        <WorkflowFlowchart />
+      </div>
+
+      {/* AI Simulation Insight Banner */}
+      <div
+        className="card"
+        style={{
+          padding: 20,
+          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+          color: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 18,
+          border: '1px solid #334155',
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: '#0D9488',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: '0 4px 14px rgba(13, 148, 136, 0.4)',
+          }}
+        >
+          <BrainCircuit size={22} color="white" />
         </div>
         <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 10, color: '#A3B19B', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>AI INSIGHT & SIMULATION</p>
-          <p style={{ color: 'white', fontWeight: 600, marginTop: 3, fontSize: 13.5 }}>Your Vitamin D3 inventory may exceed demand before expiry. Run the What-If Simulator before reordering.</p>
+          <p style={{ fontSize: 10.5, color: '#99F6E4', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            OPERATIONAL AI ADVISORY & SIMULATION
+          </p>
+          <p style={{ color: '#F8FAFC', fontWeight: 600, marginTop: 3, fontSize: 13.5 }}>
+            Purchasing 300 additional units of Vitamin D3 will cause ~120 units (₹ 7,800) to expire unsold based on current velocity. Run the What-If Simulator before issuing PO.
+          </p>
         </div>
-        <button onClick={() => onNavigate('simulator')} className="btn" style={{ background: 'rgba(255,255,255,0.12)', color: 'white', border: '1px solid rgba(255,255,255,0.18)', whiteSpace: 'nowrap', fontSize: 13 }}>
-          Open Simulator <ChevronRight size={14}/>
+        <button
+          onClick={() => onNavigate('simulator')}
+          className="btn"
+          style={{
+            backgroundColor: '#0D9488',
+            color: '#FFFFFF',
+            whiteSpace: 'nowrap',
+            fontSize: 13,
+            padding: '9px 16px',
+            borderRadius: 8,
+          }}
+        >
+          Launch Simulator <ChevronRight size={15} />
         </button>
       </div>
     </>
@@ -1609,24 +1447,22 @@ function Expiry({
         <Stat label="Expiring in 90d" value="28" icon={CalendarDays} tone="teal" />
         <Stat label="Expired" value="3" icon={AlertCircle} tone="red" />
       </div>
+      {/* Redesigned Full-Featured Expiry Timeline Component with Live Proportional Positioning */}
+      <div style={{ marginBottom: 20 }}>
+        <ExpiryTimeline
+          inventory={inventory}
+          onSelectBatch={b => {
+            showToast(`Selected ${b.medicine} (${b.batch}) · Expiry: ${b.expiry}`);
+          }}
+          onNavigateExpiryTable={() => {
+            // Scroll down or focus on table
+            showToast('Showing full FEFO batch priority table below');
+          }}
+        />
+      </div>
+
       <div className="responsive-dashboard-grid">
-        <Panel title="Expiry Timeline">
-          <div style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24, fontSize: 12, color: '#888888' }}>
-              {['Today', '30 days', '60 days', '90 days', '120 days'].map(t => <span key={t}>{t}</span>)}
-            </div>
-            <div style={{ position: 'relative', height: 100, borderTop: '1.5px solid #E5E5E0' }}>
-              {[{ left: '12%', top: 16, text: 'AMX204', sub: 'Oct 2026 · Recalled', color: '#A63A50', bg: '#F9ECEF', border: '#F3C6D0' },
-                { left: '25%', top: 52, text: 'VD102', sub: 'Sep 2026 · High risk', color: '#8C5E3C', bg: '#F7EDE2', border: '#EBD4BF' }].map(b => (
-                <div key={b.text} style={{ position: 'absolute', left: b.left, top: b.top, background: b.bg, border: `1px solid ${b.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 12, color: b.color, fontWeight: 600, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                  <span style={{ display: 'block' }}>{b.text}</span>
-                  <span style={{ fontWeight: 400, fontSize: 11 }}>{b.sub}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Panel>
-        <Panel title="Risk Distribution">
+        <Panel title="Expiry Risk Distribution Breakdown">
           <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
             <div style={{ width: 140, height: 140, borderRadius: '50%', background: 'conic-gradient(#A63A50 0 4%,#B86B35 4% 16%,#52796F 16% 30%,#E5E5E0 30% 100%)', position: 'relative' }}>
               <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -1635,12 +1471,44 @@ function Expiry({
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-              {[['Expired', '3', '#A63A50'], ['High risk', '12', '#B86B35'], ['Watch', '34', '#52796F'], ['Safe', '197', '#CCCCCC']].map(([n, v, c]) => (
+              {[['Expired / Recalled', '4', '#A63A50'], ['Critical (<30d)', '12', '#B86B35'], ['Watch (<90d)', '34', '#52796F'], ['Safe (>90d)', '196', '#CCCCCC']].map(([n, v, c]) => (
                 <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center' }}>
                   <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }}/>{n}</span>
                   <b>{v}</b>
                 </div>
               ))}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Regulatory Compliance & FEFO Protocol">
+          <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <CheckCircle2 size={18} color="#16A34A" />
+              </div>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>First-Expiry, First-Out (FEFO) Strict Enforcement</p>
+                <p style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>System automatically sorts stock batches by earliest expiry to minimize expired inventory write-offs.</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertCircle size={18} color="#DC2626" />
+              </div>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Automated Quarantine Barrier</p>
+                <p style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Batches marked as Expired or Recalled are electronically hard-locked and cannot be selected during dispensing.</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Clock3 size={18} color="#D97706" />
+              </div>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Supplier Return Window</p>
+                <p style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Medicines reaching 60 days before expiry generate return-to-vendor credit claim notices automatically.</p>
+              </div>
             </div>
           </div>
         </Panel>
@@ -1941,63 +1809,202 @@ function Dispensing({
 }
 
 /* ─────────── 6. DISPENSING AUDIT ─────────── */
-function AuditPage({ audits, showToast }: { audits: Audit[]; showToast: (s: string) => void }) {
+function AuditPage({
+  audits,
+  showToast,
+  onNavigate,
+}: {
+  audits: Audit[];
+  showToast: (s: string) => void;
+  onNavigate?: (p: string) => void;
+}) {
   const [q, setQ] = useState('');
-  const rows = audits.filter(a => (a.medicine + a.customer + a.batch + a.pharmacist).toLowerCase().includes(q.toLowerCase()));
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Completed' | 'Recalled'>('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
+
+  const filtered = audits.filter(a => {
+    const matchesQuery = (a.medicine + a.customer + a.batch + a.pharmacist + (a.rxId || '')).toLowerCase().includes(q.toLowerCase());
+    const matchesStatus = statusFilter === 'All' || a.status === statusFilter;
+    return matchesQuery && matchesStatus;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const totalRevenue = audits.reduce((sum, a) => sum + (a.totalAmount || a.quantity * 45), 0);
 
   return (
     <>
       <PageHeader
-        eyebrow="COMPLIANCE"
-        title="Dispensing Audit"
-        description="Every dispensing event, fully traceable and review-ready."
+        eyebrow="REGULATORY COMPLIANCE & GOVERNANCE"
+        title="Dispensing Audit Trail"
+        description="Immutable chronological record of every dispensed prescription with full batch traceability and pharmacist accountability."
         action={
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              downloadCSV(
-                'dispensing_audit_trail.csv',
-                ['Date', 'Rx ID', 'Medicine', 'Batch', 'Quantity', 'Customer', 'Pharmacist', 'Status', 'Total (INR)'],
-                audits.map(a => [a.date, a.rxId || `RX-${a.id}`, a.medicine, a.batch, a.quantity, a.customer, a.pharmacist, a.status, a.totalAmount || (a.quantity * 45)])
-              );
-              showToast('Downloaded dispensing_audit_trail.csv');
-            }}
-          >
-            <Download size={14}/> Export audit log
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                downloadCSV(
+                  'dispensing_audit_trail.csv',
+                  ['Date', 'Rx ID', 'Medicine', 'Batch', 'Quantity', 'Customer', 'Pharmacist', 'Status', 'Total (INR)'],
+                  audits.map(a => [a.date, a.rxId || `RX-${a.id}`, a.medicine, a.batch, a.quantity, a.customer, a.pharmacist, a.status, a.totalAmount || (a.quantity * 45)])
+                );
+                showToast('Exported dispensing_audit_trail.csv');
+              }}
+            >
+              <Download size={14} /> Export Audit Log (CSV)
+            </button>
+          </div>
         }
       />
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: 16, borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div className="search-input" style={{ maxWidth: 320 }}>
-            <Search size={15} color="#888888"/><input placeholder="Search audit records..." value={q} onChange={e => setQ(e.target.value)}/>
+
+      {/* Summary KPI Strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 18 }}>
+        <div className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Total Transactions</p>
+            <p style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>{audits.length}</p>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: '#52796F', fontWeight: 600, background: '#E6EFEA', padding: '4px 10px', borderRadius: 99 }}>
-              100% Traceable
-            </span>
+          <span className="chip badge-teal" style={{ fontSize: 11 }}>100% Traceable</span>
+        </div>
+        <div className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Units Dispensed</p>
+            <p style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>
+              {audits.reduce((sum, a) => sum + a.quantity, 0)} units
+            </p>
+          </div>
+          <span className="chip badge-green" style={{ fontSize: 11 }}>FEFO Enforced</span>
+        </div>
+        <div className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Dispensing Volume</p>
+            <p style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>₹ {totalRevenue.toLocaleString()}</p>
+          </div>
+          <span className="chip badge-blue" style={{ fontSize: 11 }}>Verified Invoices</span>
+        </div>
+      </div>
+
+      <div className="card" style={{ overflow: 'hidden' }}>
+        {/* Filter and Search Bar */}
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div className="search-input" style={{ width: 'clamp(220px, 30vw, 340px)' }}>
+            <Search size={15} color="#64748B" />
+            <input
+              placeholder="Search Rx ID, medicine, customer, batch..."
+              value={q}
+              onChange={e => {
+                setQ(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+            {q && (
+              <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {(['All', 'Completed', 'Recalled'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => {
+                  setStatusFilter(tab);
+                  setCurrentPage(1);
+                }}
+                className={`btn ${statusFilter === tab ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: 12, padding: '5px 12px', borderRadius: 7 }}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
         </div>
+
+        {/* Audit Table */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead><tr style={{ background: '#F2F2EE' }}>
-              {['Date', 'Rx ID', 'Medicine', 'Batch', 'Quantity', 'Customer', 'Pharmacist', 'Status'].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: '#888888', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
-            </tr></thead>
-            <tbody>{rows.map(a => (
-              <tr key={a.id} className="table-row" style={{ borderTop: '1px solid #EFEFEA' }}>
-                <td style={{ padding: '14px 20px', fontSize: 12, color: '#555555' }}>{a.date}</td>
-                <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 12, color: '#6B8068', fontWeight: 700 }}>{a.rxId || `RX-2026-${a.id.toString().slice(-4)}`}</td>
-                <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: 13 }}>{a.medicine}</td>
-                <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 13 }}>{a.batch}</td>
-                <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 700 }}>{a.quantity}</td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: '#555555' }}>{a.customer}</td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: '#555555' }}>{a.pharmacist}</td>
-                <td style={{ padding: '14px 20px' }}><Badge status={a.status}/></td>
+            <thead>
+              <tr className="table-header">
+                {['Timestamp', 'Rx ID', 'Medication', 'Batch', 'Qty', 'Customer', 'Pharmacist', 'Amount', 'Compliance'].map(h => (
+                  <th key={h} style={{ padding: '12px 18px', fontSize: 11, fontWeight: 700, color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
-            ))}</tbody>
+            </thead>
+            <tbody>
+              {paginatedRows.length > 0 ? (
+                paginatedRows.map(a => (
+                  <tr key={a.id} className="table-row" style={{ borderTop: '1px solid #E2E8F0' }}>
+                    <td style={{ padding: '13px 18px', fontSize: 12.5, color: '#64748B', whiteSpace: 'nowrap' }}>{a.date}</td>
+                    <td style={{ padding: '13px 18px', fontFamily: 'monospace', fontSize: 12.5, color: '#0D9488', fontWeight: 800 }}>
+                      {a.rxId || `RX-2026-${a.id.toString().slice(-4)}`}
+                    </td>
+                    <td style={{ padding: '13px 18px', fontWeight: 700, fontSize: 13, color: '#0F172A' }}>{a.medicine}</td>
+                    <td style={{ padding: '13px 18px', fontFamily: 'monospace', fontSize: 12.5, color: '#334155' }}>{a.batch}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{a.quantity}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 13, color: '#334155', fontWeight: 600 }}>{a.customer}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 12.5, color: '#64748B' }}>{a.pharmacist}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>
+                      ₹ {(a.totalAmount || a.quantity * 45).toLocaleString()}
+                    </td>
+                    <td style={{ padding: '13px 18px' }}><Badge status={a.status} /></td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={9} style={{ padding: '36px 20px', textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                    No audit records match "{q}" in category "{statusFilter}".
+                  </td>
+                </tr>
+              )}
+            </tbody>
           </table>
         </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #EFEFEA', fontSize: 12, color: '#888888' }}>Showing {rows.length} of {audits.length} logged dispensing events</div>
+
+        {/* Pagination & Counter Footer */}
+        <div
+          style={{
+            padding: '12px 18px',
+            borderTop: '1px solid #E2E8F0',
+            backgroundColor: '#F8FAFC',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 12, color: '#64748B' }}>
+            Showing {filtered.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
+            {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} audit entries
+          </span>
+
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="btn btn-secondary"
+              style={{ padding: '4px 10px', fontSize: 11.5, opacity: currentPage <= 1 ? 0.5 : 1 }}
+            >
+              Previous
+            </button>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', padding: '0 6px' }}>
+              {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="btn btn-secondary"
+              style={{ padding: '4px 10px', fontSize: 11.5, opacity: currentPage >= totalPages ? 0.5 : 1 }}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </>
   );
@@ -2344,81 +2351,375 @@ function Suppliers({
 
 /* ─────────── 10. BATCH RECALL (WITH BLOCK & NOTIFY) ─────────── */
 function Recall({
-  inventory,
+  inventory = [],
   setInventory,
+  audits = [],
   showToast,
+  onNavigate,
 }: {
   inventory: Medicine[];
   setInventory: React.Dispatch<React.SetStateAction<Medicine[]>>;
+  audits: Audit[];
   showToast: (s: string) => void;
+  onNavigate?: (p: string) => void;
 }) {
   const [notifyModal, setNotifyModal] = useState(false);
+  const [createRecallModal, setCreateRecallModal] = useState(false);
+  const [newRecallBatch, setNewRecallBatch] = useState('');
+  const [newRecallReason, setNewRecallReason] = useState('Packaging seal defect detected');
+  const [hasError, setHasError] = useState(false);
 
-  const blockBatch = () => {
-    setInventory(inventory.map(m => m.batch === 'AMX204' ? { ...m, status: 'Recalled' } : m));
-    showToast('Batch AMX204 has been quarantined & locked from dispensing');
+  // Safe fallback if data parsing fails
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+  const recalledMedicines = safeInventory.filter(m => m && m.status === 'Recalled');
+
+  const blockBatch = (batchCode: string) => {
+    try {
+      setInventory(prev => prev.map(m => m.batch === batchCode ? { ...m, status: 'Recalled' } : m));
+      showToast(`Batch ${batchCode} quarantined & locked from dispensing`);
+    } catch {
+      setHasError(true);
+    }
+  };
+
+  const handleCreateRecall = () => {
+    if (!newRecallBatch) {
+      showToast('Please select a batch to recall');
+      return;
+    }
+    blockBatch(newRecallBatch);
+    setCreateRecallModal(false);
+    showToast(`Recall notice issued for Batch ${newRecallBatch}`);
   };
 
   const handleSendNotice = () => {
     setNotifyModal(false);
-    showToast('SMS & WhatsApp recall alert broadcast to 18 affected patients');
+    showToast('Urgent SMS & WhatsApp recall notification broadcast to all 18 patients');
   };
+
+  const impactedPatients = [
+    { name: 'Priya Sharma', phone: '+91 97312 90342', date: '12 Aug 2026', qty: 10, status: 'SMS Delivered', rxId: 'RX-2026-88192' },
+    { name: 'Arun Kumar', phone: '+91 94480 77109', date: '15 Aug 2026', qty: 15, status: 'Confirmed Discontinued', rxId: 'RX-2026-88185' },
+    { name: 'Rahul Kumar', phone: '+91 98450 48123', date: '18 Aug 2026', qty: 12, status: 'Replacement Claimed', rxId: 'RX-2026-88102' },
+    { name: 'Meena Devi', phone: '+91 96114 64190', date: '19 Aug 2026', qty: 8, status: 'SMS Delivered', rxId: 'RX-2026-88095' },
+  ];
+
+  if (hasError) {
+    return (
+      <div className="card" style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, margin: '24px 0', border: '1px solid #FECACA' }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <AlertCircle size={28} />
+        </div>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', marginBottom: 6 }}>
+          Unable to load recall data
+        </h3>
+        <p style={{ fontSize: 13, color: '#64748B', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
+          An unexpected error occurred while retrieving batch recall records. Please verify inventory connection and retry.
+        </p>
+        <button className="btn btn-primary" onClick={() => setHasError(false)}>
+          <RefreshCw size={14} /> Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
       <PageHeader
-        eyebrow="SAFETY CONTROLS"
-        title="Batch Recall"
-        description="Contain recalled medicines and protect affected customers."
+        eyebrow="PATIENT SAFETY & RECALL CONTAINMENT"
+        title="Batch Recall Management"
+        description="Instant containment protocol: quarantine affected batches, trace exposed customers from dispensing audit logs, and dispatch multilingual advisories."
         action={
-          <button className="btn btn-danger" onClick={() => setNotifyModal(true)}>
-            <Send size={14}/> Send Notification
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-secondary" onClick={() => onNavigate?.('audit')}>
+              <ClipboardCheck size={15} /> Dispensing Audit Logs
+            </button>
+            <button className="btn btn-teal" onClick={() => setCreateRecallModal(true)}>
+              <Plus size={14} /> Issue New Batch Recall
+            </button>
+            <button className="btn btn-danger" onClick={() => setNotifyModal(true)}>
+              <Send size={14} /> Send Recall Notification
+            </button>
+          </div>
         }
       />
-      <div className="card" style={{ border: '1px solid #F3C6D0', overflow: 'hidden', marginBottom: 20 }}>
-        <div style={{ padding: 18, background: '#F9ECEF', borderBottom: '1px solid #F3C6D0', display: 'flex', gap: 14 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#F5D6DC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <AlertCircle size={20} color="#A63A50" />
+
+      {/* Recalled Batches Summary List or Professional Empty State */}
+      {recalledMedicines.length === 0 ? (
+        <div
+          className="card"
+          style={{
+            padding: '48px 24px',
+            textAlign: 'center',
+            backgroundColor: '#FFFFFF',
+            borderRadius: 12,
+            marginBottom: 24,
+            border: '1px solid #E2E8F0',
+          }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              backgroundColor: '#F0FDF4',
+              color: '#16A34A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}
+          >
+            <ShieldCheck size={28} />
           </div>
-          <div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 800, fontSize: 15 }}>Amoxicillin 500mg · AMX204</h3>
-              <Badge status="Recalled" />
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', marginBottom: 6 }}>
+            No Active Batch Recalls
+          </h3>
+          <p style={{ fontSize: 13, color: '#64748B', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
+            All active medication inventory passes regulatory manufacturer safety guidelines. No manufacturer or regulatory quarantine alerts are active.
+          </p>
+          <button className="btn btn-danger" onClick={() => setCreateRecallModal(true)}>
+            <ShieldAlert size={15} /> Issue New Batch Recall Notice
+          </button>
+        </div>
+      ) : (
+        recalledMedicines.map(rec => (
+          <div
+            key={rec.batch}
+            className="card"
+            style={{ border: '1.5px solid #FECACA', overflow: 'hidden', marginBottom: 20 }}
+          >
+            <div
+              style={{
+                padding: '16px 20px',
+                background: '#FEF2F2',
+                borderBottom: '1px solid #FECACA',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 10,
+                    background: '#FEE2E2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <AlertCircle size={22} color="#DC2626" />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <h3 style={{ fontWeight: 900, fontSize: 16, color: '#0F172A' }}>
+                      {rec.medicine} · Batch {rec.batch}
+                    </h3>
+                    <span className="chip badge-red">MANDATORY RECALL</span>
+                  </div>
+                  <p style={{ fontSize: 12.5, color: '#991B1B', marginTop: 2 }}>
+                    Manufacturer/Distributor {rec.supplier} notice issued: Packaging defect. Immediate patient isolation mandatory.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => blockBatch(rec.batch)}
+                  className="btn btn-danger"
+                  style={{ fontSize: 12 }}
+                >
+                  <Ban size={14} /> Batch Hard-Locked
+                </button>
+              </div>
             </div>
-            <p style={{ fontSize: 12.5, color: '#A63A50', marginTop: 3 }}>Supplier recall issued on 18 Aug 2025 due to quality concerns.</p>
+
+            {/* 4 Recall KPI Metrics */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: 14,
+                padding: '18px 20px',
+                backgroundColor: '#FFFFFF',
+              }}
+            >
+              {[
+                { label: 'Units Remaining in Stock', val: String(rec.quantity || 45), sub: 'Quarantined in storage', tone: 'red' },
+                { label: 'Patients Exposed', val: '18', sub: 'Identified via Audit Trail', tone: 'amber' },
+                { label: 'Units Dispensed to Date', val: '27', sub: 'Across 6 transactions', tone: 'blue' },
+                { label: 'Recall Resolution Status', val: '82%', sub: 'Advisories acknowledged', tone: 'green' },
+              ].map(stat => (
+                <div key={stat.label} style={{ padding: '12px 14px', borderRadius: 10, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                  <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>{stat.label}</p>
+                  <p style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>{stat.val}</p>
+                  <p style={{ fontSize: 11, color: stat.tone === 'red' ? '#DC2626' : stat.tone === 'amber' ? '#D97706' : '#16A34A', marginTop: 2, fontWeight: 600 }}>
+                    {stat.sub}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Containment Protocol Action Checklist */}
+            <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#0F172A' }}>ACTIONS TAKEN:</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#16A34A', fontWeight: 600 }}>
+                <CheckCircle2 size={15} /> 1. Dispensing Locked
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#16A34A', fontWeight: 600 }}>
+                <CheckCircle2 size={15} /> 2. Audit Trail Queried
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#16A34A', fontWeight: 600 }}>
+                <CheckCircle2 size={15} /> 3. Emergency SMS Broadcast
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#D97706', fontWeight: 600 }}>
+                <Clock3 size={15} /> 4. Supplier Return Claim Pending
+              </span>
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Modal for Issuing New Batch Recall */}
+      {createRecallModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(3px)' }} onClick={() => setCreateRecallModal(false)} />
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 460, zIndex: 111, padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ShieldAlert size={18} color="#DC2626" />
+                <h3 style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>Issue Batch Recall & Quarantine</h3>
+              </div>
+              <button onClick={() => setCreateRecallModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#64748B"/></button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label className="label">Select Batch to Recall</label>
+                <select className="input" value={newRecallBatch} onChange={e => setNewRecallBatch(e.target.value)}>
+                  <option value="">-- Choose Batch from Inventory --</option>
+                  {inventory.map(m => (
+                    <option key={m.batch} value={m.batch}>
+                      {m.batch} · {m.medicine} ({m.quantity} units, exp: {m.expiry})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Official Recall Reason / Authority Notice</label>
+                <input
+                  className="input"
+                  placeholder="e.g. CDSCO directive or packaging seal breach"
+                  value={newRecallReason}
+                  onChange={e => setNewRecallReason(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+                <button className="btn btn-secondary" onClick={() => setCreateRecallModal(false)}>Cancel</button>
+                <button className="btn btn-danger" onClick={handleCreateRecall}>
+                  <AlertTriangle size={14} /> Quarantine & Issue Recall
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="responsive-stats-grid" style={{ padding: 20 }}>
-          {[['45', 'Units remaining', '#A63A50', 'Must be blocked'], ['18', 'Customers affected', '#B86B35', 'Notifications pending'], ['27', 'Dispensed this month', '#555555', 'Across 6 transactions']].map(([v, l, c, s]) => (
-            <div key={l}><p style={{ fontSize: 11.5, color: '#888888' }}>{l}</p><p style={{ fontSize: 28, fontWeight: 800, color: '#111111', marginTop: 2 }}>{v}</p><p style={{ fontSize: 11.5, color: c, marginTop: 2 }}>{s}</p></div>
-          ))}
+      )}
+
+      {/* Exposed Customers Identified from Dispensing Audit */}
+      <div className="card" style={{ overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
+              Impacted Patients Traced from Dispensing Audit Log
+            </h3>
+            <p style={{ fontSize: 11.5, color: '#64748B' }}>
+              Cross-referenced from historical prescriptions containing batch AMX204
+            </p>
+          </div>
+          <button onClick={() => onNavigate?.('audit')} className="btn btn-ghost" style={{ fontSize: 12 }}>
+            View Full Audit Records →
+          </button>
         </div>
-        <div style={{ padding: '14px 20px', borderTop: '1px solid #EFEFEA', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary" onClick={() => showToast('Showing 18 customer records matching AMX204')}><Users size={14}/> View Impacted Customers</button>
-          <button className="btn btn-danger" onClick={blockBatch}><ShieldCheck size={14}/> Lock / Block Batch</button>
-          <button className="btn btn-secondary" onClick={() => setNotifyModal(true)}><Send size={14}/> Send Safety Notice</button>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr className="table-header">
+                {['Patient Name', 'Phone Number', 'Dispense Date', 'Rx ID', 'Quantity', 'Recall Status', 'Action'].map(h => (
+                  <th key={h} style={{ padding: '11px 16px', fontSize: 11, fontWeight: 700, color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {impactedPatients.map(p => (
+                <tr key={p.name} className="table-row" style={{ borderTop: '1px solid #E2E8F0' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13, color: '#0F172A' }}>{p.name}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: '#475569' }}>{p.phone}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: '#64748B' }}>{p.date}</td>
+                  <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#0D9488', fontWeight: 700 }}>{p.rxId}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{p.qty} units</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span
+                      className={`chip ${
+                        p.status.includes('Claimed')
+                          ? 'badge-green'
+                          : p.status.includes('Confirmed')
+                          ? 'badge-blue'
+                          : 'badge-amber'
+                      }`}
+                    >
+                      {p.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <button
+                      onClick={() => showToast(`Dispatched follow-up SMS reminder to ${p.name}`)}
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11, padding: '4px 8px' }}
+                    >
+                      Resend SMS
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {notifyModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,17,0.5)' }} onClick={() => setNotifyModal(false)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 440, zIndex: 111 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 800 }}>Broadcast Safety Recall Alert</h3>
-              <button onClick={() => setNotifyModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#888"/></button>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(3px)' }} onClick={() => setNotifyModal(false)} />
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 460, zIndex: 111, padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={18} color="#DC2626" />
+                <h3 style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>Broadcast Patient Recall Advisory</h3>
+              </div>
+              <button onClick={() => setNotifyModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#64748B"/></button>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 13, color: '#555555' }}>
-                This will send an automated SMS & WhatsApp notification to all <b>18 patients</b> who received batch <b>AMX204 (Amoxicillin 500mg)</b>.
+              <p style={{ fontSize: 13, color: '#334155' }}>
+                This will dispatch an urgent automated SMS & WhatsApp advisory to all <b>18 patients</b> who received batch <b>AMX204 (Amoxicillin 500mg)</b>.
               </p>
-              <div style={{ background: '#F9ECEF', padding: 12, borderRadius: 8, border: '1px solid #F3C6D0', fontSize: 12.5, color: '#A63A50' }}>
-                "Urgent notification from WellCare Pharmacy: Please discontinue taking Amoxicillin 500mg Batch AMX204. Please visit the pharmacy for free replacement."
+              <div style={{ background: '#FEF2F2', padding: 14, borderRadius: 10, border: '1px solid #FECACA', fontSize: 12.5, color: '#991B1B', lineHeight: 1.5 }}>
+                <b>Standard Regulatory Message:</b>
+                <p style={{ marginTop: 4 }}>
+                  "Urgent Safety Notice from WellCare Pharmacy: Please discontinue taking Amoxicillin 500mg Batch AMX204 immediately due to distributor recall. Please bring unused medication to the pharmacy for a 100% free fresh replacement."
+                </p>
               </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button className="btn btn-secondary" onClick={() => setNotifyModal(false)}>Cancel</button>
-                <button className="btn btn-danger" onClick={handleSendNotice}>Send 18 Notifications</button>
+                <button className="btn btn-danger" onClick={handleSendNotice}>
+                  <Send size={14} /> Send 18 Broadcast Notifications
+                </button>
               </div>
             </div>
           </div>
@@ -2821,17 +3122,21 @@ function Reports({ showToast }: { showToast: (s: string) => void }) {
         </select>
       </div>
       <div className="responsive-split-grid">
-        <Panel title="Dispensing Trend" action={<span style={{ fontSize: 12, color: '#52796F', fontWeight: 600 }}>+12.4% vs prior</span>}><SimpleChart /></Panel>
-        <Panel title="Stock Movement"><SimpleChart type="bar" /></Panel>
+        <Panel title="Dispensing Trend" action={<span style={{ fontSize: 12, color: '#0D9488', fontWeight: 700 }}>+12.4% vs prior</span>}>
+          <DispensingTrendsChart timeframe={timeframe} />
+        </Panel>
+        <Panel title="Stock Movement" action={<span style={{ fontSize: 12, color: '#64748B' }}>Apr – Sep 2026</span>}>
+          <StockMovementChart />
+        </Panel>
         <Panel title="Expiry Risk by Month">
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[['Sep 2026', '12', '#A63A50'], ['Oct 2026', '18', '#B86B35'], ['Nov 2026', '28', '#B86B35'], ['Dec 2026', '34', '#52796F'], ['Jan 2027', '42', '#CCCCCC']].map(([m, v, c]) => (
+            {[['Sep 2026', '12', '#DC2626'], ['Oct 2026', '18', '#D97706'], ['Nov 2026', '28', '#D97706'], ['Dec 2026', '34', '#0D9488'], ['Jan 2027', '42', '#94A3B8']].map(([m, v, c]) => (
               <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 54, fontSize: 11.5, color: '#555555' }}>{m}</span>
-                <div style={{ flex: 1, height: 18, background: '#F2F2EE', borderRadius: 5, overflow: 'hidden' }}>
+                <span style={{ width: 54, fontSize: 11.5, color: '#475569', fontWeight: 600 }}>{m}</span>
+                <div style={{ flex: 1, height: 18, background: '#F1F5F9', borderRadius: 5, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${Number(v) * 1.8}%`, background: c, borderRadius: 5 }}/>
                 </div>
-                <span style={{ width: 22, fontSize: 11.5, fontWeight: 700, textAlign: 'right' }}>{v}</span>
+                <span style={{ width: 22, fontSize: 11.5, fontWeight: 700, textAlign: 'right', color: '#0F172A' }}>{v}</span>
               </div>
             ))}
           </div>
@@ -2840,10 +3145,10 @@ function Reports({ showToast }: { showToast: (s: string) => void }) {
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {filteredMeds.map((x, i) => (
               <div key={x.name} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5 }}>
-                <span style={{ width: 20, fontSize: 10.5, color: '#888888', fontWeight: 600 }}>0{i + 1}</span>
-                <span style={{ flex: 1, fontWeight: 600 }}>{x.name}</span>
-                <span style={{ fontWeight: 700 }}>{x.count}</span>
-                <ArrowUpRight size={12} color="#52796F" />
+                <span style={{ width: 20, fontSize: 11, color: '#64748B', fontWeight: 700 }}>0{i + 1}</span>
+                <span style={{ flex: 1, fontWeight: 700, color: '#0F172A' }}>{x.name}</span>
+                <span style={{ fontWeight: 800, color: '#0F172A' }}>{x.count}</span>
+                <ArrowUpRight size={14} color="#0D9488" strokeWidth={2.5} />
               </div>
             ))}
           </div>
@@ -3037,7 +3342,7 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
     { id: 3, date: 'Yesterday, 04:35 PM', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 10, customer: 'Meena Devi', pharmacist: 'Dr. Suresh', status: 'Completed', rxId: 'RX-2026-88102', totalAmount: 650 },
   ]);
   const [toast, setToast] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   const showToast = (text: string) => {
@@ -3049,7 +3354,7 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
       setMobileDrawerOpen(true);
     } else {
-      setSidebarOpen(!sidebarOpen);
+      setSidebarCollapsed(!sidebarCollapsed);
     }
   };
 
@@ -3058,21 +3363,53 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
     setPage(targetPage);
   };
 
+  // Workspaces tab configurations
+  const inventoryTabs: TabItem[] = [
+    { id: 'inventory', label: 'Medicines & Stock', badge: inventory.length },
+    { id: 'add-stock', label: 'Add New Stock' },
+    { id: 'expiry', label: 'Batches & Expiry', badge: inventory.filter(m => m.status === 'Near Expiry' || m.status === 'Expired').length, badgeVariant: 'warning' },
+    { id: 'suppliers', label: 'Suppliers & Returns', badge: suppliersList.length },
+  ];
+
+  const dispensingTabs: TabItem[] = [
+    { id: 'dispensing', label: 'New Dispensing (POS)' },
+    { id: 'audit', label: 'Dispensing Audit', badge: audits.length },
+    { id: 'customers', label: 'Customer Directory', badge: customersList.length },
+  ];
+
+  const safetyTabs: TabItem[] = [
+    { id: 'alerts', label: 'Safety & System Alerts', badge: 3, badgeVariant: 'danger' },
+    { id: 'recall', label: 'Batch Recall & Quarantine', badge: inventory.filter(m => m.status === 'Recalled').length || 1, badgeVariant: 'danger' },
+  ];
+
+  const aiTabs: TabItem[] = [
+    { id: 'ai', label: 'AI Pharmacy Assistant' },
+    { id: 'simulator', label: 'What-If Expiry Simulator' },
+    { id: 'reports', label: 'Reports & Analytics' },
+  ];
+
+  const isInventoryWorkspace = ['inventory', 'add-stock', 'expiry', 'suppliers'].includes(page);
+  const isDispensingWorkspace = ['dispensing', 'audit', 'customers'].includes(page);
+  const isSafetyWorkspace = ['alerts', 'recall'].includes(page);
+  const isAiWorkspace = ['ai', 'simulator', 'reports'].includes(page);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#FAFAF8' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#F8FAFC' }}>
       <Sidebar
-        open={sidebarOpen}
         page={page}
-        onNavigate={p => { setFilterQuery(''); setPage(p as Page); }}
+        onNavigate={p => { setFilterQuery(''); setPage(p); }}
         onLogout={onLogout}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        inventoryCount={inventory.length}
+        criticalAlertCount={3}
       />
 
-      <MobileDrawer
+      <MobileSidebarDrawer
         open={mobileDrawerOpen}
         onClose={() => setMobileDrawerOpen(false)}
         page={page}
-        onNavigate={p => { setFilterQuery(''); setPage(p as Page); }}
+        onNavigate={p => { setFilterQuery(''); setPage(p); }}
         onLogout={onLogout}
       />
 
@@ -3080,9 +3417,13 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
         className="main-content-wrapper"
         style={{
           flex: 1,
-          marginLeft: 68,
-          transition: 'margin 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          marginLeft: sidebarCollapsed ? 74 : 260,
+          width: `calc(100% - ${sidebarCollapsed ? 74 : 260}px)`,
           minWidth: 0,
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          transition: 'margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         <Topbar
@@ -3094,8 +3435,38 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
           suppliersList={suppliersList}
           onNavigateWithFilter={handleNavigateWithFilter}
         />
-        <main style={{ padding: 'clamp(14px, 2.5vw, 28px)', maxWidth: 1400, margin: '0 auto', paddingBottom: '90px' }} className="animate-fade-in">
-          {page === 'dashboard' && <Dashboard onNavigate={p => setPage(p as Page)} />}
+        <main style={{ flex: 1, width: '100%', padding: '24px 32px 80px', boxSizing: 'border-box' }} className="animate-fade-in">
+          {/* Workspace Tabs - Rendered dynamically at top of relevant modules */}
+          {isInventoryWorkspace && (
+            <WorkspaceTabs
+              tabs={inventoryTabs}
+              activeTab={page}
+              onSelectTab={tabId => { setFilterQuery(''); setPage(tabId as Page); }}
+            />
+          )}
+          {isDispensingWorkspace && (
+            <WorkspaceTabs
+              tabs={dispensingTabs}
+              activeTab={page}
+              onSelectTab={tabId => { setFilterQuery(''); setPage(tabId as Page); }}
+            />
+          )}
+          {isSafetyWorkspace && (
+            <WorkspaceTabs
+              tabs={safetyTabs}
+              activeTab={page}
+              onSelectTab={tabId => { setFilterQuery(''); setPage(tabId as Page); }}
+            />
+          )}
+          {isAiWorkspace && (
+            <WorkspaceTabs
+              tabs={aiTabs}
+              activeTab={page}
+              onSelectTab={tabId => { setFilterQuery(''); setPage(tabId as Page); }}
+            />
+          )}
+
+          {page === 'dashboard' && <Dashboard onNavigate={p => setPage(p as Page)} inventory={inventory} />}
           {page === 'inventory' && (
             <Inventory
               inventory={inventory}
@@ -3137,41 +3508,39 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
               showToast={showToast}
             />
           )}
-          {page === 'recall' && <Recall inventory={inventory} setInventory={setInventory} showToast={showToast} />}
-          {page === 'ai' && <Assistant inventory={inventory} audits={audits} onOpenSimulator={() => setPage('simulator')} />}
-          {page === 'simulator' && <WhatIfSimulator inventory={inventory} setInventory={setInventory} showToast={showToast} />}
+          {page === 'recall' && (
+            <Recall
+              inventory={inventory}
+              setInventory={setInventory}
+              audits={audits}
+              showToast={showToast}
+              onNavigate={p => setPage(p as Page)}
+            />
+          )}
+          {page === 'ai' && (
+            <EnhancedAIAssistant
+              inventory={inventory}
+              audits={audits}
+              suppliersList={suppliersList}
+              onOpenSimulator={() => setPage('simulator')}
+              onNavigatePage={p => setPage(p as Page)}
+            />
+          )}
+          {page === 'simulator' && (
+            <EnhancedWhatIfSimulator
+              inventory={inventory}
+              setInventory={setInventory}
+              showToast={showToast}
+            />
+          )}
           {page === 'reports' && <Reports showToast={showToast} />}
           {page === 'settings' && <PharmSettings showToast={showToast} />}
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="mobile-bottom-nav">
-        <button onClick={() => setPage('dashboard')} className={`mobile-bottom-item ${page === 'dashboard' ? 'active' : ''}`}>
-          <Gauge size={19} />
-          <span>Dashboard</span>
-        </button>
-        <button onClick={() => setPage('inventory')} className={`mobile-bottom-item ${page === 'inventory' ? 'active' : ''}`}>
-          <Boxes size={19} />
-          <span>Inventory</span>
-        </button>
-        <button onClick={() => setPage('dispensing')} className={`mobile-bottom-item ${page === 'dispensing' ? 'active' : ''}`}>
-          <CreditCard size={19} />
-          <span>Dispense</span>
-        </button>
-        <button onClick={() => setPage('simulator')} className={`mobile-bottom-item ${page === 'simulator' ? 'active' : ''}`}>
-          <SlidersHorizontal size={19} />
-          <span>Simulator</span>
-        </button>
-        <button onClick={() => setMobileDrawerOpen(true)} className="mobile-bottom-item">
-          <Menu size={19} />
-          <span>Menu</span>
-        </button>
-      </nav>
-
       {toast && (
-        <div className="animate-slide-up" style={{ position: 'fixed', bottom: 74, right: 20, zIndex: 120, display: 'flex', alignItems: 'center', gap: 10, background: '#111111', color: 'white', padding: '11px 18px', borderRadius: 11, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', fontSize: 13, fontWeight: 500 }}>
-          <CheckCircle2 size={16} color="#A3B19B" /> {toast}
+        <div className="animate-slide-up" style={{ position: 'fixed', bottom: 74, right: 20, zIndex: 120, display: 'flex', alignItems: 'center', gap: 10, background: '#0F172A', color: 'white', padding: '11px 18px', borderRadius: 11, boxShadow: '0 8px 24px rgba(15,23,42,0.25)', fontSize: 13, fontWeight: 600 }}>
+          <CheckCircle2 size={16} color="#5EEAD4" /> {toast}
         </div>
       )}
     </div>
