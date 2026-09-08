@@ -9,14 +9,17 @@
 :root {
   /* Crisp White-Based Professional Healthcare Palette */
   --bg: #F8FAFC;
+  --background: #F8FAFC;
   --bg-sidebar: #FFFFFF;
   --bg-header: #FFFFFF;
   --bg-alt: #F1F5F9;
   --bg-subtle: #E2E8F0;
   --bg-input: #FFFFFF;
+  --input-background: #FFFFFF;
   --surface: #FFFFFF;
   --surface-hover: #F8FAFC;
   --surface-raised: #FFFFFF;
+  --surface-elevated: #FFFFFF;
   --white: #FFFFFF;
 
   /* Primary Brand: Professional Medical Teal */
@@ -29,13 +32,16 @@
 
   /* High-Contrast Text Hierarchy */
   --text: #0F172A;
+  --text-primary: #0F172A;
   --text-2: #1E293B;
+  --text-secondary: #475569;
   --text-3: #475569;
   --text-4: #64748B;
   --text-muted: #94A3B8;
 
   /* Crisp Borders */
   --border: #E2E8F0;
+  --input-border: #CBD5E1;
   --border-light: #F1F5F9;
   --border-strong: #CBD5E1;
 
@@ -83,6 +89,7 @@
 [data-theme="dark"], .dark {
   /* Layer 1: App Background */
   --bg: #0F1720;
+  --background: #0F1720;
 
   /* Layer 2: Sidebar & Header */
   --bg-sidebar: #111B26;
@@ -90,6 +97,7 @@
   --bg-alt: #14202C;
   --bg-subtle: #1A2838;
   --bg-input: #14202C;
+  --input-background: #14202C;
 
   /* Layer 3: Cards & Surfaces */
   --surface: #172330;
@@ -97,6 +105,7 @@
 
   /* Layer 4: Elevated Modals & Tooltips */
   --surface-raised: #1E2D3D;
+  --surface-elevated: #1E2D3D;
   --white: #172330;
 
   /* Primary Brand: Professional Teal */
@@ -109,13 +118,16 @@
 
   /* High-Contrast WCAG Text Hierarchy */
   --text: #F1F5F9;
+  --text-primary: #F1F5F9;
   --text-2: #A8B5C4;
+  --text-secondary: #A8B5C4;
   --text-3: #8E9DAE;
   --text-4: #7F8D9D;
   --text-muted: #7F8D9D;
 
   /* Layer 5: Subtle Slate Borders */
   --border: #2A3A49;
+  --input-border: #3B4D60;
   --border-light: #1E2D3D;
   --border-strong: #3B4D60;
 
@@ -225,12 +237,14 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.btn-teal {
+.btn-teal,
+.btn-sage {
   background: var(--primary);
   color: #FFFFFF;
   border-color: var(--primary);
 }
-.btn-teal:hover {
+.btn-teal:hover,
+.btn-sage:hover {
   background: var(--primary-dark);
   border-color: var(--primary-dark);
   box-shadow: 0 4px 12px var(--primary-glow);

@@ -1021,7 +1021,7 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
       <div className="responsive-split-grid" style={{ marginBottom: 20 }}>
         <Panel
           title="Stock Movement (Inflow vs Outflow)"
-          action={<span style={{ fontSize: 12, color: '#64748B' }}>Apr – Sep 2026</span>}
+          action={<span style={{ fontSize: 12, color: 'var(--text-3)' }}>Apr – Sep 2026</span>}
         >
           <StockMovementChart />
         </Panel>
@@ -1030,7 +1030,7 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
           title="Most Dispensed Medicines Ranking"
           action={
             <button
-              style={{ fontSize: 12, color: '#0D9488', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
               onClick={() => onNavigate('reports')}
             >
               Full analytics report →
@@ -1051,12 +1051,12 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
         className="card"
         style={{
           padding: 20,
-          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-          color: '#FFFFFF',
+          background: 'linear-gradient(135deg, var(--bg-alt) 0%, var(--surface-raised) 100%)',
+          color: 'var(--text)',
           display: 'flex',
           alignItems: 'center',
           gap: 18,
-          border: '1px solid #334155',
+          border: '1px solid var(--border)',
         }}
       >
         <div
@@ -1064,30 +1064,28 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
             width: 44,
             height: 44,
             borderRadius: 12,
-            background: '#0D9488',
+            background: 'var(--primary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            boxShadow: '0 4px 14px rgba(13, 148, 136, 0.4)',
+            boxShadow: '0 4px 14px var(--primary-glow)',
           }}
         >
           <BrainCircuit size={22} color="white" />
         </div>
         <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 10.5, color: '#99F6E4', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          <p style={{ fontSize: 10.5, color: 'var(--primary)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
             OPERATIONAL AI ADVISORY & SIMULATION
           </p>
-          <p style={{ color: '#F8FAFC', fontWeight: 600, marginTop: 3, fontSize: 13.5 }}>
+          <p style={{ color: 'var(--text)', fontWeight: 600, marginTop: 3, fontSize: 13.5 }}>
             Purchasing 300 additional units of Vitamin D3 will cause ~120 units (₹ 7,800) to expire unsold based on current velocity. Run the What-If Simulator before issuing PO.
           </p>
         </div>
         <button
           onClick={() => onNavigate('simulator')}
-          className="btn"
+          className="btn btn-teal"
           style={{
-            backgroundColor: '#0D9488',
-            color: '#FFFFFF',
             whiteSpace: 'nowrap',
             fontSize: 13,
             padding: '9px 16px',
@@ -1137,18 +1135,18 @@ function Inventory({
         title="Medicine Inventory"
         description="Track medicines, batches, and stock status in one place."
         action={
-          <button onClick={onAdd} className="btn btn-sage">
+          <button onClick={onAdd} className="btn btn-teal">
             <Plus size={15}/> Add stock
           </button>
         }
       />
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: 16, display: 'flex', gap: 12, justifyContent: 'space-between', borderBottom: '1px solid #EFEFEA', flexWrap: 'wrap' }}>
+        <div style={{ padding: 16, display: 'flex', gap: 12, justifyContent: 'space-between', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
           <div className="search-input" style={{ minWidth: 260 }}>
-            <Search size={15} color="#888888" />
+            <Search size={15} color="var(--text-muted)" />
             <input placeholder="Search medicine, batch, supplier..." value={q} onChange={e => setQ(e.target.value)} />
             {q && (
-              <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888888' }}>
+              <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                 <X size={13} />
               </button>
             )}
@@ -1169,36 +1167,36 @@ function Inventory({
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr style={{ background: '#F2F2EE' }}>
+              <tr style={{ background: 'var(--bg-alt)' }}>
                 {['Medicine', 'Batch', 'Expiry', 'Quantity', 'Rate', 'Supplier', 'Status', ''].map(h => (
-                  <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: '#888888', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>
+                  <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.map(m => (
-                <tr key={m.id} className="table-row" style={{ borderTop: '1px solid #EFEFEA' }}>
+                <tr key={m.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: '14px 20px' }}>
-                    <p style={{ fontWeight: 600, fontSize: 13.5, color: '#111111' }}>{m.medicine}</p>
-                    <p style={{ fontSize: 11, color: '#888888', marginTop: 2 }}>Stock updated</p>
+                    <p style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text)' }}>{m.medicine}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Stock updated</p>
                   </td>
-                  <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 13, color: '#555555' }}>{m.batch}</td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, color: '#555555' }}>{m.expiry}</td>
-                  <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 700, color: '#111111' }}>{m.quantity}</td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, color: '#555555' }}>₹ {m.unitPrice || 45}</td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, color: '#555555' }}>{m.supplier}</td>
+                  <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 13, color: 'var(--text-2)' }}>{m.batch}</td>
+                  <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{m.expiry}</td>
+                  <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{m.quantity}</td>
+                  <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>₹ {m.unitPrice || 45}</td>
+                  <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{m.supplier}</td>
                   <td style={{ padding: '14px 20px' }}><Badge status={m.status}/></td>
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                       <button className="btn btn-ghost" style={{ padding: 6 }} onClick={() => setEdit(m)}><Edit3 size={14}/></button>
-                      <button className="btn btn-ghost" style={{ padding: 6, color: '#A63A50' }} onClick={() => { setInventory(inventory.filter(x => x.id !== m.id)); showToast(`Removed ${m.medicine} (${m.batch})`); }}><Trash2 size={14}/></button>
+                      <button className="btn btn-ghost" style={{ padding: 6, color: 'var(--danger)' }} onClick={() => { setInventory(inventory.filter(x => x.id !== m.id)); showToast(`Removed ${m.medicine} (${m.batch})`); }}><Trash2 size={14}/></button>
                     </div>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: 36, color: '#888888', fontSize: 13 }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: 36, color: 'var(--text-3)', fontSize: 13 }}>
                     No medicines match your search criteria.
                   </td>
                 </tr>
@@ -1206,16 +1204,16 @@ function Inventory({
             </tbody>
           </table>
         </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #EFEFEA', fontSize: 12, color: '#888888' }}>Showing {rows.length} of {inventory.length} medicines</div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-3)' }}>Showing {rows.length} of {inventory.length} medicines</div>
       </div>
 
       {edit && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,17,0.4)' }} onClick={() => setEdit(null)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setEdit(null)} />
           <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 440, padding: 0 }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 700, fontSize: 16 }}>Edit medicine</h3>
-              <button onClick={() => setEdit(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888888' }}><X size={18}/></button>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Edit medicine</h3>
+              <button onClick={() => setEdit(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}><X size={18}/></button>
             </div>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div><label className="label">Medicine name</label><input className="input" value={edit.medicine} onChange={e => setEdit({ ...edit, medicine: e.target.value })}/></div>
@@ -1226,7 +1224,7 @@ function Inventory({
               <div><label className="label">Status</label><select className="input" value={edit.status} onChange={e => setEdit({ ...edit, status: e.target.value as Status })}><option>Available</option><option>Near Expiry</option><option>Low Stock</option><option>Recalled</option></select></div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
                 <button className="btn btn-secondary" onClick={() => setEdit(null)}>Cancel</button>
-                <button className="btn btn-sage" onClick={() => { setInventory(inventory.map(x => x.id === edit.id ? edit : x)); setEdit(null); showToast('Inventory updated'); }}>Save changes</button>
+                <button className="btn btn-teal" onClick={() => { setInventory(inventory.map(x => x.id === edit.id ? edit : x)); setEdit(null); showToast('Inventory updated'); }}>Save changes</button>
               </div>
             </div>
           </div>
@@ -1313,16 +1311,16 @@ function AddStock({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="card card-hover" style={{ padding: 22 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <QrCode size={22} color="#526350" />
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <QrCode size={22} color="var(--primary)" />
               </div>
               <div style={{ flex: 1 }}>
-                <h3 style={{ fontWeight: 700, fontSize: 16 }}>Barcode / QR Package Scanner</h3>
-                <p style={{ fontSize: 13, color: '#555555', marginTop: 4, lineHeight: 1.5 }}>
+                <h3 style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Barcode / QR Package Scanner</h3>
+                <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
                   Scan medicine packages, strips, or bulk carton QR codes for auto-filling batch details.
                 </p>
                 <div style={{ marginTop: 14 }}>
-                  <button className="btn btn-sage" onClick={() => setScannerOpen(true)}>
+                  <button className="btn btn-teal" onClick={() => setScannerOpen(true)}>
                     <Camera size={15} /> Launch QR Scanner
                   </button>
                 </div>
@@ -1332,12 +1330,12 @@ function AddStock({
 
           <div className="card card-hover" style={{ padding: 22 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#E3ECE7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <FileText size={22} color="#4A6B5D" />
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--info-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <FileText size={22} color="var(--info)" />
               </div>
               <div style={{ flex: 1 }}>
-                <h3 style={{ fontWeight: 700, fontSize: 16 }}>Distributor Invoice OCR</h3>
-                <p style={{ fontSize: 13, color: '#555555', marginTop: 4, lineHeight: 1.5 }}>
+                <h3 style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Distributor Invoice OCR</h3>
+                <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
                   Upload a distributor purchase bill (PDF/Image) to batch-import all medications automatically.
                 </p>
                 <div style={{ marginTop: 14 }}>
@@ -1351,7 +1349,7 @@ function AddStock({
         </div>
 
         <div className="card" style={{ padding: 24 }}>
-          <h3 style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, borderBottom: '1px solid #EFEFEA', paddingBottom: 12 }}>
+          <h3 style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12, color: 'var(--text)' }}>
             Stock Entry Details
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -1387,7 +1385,7 @@ function AddStock({
             </div>
             <div style={{ gridColumn: 'span 2', display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
               <button className="btn btn-secondary" onClick={onDone}>Cancel</button>
-              <button className="btn btn-sage" onClick={submit}><PackagePlus size={15}/> Add to Inventory</button>
+              <button className="btn btn-teal" onClick={submit}><PackagePlus size={15}/> Add to Inventory</button>
             </div>
           </div>
         </div>
@@ -1455,7 +1453,6 @@ function Expiry({
             showToast(`Selected ${b.medicine} (${b.batch}) · Expiry: ${b.expiry}`);
           }}
           onNavigateExpiryTable={() => {
-            // Scroll down or focus on table
             showToast('Showing full FEFO batch priority table below');
           }}
         />
@@ -1464,17 +1461,17 @@ function Expiry({
       <div className="responsive-dashboard-grid">
         <Panel title="Expiry Risk Distribution Breakdown">
           <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-            <div style={{ width: 140, height: 140, borderRadius: '50%', background: 'conic-gradient(#A63A50 0 4%,#B86B35 4% 16%,#52796F 16% 30%,#E5E5E0 30% 100%)', position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 24, fontWeight: 800, color: '#111111' }}>246</span>
-                <span style={{ fontSize: 11, color: '#888888' }}>batches</span>
+            <div style={{ width: 140, height: 140, borderRadius: '50%', background: 'conic-gradient(var(--danger) 0 4%, var(--warning) 4% 16%, var(--primary) 16% 30%, var(--border-strong) 30% 100%)', position: 'relative' }}>
+              <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', background: 'var(--surface-raised)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>246</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>batches</span>
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-              {[['Expired / Recalled', '4', '#A63A50'], ['Critical (<30d)', '12', '#B86B35'], ['Watch (<90d)', '34', '#52796F'], ['Safe (>90d)', '196', '#CCCCCC']].map(([n, v, c]) => (
-                <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center' }}>
+              {[['Expired / Recalled', '4', 'var(--danger)'], ['Critical (<30d)', '12', 'var(--warning)'], ['Watch (<90d)', '34', 'var(--primary)'], ['Safe (>90d)', '196', 'var(--text-muted)']].map(([n, v, c]) => (
+                <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center', color: 'var(--text-2)' }}>
                   <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }}/>{n}</span>
-                  <b>{v}</b>
+                  <b style={{ color: 'var(--text)' }}>{v}</b>
                 </div>
               ))}
             </div>
@@ -1484,30 +1481,30 @@ function Expiry({
         <Panel title="Regulatory Compliance & FEFO Protocol">
           <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <CheckCircle2 size={18} color="#16A34A" />
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--success-light)', border: '1px solid var(--success-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <CheckCircle2 size={18} color="var(--success)" />
               </div>
               <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>First-Expiry, First-Out (FEFO) Strict Enforcement</p>
-                <p style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>System automatically sorts stock batches by earliest expiry to minimize expired inventory write-offs.</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>First-Expiry, First-Out (FEFO) Strict Enforcement</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>System automatically sorts stock batches by earliest expiry to minimize expired inventory write-offs.</p>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <AlertCircle size={18} color="#DC2626" />
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--danger-light)', border: '1px solid var(--danger-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertCircle size={18} color="var(--danger)" />
               </div>
               <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Automated Quarantine Barrier</p>
-                <p style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Batches marked as Expired or Recalled are electronically hard-locked and cannot be selected during dispensing.</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Automated Quarantine Barrier</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Batches marked as Expired or Recalled are electronically hard-locked and cannot be selected during dispensing.</p>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Clock3 size={18} color="#D97706" />
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--warning-light)', border: '1px solid var(--warning-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Clock3 size={18} color="var(--warning)" />
               </div>
               <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Supplier Return Window</p>
-                <p style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Medicines reaching 60 days before expiry generate return-to-vendor credit claim notices automatically.</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Supplier Return Window</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Medicines reaching 60 days before expiry generate return-to-vendor credit claim notices automatically.</p>
               </div>
             </div>
           </div>
@@ -1516,18 +1513,18 @@ function Expiry({
       <Panel title="Priority Batches for FEFO Dispensing">
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead><tr style={{ background: '#F2F2EE' }}>
-              {['Medicine', 'Batch', 'Expiry', 'Days Left', 'Risk', 'Action'].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: '#888888', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
+            <thead><tr style={{ background: 'var(--bg-alt)' }}>
+              {['Medicine', 'Batch', 'Expiry', 'Days Left', 'Risk', 'Action'].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
             </tr></thead>
             <tbody>{inventory.slice(0, 5).map((m, i) => (
-              <tr key={m.batch} className="table-row" style={{ borderTop: '1px solid #EFEFEA' }}>
-                <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: 13 }}>{m.medicine}</td>
-                <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 13 }}>{m.batch}</td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: '#555555' }}>{m.expiry}</td>
-                <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 14 }}>{[12, 42, 68, 103, 150][i] || 90}</td>
+              <tr key={m.batch} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{m.medicine}</td>
+                <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 13, color: 'var(--text-2)' }}>{m.batch}</td>
+                <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{m.expiry}</td>
+                <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{[12, 42, 68, 103, 150][i] || 90}</td>
                 <td style={{ padding: '14px 20px' }}><Badge status={m.status}/></td>
                 <td style={{ padding: '14px 20px' }}>
-                  <button onClick={() => onNavigate?.('dispensing')} style={{ fontSize: 12, color: '#6B8068', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <button onClick={() => onNavigate?.('dispensing')} style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
                     Dispense batch →
                   </button>
                 </td>
@@ -1681,14 +1678,14 @@ function Dispensing({
       />
       <div className="responsive-dashboard-grid">
         <div className="card">
-          <div style={{ padding: 18, borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: 18, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ width: 38, height: 38, borderRadius: 9, background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CreditCard size={18} color="#526350"/>
+              <div style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CreditCard size={18} color="var(--primary)"/>
               </div>
               <div>
-                <h3 style={{ fontWeight: 700, fontSize: 14.5 }}>New dispensing record</h3>
-                <p style={{ fontSize: 11.5, color: '#888888', marginTop: 2 }}>Record what leaves your pharmacy</p>
+                <h3 style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--text)' }}>New dispensing record</h3>
+                <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>Record what leaves your pharmacy</p>
               </div>
             </div>
             <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setScannerOpen(true)}>
@@ -1720,12 +1717,12 @@ function Dispensing({
             <div>
               <label className="label">Quantity</label>
               <input className="input" type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value)))}/>
-              {chosen && <p style={{ fontSize: 11, color: '#888888', marginTop: 4 }}>Available: {chosen.quantity} units (₹ {chosen.unitPrice || 45}/unit)</p>}
+              {chosen && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>Available: {chosen.quantity} units (₹ {chosen.unitPrice || 45}/unit)</p>}
             </div>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <label className="label" style={{ marginBottom: 0 }}>Customer</label>
-                <button onClick={() => setNewCustomerModal(true)} style={{ background: 'none', border: 'none', color: '#6B8068', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                <button onClick={() => setNewCustomerModal(true)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                   + New Customer
                 </button>
               </div>
@@ -1741,7 +1738,7 @@ function Dispensing({
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-              <button className="btn btn-sage" style={{ padding: '10px 22px' }} onClick={confirm}>
+              <button className="btn btn-teal" style={{ padding: '10px 22px' }} onClick={confirm}>
                 <Check size={15}/> Confirm & Generate Receipt
               </button>
             </div>
@@ -1750,21 +1747,21 @@ function Dispensing({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="card" style={{ padding: 18 }}>
-            <p style={{ fontSize: 11.5, color: '#555555', fontWeight: 500 }}>Dispensed today</p>
-            <p style={{ fontSize: 32, fontWeight: 800, color: '#111111', marginTop: 2 }}>{42 + audits.length - 3}</p>
-            <p style={{ fontSize: 11.5, color: '#888888', marginTop: 2 }}>records completed</p>
-            <div className="progress-bar" style={{ marginTop: 12 }}><div className="progress-fill" style={{ width: '78%', background: '#6B8068' }}/></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginTop: 6 }}><span style={{ color: '#555555' }}>Daily target</span><b>78%</b></div>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500 }}>Dispensed today</p>
+            <p style={{ fontSize: 32, fontWeight: 800, color: 'var(--text)', marginTop: 2 }}>{42 + audits.length - 3}</p>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>records completed</p>
+            <div className="progress-bar" style={{ marginTop: 12 }}><div className="progress-fill" style={{ width: '78%', background: 'var(--primary)' }}/></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginTop: 6 }}><span style={{ color: 'var(--text-3)' }}>Daily target</span><b style={{ color: 'var(--text)' }}>78%</b></div>
           </div>
           <Panel title="Recent records">
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {audits.slice(0, 4).map(a => (
-                <div key={a.id} style={{ padding: '12px 18px', borderTop: '1px solid #EFEFEA' }}>
+                <div key={a.id} style={{ padding: '12px 18px', borderTop: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <p style={{ fontSize: 12.5, fontWeight: 600, color: '#111111' }}>{a.medicine}</p>
-                    <span style={{ fontSize: 11.5, color: '#888888' }}>{a.quantity}x</span>
+                    <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>{a.medicine}</p>
+                    <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{a.quantity}x</span>
                   </div>
-                  <p style={{ fontSize: 11.5, color: '#888888', marginTop: 2 }}>{a.customer} · {a.date}</p>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{a.customer} · {a.date}</p>
                 </div>
               ))}
             </div>
@@ -1780,18 +1777,18 @@ function Dispensing({
 
       {newCustomerModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,17,0.5)' }} onClick={() => setNewCustomerModal(false)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 400, zIndex: 111 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 700, fontSize: 15 }}>Quick Add Customer</h3>
-              <button onClick={() => setNewCustomerModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={17} color="#888"/></button>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setNewCustomerModal(false)} />
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 400, zIndex: 111, padding: 0 }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>Quick Add Customer</h3>
+              <button onClick={() => setNewCustomerModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={17} color="var(--text-3)"/></button>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div><label className="label">Customer Full Name *</label><input className="input" placeholder="e.g. Ramesh Patel" value={newCustName} onChange={e => setNewCustName(e.target.value)}/></div>
               <div><label className="label">Phone Number</label><input className="input" placeholder="e.g. +91 98450 12345" value={newCustPhone} onChange={e => setNewCustPhone(e.target.value)}/></div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
                 <button className="btn btn-secondary" onClick={() => setNewCustomerModal(false)}>Cancel</button>
-                <button className="btn btn-sage" onClick={handleAddCustomer}>Add & Select</button>
+                <button className="btn btn-teal" onClick={handleAddCustomer}>Add & Select</button>
               </div>
             </div>
           </div>
@@ -1863,15 +1860,15 @@ function AuditPage({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 18 }}>
         <div className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Total Transactions</p>
-            <p style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>{audits.length}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>Total Transactions</p>
+            <p style={{ fontSize: 20, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>{audits.length}</p>
           </div>
           <span className="chip badge-teal" style={{ fontSize: 11 }}>100% Traceable</span>
         </div>
         <div className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Units Dispensed</p>
-            <p style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>Units Dispensed</p>
+            <p style={{ fontSize: 20, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>
               {audits.reduce((sum, a) => sum + a.quantity, 0)} units
             </p>
           </div>
@@ -1879,8 +1876,8 @@ function AuditPage({
         </div>
         <div className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Dispensing Volume</p>
-            <p style={{ fontSize: 20, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>₹ {totalRevenue.toLocaleString()}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>Dispensing Volume</p>
+            <p style={{ fontSize: 20, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>₹ {totalRevenue.toLocaleString()}</p>
           </div>
           <span className="chip badge-blue" style={{ fontSize: 11 }}>Verified Invoices</span>
         </div>
@@ -1888,9 +1885,9 @@ function AuditPage({
 
       <div className="card" style={{ overflow: 'hidden' }}>
         {/* Filter and Search Bar */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div className="search-input" style={{ width: 'clamp(220px, 30vw, 340px)' }}>
-            <Search size={15} color="#64748B" />
+            <Search size={15} color="var(--text-3)" />
             <input
               placeholder="Search Rx ID, medicine, customer, batch..."
               value={q}
@@ -1900,7 +1897,7 @@ function AuditPage({
               }}
             />
             {q && (
-              <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+              <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
                 <X size={13} />
               </button>
             )}
@@ -1929,7 +1926,7 @@ function AuditPage({
             <thead>
               <tr className="table-header">
                 {['Timestamp', 'Rx ID', 'Medication', 'Batch', 'Qty', 'Customer', 'Pharmacist', 'Amount', 'Compliance'].map(h => (
-                  <th key={h} style={{ padding: '12px 18px', fontSize: 11, fontWeight: 700, color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  <th key={h} style={{ padding: '12px 18px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     {h}
                   </th>
                 ))}
@@ -1938,17 +1935,17 @@ function AuditPage({
             <tbody>
               {paginatedRows.length > 0 ? (
                 paginatedRows.map(a => (
-                  <tr key={a.id} className="table-row" style={{ borderTop: '1px solid #E2E8F0' }}>
-                    <td style={{ padding: '13px 18px', fontSize: 12.5, color: '#64748B', whiteSpace: 'nowrap' }}>{a.date}</td>
-                    <td style={{ padding: '13px 18px', fontFamily: 'monospace', fontSize: 12.5, color: '#0D9488', fontWeight: 800 }}>
+                  <tr key={a.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '13px 18px', fontSize: 12.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.date}</td>
+                    <td style={{ padding: '13px 18px', fontFamily: 'monospace', fontSize: 12.5, color: 'var(--primary)', fontWeight: 800 }}>
                       {a.rxId || `RX-2026-${a.id.toString().slice(-4)}`}
                     </td>
-                    <td style={{ padding: '13px 18px', fontWeight: 700, fontSize: 13, color: '#0F172A' }}>{a.medicine}</td>
-                    <td style={{ padding: '13px 18px', fontFamily: 'monospace', fontSize: 12.5, color: '#334155' }}>{a.batch}</td>
-                    <td style={{ padding: '13px 18px', fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{a.quantity}</td>
-                    <td style={{ padding: '13px 18px', fontSize: 13, color: '#334155', fontWeight: 600 }}>{a.customer}</td>
-                    <td style={{ padding: '13px 18px', fontSize: 12.5, color: '#64748B' }}>{a.pharmacist}</td>
-                    <td style={{ padding: '13px 18px', fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>
+                    <td style={{ padding: '13px 18px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{a.medicine}</td>
+                    <td style={{ padding: '13px 18px', fontFamily: 'monospace', fontSize: 12.5, color: 'var(--text-2)' }}>{a.batch}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{a.quantity}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{a.customer}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 12.5, color: 'var(--text-3)' }}>{a.pharmacist}</td>
+                    <td style={{ padding: '13px 18px', fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>
                       ₹ {(a.totalAmount || a.quantity * 45).toLocaleString()}
                     </td>
                     <td style={{ padding: '13px 18px' }}><Badge status={a.status} /></td>
@@ -1956,7 +1953,7 @@ function AuditPage({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} style={{ padding: '36px 20px', textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                  <td colSpan={9} style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
                     No audit records match "{q}" in category "{statusFilter}".
                   </td>
                 </tr>
@@ -1969,8 +1966,8 @@ function AuditPage({
         <div
           style={{
             padding: '12px 18px',
-            borderTop: '1px solid #E2E8F0',
-            backgroundColor: '#F8FAFC',
+            borderTop: '1px solid var(--border)',
+            backgroundColor: 'var(--bg-subtle)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -1978,7 +1975,7 @@ function AuditPage({
             gap: 10,
           }}
         >
-          <span style={{ fontSize: 12, color: '#64748B' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
             Showing {filtered.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
             {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} audit entries
           </span>
@@ -1992,7 +1989,7 @@ function AuditPage({
             >
               Previous
             </button>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', padding: '0 6px' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', padding: '0 6px' }}>
               {currentPage} of {totalPages}
             </span>
             <button
@@ -2057,15 +2054,15 @@ function Customers({
         title="Customers"
         description="Keep customer care personal, informed, and connected with prescription tracking."
         action={
-          <button className="btn btn-sage" onClick={() => setAddModal(true)}>
+          <button className="btn btn-teal" onClick={() => setAddModal(true)}>
             <Plus size={15}/> Add Customer
           </button>
         }
       />
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: 16, borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ padding: 16, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div className="search-input" style={{ maxWidth: 300 }}>
-            <Search size={15} color="#888888"/>
+            <Search size={15} color="var(--text-3)"/>
             <input placeholder="Search customers..." value={q} onChange={e => setQ(e.target.value)}/>
           </div>
           <button
@@ -2091,17 +2088,17 @@ function Customers({
               onClick={() => setSelectedCust(c)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: i % 2 ? '#E3ECE7' : '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13.5, color: i % 2 ? '#4A6B5D' : '#526350' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: i % 2 ? 'var(--primary-light)' : 'var(--info-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13.5, color: i % 2 ? 'var(--primary)' : 'var(--info)' }}>
                   {c.name.split(' ').map(x => x[0]).join('')}
                 </div>
                 <div>
-                  <p style={{ fontWeight: 700, fontSize: 13.5 }}>{c.name}</p>
-                  <p style={{ fontSize: 11.5, color: '#888888' }}>{c.phone}</p>
+                  <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{c.name}</p>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{c.phone}</p>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 20, marginTop: 14, paddingTop: 14, borderTop: '1px solid #EFEFEA' }}>
-                <div><p style={{ fontSize: 18, fontWeight: 800 }}>{c.visits}</p><p style={{ fontSize: 10.5, color: '#888888' }}>Visits</p></div>
-                <div><p style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{c.lastVisit}</p><p style={{ fontSize: 10.5, color: '#888888', marginTop: 2 }}>Last visit</p></div>
+              <div style={{ display: 'flex', gap: 20, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                <div><p style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>{c.visits}</p><p style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Visits</p></div>
+                <div><p style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2, color: 'var(--text)' }}>{c.lastVisit}</p><p style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 2 }}>Last visit</p></div>
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'flex-end' }}>
                   <span className="chip badge-green">{c.alerts ? 'Alerts on' : 'Alerts off'}</span>
                 </div>
@@ -2113,48 +2110,48 @@ function Customers({
 
       {selectedCust && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,17,0.5)' }} onClick={() => setSelectedCust(null)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setSelectedCust(null)} />
           <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 0, zIndex: 111 }}>
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#526350' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary)' }}>
                   {selectedCust.name.split(' ').map(x => x[0]).join('')}
                 </div>
                 <div>
-                  <h3 style={{ fontWeight: 800, fontSize: 16 }}>{selectedCust.name}</h3>
-                  <p style={{ fontSize: 12, color: '#888888' }}>{selectedCust.phone} · {selectedCust.email}</p>
+                  <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>{selectedCust.name}</h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{selectedCust.phone} · {selectedCust.email}</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedCust(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#888"/></button>
+              <button onClick={() => setSelectedCust(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
             </div>
 
             <div style={{ padding: 24 }}>
-              <div style={{ background: '#F8FAF8', borderRadius: 12, padding: 14, marginBottom: 18, border: '1px solid #E5ECE4' }}>
-                <p style={{ fontSize: 11, fontWeight: 800, color: '#6B8068', textTransform: 'uppercase' }}>Clinical Information</p>
-                <p style={{ fontSize: 13, marginTop: 4 }}>Known Allergies: <b>{selectedCust.allergies || 'None reported'}</b></p>
-                <p style={{ fontSize: 13, marginTop: 2 }}>SMS Refill & Expiry Reminders: <b>{selectedCust.alerts ? 'Enabled' : 'Disabled'}</b></p>
+              <div style={{ background: 'var(--bg-alt)', borderRadius: 12, padding: 14, marginBottom: 18, border: '1px solid var(--border)' }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>Clinical Information</p>
+                <p style={{ fontSize: 13, marginTop: 4, color: 'var(--text)' }}>Known Allergies: <b>{selectedCust.allergies || 'None reported'}</b></p>
+                <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>SMS Refill & Expiry Reminders: <b>{selectedCust.alerts ? 'Enabled' : 'Disabled'}</b></p>
               </div>
 
-              <h4 style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', marginBottom: 10 }}>
+              <h4 style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 10 }}>
                 Prescription & Dispense History
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
                 {audits.filter(a => a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).map(a => (
-                  <div key={a.id} style={{ padding: '10px 12px', background: '#FAFAF8', borderRadius: 8, border: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between' }}>
+                  <div key={a.id} style={{ padding: '10px 12px', background: 'var(--surface-raised)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
                     <div>
-                      <p style={{ fontWeight: 600, fontSize: 13 }}>{a.medicine}</p>
-                      <p style={{ fontSize: 11, color: '#888888' }}>{a.date} · Batch: {a.batch}</p>
+                      <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{a.medicine}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.date} · Batch: {a.batch}</p>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{a.quantity} units</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{a.quantity} units</span>
                   </div>
                 ))}
                 {audits.filter(a => a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).length === 0 && (
-                  <p style={{ fontSize: 12, color: '#888888', textAlign: 'center', padding: 12 }}>No previous dispensing history found.</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: 12 }}>No previous dispensing history found.</p>
                 )}
               </div>
             </div>
 
-            <div style={{ padding: '14px 24px', borderTop: '1px solid #EFEFEA', background: '#FAFAF8', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'flex-end' }}>
               <button className="btn btn-secondary" onClick={() => setSelectedCust(null)}>Close</button>
             </div>
           </div>
@@ -2163,11 +2160,11 @@ function Customers({
 
       {addModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,17,0.5)' }} onClick={() => setAddModal(false)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setAddModal(false)} />
           <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 440, padding: 0, zIndex: 111 }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 800 }}>Add New Customer</h3>
-              <button onClick={() => setAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#888"/></button>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontWeight: 800, color: 'var(--text)' }}>Add New Customer</h3>
+              <button onClick={() => setAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
             </div>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div><label className="label">Customer Full Name *</label><input className="input" placeholder="e.g. Ramesh Patel" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></div>
@@ -2176,7 +2173,7 @@ function Customers({
               <div><label className="label">Known Drug Allergies</label><input className="input" placeholder="e.g. Penicillin, Sulfa" value={form.allergies} onChange={e => setForm({ ...form, allergies: e.target.value })}/></div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
                 <button className="btn btn-secondary" onClick={() => setAddModal(false)}>Cancel</button>
-                <button className="btn btn-sage" onClick={handleAdd}>Save Customer</button>
+                <button className="btn btn-teal" onClick={handleAdd}>Save Customer</button>
               </div>
             </div>
           </div>
@@ -2194,8 +2191,8 @@ function AlertsPage({ onNavigate, showToast }: { onNavigate: (p: string) => void
     { title: 'AMX204 recalled by supplier', detail: '45 units remaining. Supplier recall quarantine active.', type: 'Recall', tone: 'red', page: 'recall' },
     { title: 'Weekly expiry digest ready', detail: 'Your scheduled pharmacy operations summary is ready.', type: 'Report', tone: 'sage', page: 'reports' },
   ];
-  const bg: Record<string, string> = { amber: '#F7EDE2', red: '#F9ECEF', orange: '#F7EBE3', sage: '#E8EFE7' };
-  const tc: Record<string, string> = { amber: '#8C5E3C', red: '#A63A50', orange: '#B86B35', sage: '#526350' };
+  const bg: Record<string, string> = { amber: 'var(--warning-light)', red: 'var(--danger-light)', orange: 'var(--orange-light)', sage: 'var(--primary-light)' };
+  const tc: Record<string, string> = { amber: 'var(--warning)', red: 'var(--danger)', orange: 'var(--orange)', sage: 'var(--primary)' };
 
   return (
     <>
@@ -2213,11 +2210,11 @@ function AlertsPage({ onNavigate, showToast }: { onNavigate: (p: string) => void
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <p style={{ fontWeight: 700, fontSize: 13.5 }}>{a.title}</p>
-                <span className={`chip badge-${a.tone === 'sage' ? 'blue' : a.tone === 'amber' ? 'amber' : a.tone === 'red' ? 'red' : 'orange'}`}>{a.type}</span>
+                <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{a.title}</p>
+                <span className={`chip badge-${a.tone === 'sage' ? 'teal' : a.tone === 'amber' ? 'amber' : a.tone === 'red' ? 'red' : 'orange'}`}>{a.type}</span>
               </div>
-              <p style={{ fontSize: 12.5, color: '#555555', marginTop: 4, lineHeight: 1.5 }}>{a.detail}</p>
-              <button onClick={() => onNavigate(a.page)} style={{ fontSize: 12, color: '#6B8068', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <p style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>{a.detail}</p>
+              <button onClick={() => onNavigate(a.page)} style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                 Take action <ChevronRight size={13}/>
               </button>
             </div>
@@ -2268,7 +2265,7 @@ function Suppliers({
         title="Supplier Returns"
         description="Manage supplier relationships, track purchases, and process stock returns."
         action={
-          <button className="btn btn-sage" onClick={() => setModal(true)}>
+          <button className="btn btn-teal" onClick={() => setModal(true)}>
             <RotateCcw size={15}/> Create return
           </button>
         }
@@ -2280,25 +2277,25 @@ function Suppliers({
       </div>
 
       <Panel title="Supplier Directory & Return Eligibility">
-        <div style={{ padding: 16, borderBottom: '1px solid #EFEFEA' }}>
+        <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
           <div className="search-input" style={{ maxWidth: 300 }}>
-            <Search size={15} color="#888888"/>
+            <Search size={15} color="var(--text-3)"/>
             <input placeholder="Search suppliers..." value={q} onChange={e => setQ(e.target.value)}/>
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead><tr style={{ background: '#F2F2EE' }}>
-              {['Supplier', 'Active batches', 'Total purchases', 'Rating', ''].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: '#888888', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
+            <thead><tr style={{ background: 'var(--bg-alt)' }}>
+              {['Supplier', 'Active batches', 'Total purchases', 'Rating', ''].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
             </tr></thead>
             <tbody>{filtered.map(s => (
-              <tr key={s.id} className="table-row" style={{ borderTop: '1px solid #EFEFEA' }}>
+              <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
                 <td style={{ padding: '14px 20px' }}>
-                  <p style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</p>
-                  <p style={{ fontSize: 11, color: '#888888' }}>{s.email} · {s.phone}</p>
+                  <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{s.name}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.email} · {s.phone}</p>
                 </td>
-                <td style={{ padding: '14px 20px', fontSize: 13 }}>{s.batches} batches</td>
-                <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 13 }}>{s.purchases}</td>
+                <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{s.batches} batches</td>
+                <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{s.purchases}</td>
                 <td style={{ padding: '14px 20px' }}><span className="chip badge-green">★ {s.rating}</span></td>
                 <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                   <button className="btn btn-ghost" style={{ padding: 6 }} onClick={() => showToast(`Supplier Contact: ${s.name} · Phone: ${s.phone}`)}><MoreHorizontal size={16}/></button>
@@ -2311,11 +2308,11 @@ function Suppliers({
 
       {modal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(17,17,17,0.5)' }} onClick={() => setModal(false)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 440, zIndex: 111 }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between' }}>
-              <h3 style={{ fontWeight: 800 }}>Create Stock Return</h3>
-              <button onClick={() => setModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888888' }}><X size={18}/></button>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setModal(false)} />
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 440, zIndex: 111, padding: 0 }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+              <h3 style={{ fontWeight: 800, color: 'var(--text)' }}>Create Stock Return</h3>
+              <button onClick={() => setModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}><X size={18}/></button>
             </div>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
@@ -2339,7 +2336,7 @@ function Suppliers({
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
                 <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancel</button>
-                <button className="btn btn-sage" onClick={handleCreateReturn}>Submit Return Request</button>
+                <button className="btn btn-teal" onClick={handleCreateReturn}>Submit Return Request</button>
               </div>
             </div>
           </div>
@@ -2700,15 +2697,15 @@ function Recall({
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <AlertCircle size={18} color="#DC2626" />
-                <h3 style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>Broadcast Patient Recall Advisory</h3>
+                <h3 style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)' }}>Broadcast Patient Recall Advisory</h3>
               </div>
-              <button onClick={() => setNotifyModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#64748B"/></button>
+              <button onClick={() => setNotifyModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 13, color: '#334155' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
                 This will dispatch an urgent automated SMS & WhatsApp advisory to all <b>18 patients</b> who received batch <b>AMX204 (Amoxicillin 500mg)</b>.
               </p>
-              <div style={{ background: '#FEF2F2', padding: 14, borderRadius: 10, border: '1px solid #FECACA', fontSize: 12.5, color: '#991B1B', lineHeight: 1.5 }}>
+              <div style={{ background: 'var(--danger-light)', padding: 14, borderRadius: 10, border: '1px solid var(--danger-border)', fontSize: 12.5, color: 'var(--danger)', lineHeight: 1.5 }}>
                 <b>Standard Regulatory Message:</b>
                 <p style={{ marginTop: 4 }}>
                   "Urgent Safety Notice from WellCare Pharmacy: Please discontinue taking Amoxicillin 500mg Batch AMX204 immediately due to distributor recall. Please bring unused medication to the pharmacy for a 100% free fresh replacement."
@@ -3129,13 +3126,13 @@ function Reports({ showToast }: { showToast: (s: string) => void }) {
         </Panel>
         <Panel title="Expiry Risk by Month">
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[['Sep 2026', '12', '#DC2626'], ['Oct 2026', '18', '#D97706'], ['Nov 2026', '28', '#D97706'], ['Dec 2026', '34', '#0D9488'], ['Jan 2027', '42', '#94A3B8']].map(([m, v, c]) => (
+            {[['Sep 2026', '12', 'var(--danger)'], ['Oct 2026', '18', 'var(--warning)'], ['Nov 2026', '28', 'var(--warning)'], ['Dec 2026', '34', 'var(--primary)'], ['Jan 2027', '42', 'var(--text-3)']].map(([m, v, c]) => (
               <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 54, fontSize: 11.5, color: '#475569', fontWeight: 600 }}>{m}</span>
-                <div style={{ flex: 1, height: 18, background: '#F1F5F9', borderRadius: 5, overflow: 'hidden' }}>
+                <span style={{ width: 54, fontSize: 11.5, color: 'var(--text-3)', fontWeight: 600 }}>{m}</span>
+                <div style={{ flex: 1, height: 18, background: 'var(--bg-alt)', borderRadius: 5, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${Number(v) * 1.8}%`, background: c, borderRadius: 5 }}/>
                 </div>
-                <span style={{ width: 22, fontSize: 11.5, fontWeight: 700, textAlign: 'right', color: '#0F172A' }}>{v}</span>
+                <span style={{ width: 22, fontSize: 11.5, fontWeight: 700, textAlign: 'right', color: 'var(--text)' }}>{v}</span>
               </div>
             ))}
           </div>
@@ -3144,10 +3141,10 @@ function Reports({ showToast }: { showToast: (s: string) => void }) {
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {filteredMeds.map((x, i) => (
               <div key={x.name} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5 }}>
-                <span style={{ width: 20, fontSize: 11, color: '#64748B', fontWeight: 700 }}>0{i + 1}</span>
-                <span style={{ flex: 1, fontWeight: 700, color: '#0F172A' }}>{x.name}</span>
-                <span style={{ fontWeight: 800, color: '#0F172A' }}>{x.count}</span>
-                <ArrowUpRight size={14} color="#0D9488" strokeWidth={2.5} />
+                <span style={{ width: 20, fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }}>0{i + 1}</span>
+                <span style={{ flex: 1, fontWeight: 700, color: 'var(--text)' }}>{x.name}</span>
+                <span style={{ fontWeight: 800, color: 'var(--text)' }}>{x.count}</span>
+                <ArrowUpRight size={14} color="var(--primary)" strokeWidth={2.5} />
               </div>
             ))}
           </div>
@@ -3225,19 +3222,19 @@ function PharmSettings({ showToast }: { showToast: (s: string) => void }) {
           ))}
         </div>
         <div className="card">
-          <div style={{ padding: '18px 22px', borderBottom: '1px solid #EFEFEA' }}>
-            <h3 style={{ fontWeight: 700, fontSize: 15 }}>{section}</h3>
-            <p style={{ fontSize: 11.5, color: '#888888', marginTop: 3 }}>Manage your {section.toLowerCase()} settings.</p>
+          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)' }}>
+            <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{section}</h3>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 3 }}>Manage your {section.toLowerCase()} settings.</p>
           </div>
           <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 520 }}>
             {section === 'Profile' ? <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#526350' }}>
+                <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: 'var(--primary)' }}>
                   {profile.firstName[0] || 'A'}{profile.lastName[0] || 'R'}
                 </div>
                 <div>
                   <button className="btn btn-secondary" onClick={() => showToast('Profile avatar photo updated')}>Change photo</button>
-                  <p style={{ fontSize: 11, color: '#888888', marginTop: 4 }}>JPG, PNG up to 2MB</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>JPG, PNG up to 2MB</p>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
@@ -3260,10 +3257,10 @@ function PharmSettings({ showToast }: { showToast: (s: string) => void }) {
               </div>
             </> : section === 'Alert Preferences' ? <>
               {Object.keys(alertsState).map(k => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #EFEFEA' }}>
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                   <div>
-                    <p style={{ fontSize: 13.5, fontWeight: 600, color: '#111111' }}>{k}</p>
-                    <p style={{ fontSize: 11.5, color: '#888888', marginTop: 2 }}>Status: {alertsState[k] ? 'Active notifications' : 'Muted'}</p>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{k}</p>
+                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>Status: {alertsState[k] ? 'Active notifications' : 'Muted'}</p>
                   </div>
                   <div
                     onClick={() => toggleAlert(k)}
@@ -3274,10 +3271,10 @@ function PharmSettings({ showToast }: { showToast: (s: string) => void }) {
               ))}
             </> : section === 'Dispensing Rules' ? <>
               {Object.keys(rulesState).map(k => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #EFEFEA' }}>
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                   <div>
-                    <p style={{ fontSize: 13.5, fontWeight: 600, color: '#111111' }}>{k}</p>
-                    <p style={{ fontSize: 11.5, color: '#888888', marginTop: 2 }}>{rulesState[k] ? 'Enforced across all transactions' : 'Disabled'}</p>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{k}</p>
+                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{rulesState[k] ? 'Enforced across all transactions' : 'Disabled'}</p>
                   </div>
                   <div
                     onClick={() => toggleRule(k)}
@@ -3288,10 +3285,10 @@ function PharmSettings({ showToast }: { showToast: (s: string) => void }) {
               ))}
             </> : section === 'AI Assistant Preferences' ? <>
               {Object.keys(aiState).map(k => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #EFEFEA' }}>
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                   <div>
-                    <p style={{ fontSize: 13.5, fontWeight: 600, color: '#111111' }}>{k}</p>
-                    <p style={{ fontSize: 11.5, color: '#888888', marginTop: 2 }}>AI model recommendations</p>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{k}</p>
+                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>AI model recommendations</p>
                   </div>
                   <div
                     onClick={() => toggleAi(k)}
@@ -3393,7 +3390,7 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
   const isAiWorkspace = ['ai', 'simulator', 'reports'].includes(page);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#F8FAFC' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
       <Sidebar
         page={page}
         onNavigate={p => { setFilterQuery(''); setPage(p); }}
