@@ -35,7 +35,7 @@ export function ExpiryRiskChart({
       id: 'critical',
       label: 'Critical / Recalled',
       count: criticalCount,
-      color: '#EA580C',
+      color: 'var(--orange)',
       bgColor: 'var(--orange-light)',
       borderColor: 'var(--orange-border)',
       sub: 'Action: Return to supplier',
@@ -263,7 +263,7 @@ export function StockMovementChart() {
             <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text)' }}>Stock Inflow (Received)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#3B82F6' }} />
+            <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: 'var(--info)' }} />
             <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text)' }}>Stock Outflow (Dispensed)</span>
           </div>
         </div>
@@ -334,7 +334,7 @@ export function StockMovementChart() {
                   style={{
                     width: 14,
                     height: outHeight,
-                    backgroundColor: '#3B82F6',
+                    backgroundColor: 'var(--info)',
                     borderRadius: '3px 3px 0 0',
                     transition: 'all 0.2s ease',
                     opacity: hoveredIndex !== null && !isHovered ? 0.5 : 1,
@@ -351,21 +351,21 @@ export function StockMovementChart() {
                       bottom: Math.max(inHeight, outHeight) + 8,
                       left: '50%',
                       transform: 'translateX(-50%)',
-                      backgroundColor: '#0F172A',
-                      color: '#FFFFFF',
+                      backgroundColor: 'var(--surface-raised)',
+                      color: 'var(--text)',
                       padding: '8px 12px',
                       borderRadius: 8,
                       fontSize: 11,
                       whiteSpace: 'nowrap',
                       zIndex: 20,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                      border: '1px solid #334155',
+                      boxShadow: 'var(--shadow-md)',
+                      border: '1px solid var(--border)',
                     }}
                   >
-                    <p style={{ fontWeight: 800, color: '#5EEAD4', marginBottom: 2 }}>{d.month} 2026 Movement</p>
-                    <p>Inflow: <b>{d.incoming.toLocaleString()} units</b></p>
-                    <p>Dispensed: <b>{d.dispensed.toLocaleString()} units</b></p>
-                    <p style={{ color: '#86EFAC', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 2, marginTop: 2 }}>
+                    <p style={{ fontWeight: 800, color: 'var(--primary-hover)', marginBottom: 2 }}>{d.month} 2026 Movement</p>
+                    <p style={{ color: 'var(--text)' }}>Inflow: <b>{d.incoming.toLocaleString()} units</b></p>
+                    <p style={{ color: 'var(--text)' }}>Dispensed: <b>{d.dispensed.toLocaleString()} units</b></p>
+                    <p style={{ color: 'var(--success)', borderTop: '1px solid var(--border)', paddingTop: 3, marginTop: 3 }}>
                       Net: +{(d.incoming - d.dispensed).toLocaleString()} units
                     </p>
                   </div>
@@ -430,7 +430,7 @@ export function MostDispensedRanking({
                   width: 20,
                   height: 20,
                   borderRadius: 6,
-                  backgroundColor: item.rank === 1 ? 'var(--primary)' : item.rank === 2 ? '#3B82F6' : 'var(--bg-alt)',
+                  backgroundColor: item.rank === 1 ? 'var(--primary)' : item.rank === 2 ? 'var(--info)' : 'var(--bg-alt)',
                   color: item.rank <= 2 ? '#FFFFFF' : 'var(--text-3)',
                   fontSize: 11,
                   fontWeight: 800,
@@ -468,7 +468,7 @@ export function MostDispensedRanking({
               className="progress-fill"
               style={{
                 width: `${item.pct * 2.8}%`,
-                backgroundColor: item.rank === 1 ? 'var(--primary)' : item.rank === 2 ? '#3B82F6' : 'var(--text-muted)',
+                backgroundColor: item.rank === 1 ? 'var(--primary)' : item.rank === 2 ? 'var(--info)' : 'var(--text-muted)',
               }}
             />
           </div>
@@ -519,18 +519,18 @@ export function DispensingTrendsChart({
         <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: '100%', overflow: 'visible' }} preserveAspectRatio="none">
           <defs>
             <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#0D9488" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#0D9488" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.0" />
             </linearGradient>
           </defs>
           <path d={areaD} fill="url(#trendGradient)" />
-          <path d={pathD} fill="none" stroke="#0D9488" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={pathD} fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           {points.map((pt, i) => {
             const x = (i / (points.length - 1)) * width;
             const y = height - (pt.count / maxVal) * (height - 20) - 10;
             return (
               <g key={pt.day}>
-                <circle cx={x} cy={y} r="4" fill="var(--surface)" stroke="#0D9488" strokeWidth="2" />
+                <circle cx={x} cy={y} r="4" fill="var(--surface)" stroke="var(--primary)" strokeWidth="2" />
               </g>
             );
           })}

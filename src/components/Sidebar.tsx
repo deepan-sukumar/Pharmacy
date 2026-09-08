@@ -123,8 +123,8 @@ export default function Sidebar({
       className={`sidebar-container hidden-mobile-aside ${collapsed ? 'collapsed' : ''}`}
       style={{
         width: collapsed ? 74 : 260,
-        backgroundColor: '#FFFFFF',
-        borderRight: '1px solid #E2E8F0',
+        backgroundColor: 'var(--bg-sidebar)',
+        borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
@@ -133,6 +133,7 @@ export default function Sidebar({
         top: 0,
         bottom: 0,
         zIndex: 40,
+        transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease, border-color 0.2s ease',
       }}
     >
       {/* ────────── TOP HEADER & EXPAND/COLLAPSE CONTROL ────────── */}
@@ -141,7 +142,7 @@ export default function Sidebar({
           padding: collapsed ? '14px 8px 12px' : '0 16px',
           height: collapsed ? 'auto' : 68,
           minHeight: collapsed ? 88 : 68,
-          borderBottom: '1px solid #E2E8F0',
+          borderBottom: '1px solid var(--border)',
           display: 'flex',
           flexDirection: collapsed ? 'column' : 'row',
           alignItems: 'center',
@@ -167,12 +168,12 @@ export default function Sidebar({
               width: 38,
               height: 38,
               borderRadius: 10,
-              background: 'linear-gradient(135deg, #0D9488 0%, #0F766E 100%)',
+              background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(13, 148, 136, 0.25)',
+              boxShadow: '0 2px 8px var(--primary-glow)',
             }}
           >
             <Stethoscope size={20} color="#FFFFFF" />
@@ -180,24 +181,24 @@ export default function Sidebar({
           {!collapsed && (
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 15, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.3px' }}>
+                <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.3px' }}>
                   PHARMAFLOW
                 </span>
                 <span
                   style={{
                     fontSize: 9.5,
                     fontWeight: 800,
-                    color: '#0D9488',
-                    background: '#F0FDFA',
+                    color: 'var(--primary)',
+                    background: 'var(--primary-light)',
                     padding: '1.5px 5px',
                     borderRadius: 4,
-                    border: '1px solid #CCFBF1',
+                    border: '1px solid var(--primary-border)',
                   }}
                 >
                   PRO
                 </span>
               </div>
-              <p style={{ fontSize: 11, color: '#64748B', whiteSpace: 'nowrap', fontWeight: 500 }}>
+              <p style={{ fontSize: 11, color: 'var(--text-4)', whiteSpace: 'nowrap', fontWeight: 500 }}>
                 Audit & Expiry Portal
               </p>
             </div>
@@ -217,7 +218,7 @@ export default function Sidebar({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#64748B',
+              color: 'var(--text-3)',
               cursor: 'pointer',
             }}
             title="Collapse sidebar"
@@ -240,9 +241,9 @@ export default function Sidebar({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#0D9488',
-              backgroundColor: '#F0FDFA',
-              border: '1px solid #CCFBF1',
+              color: 'var(--primary)',
+              backgroundColor: 'var(--primary-light)',
+              border: '1px solid var(--primary-border)',
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
@@ -279,9 +280,9 @@ export default function Sidebar({
               height: 48,
               margin: '0 auto',
               borderRadius: 12,
-              background: page === 'dashboard' ? '#F0FDFA' : 'transparent',
-              border: page === 'dashboard' ? '1.5px solid #0D9488' : '1px solid transparent',
-              color: page === 'dashboard' ? '#0D9488' : '#475569',
+              background: page === 'dashboard' ? 'var(--primary-light)' : 'transparent',
+              border: page === 'dashboard' ? '1.5px solid var(--primary)' : '1px solid transparent',
+              color: page === 'dashboard' ? 'var(--primary)' : 'var(--text-3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -299,7 +300,7 @@ export default function Sidebar({
             style={{
               fontSize: 13.5,
               fontWeight: page === 'dashboard' ? 700 : 600,
-              color: page === 'dashboard' ? '#0D9488' : '#334155',
+              color: page === 'dashboard' ? 'var(--primary)' : 'var(--text-2)',
               padding: '10px 14px',
               borderRadius: page === 'dashboard' ? '0 10px 10px 0' : '10px',
               marginBottom: 6,
@@ -317,8 +318,6 @@ export default function Sidebar({
           const GroupIcon = group.icon;
 
           if (collapsed) {
-            // Collapsed rail mode: show main group icon only with tooltip
-            // Clicking expands the sidebar and opens this category (Requirement #5)
             return (
               <div key={group.id} style={{ position: 'relative' }}>
                 <button
@@ -333,9 +332,9 @@ export default function Sidebar({
                     height: 48,
                     margin: '0 auto',
                     borderRadius: 12,
-                    background: isGroupActive ? '#F0FDFA' : 'transparent',
-                    border: isGroupActive ? '1.5px solid #0D9488' : '1px solid transparent',
-                    color: isGroupActive ? '#0D9488' : '#475569',
+                    background: isGroupActive ? 'var(--primary-light)' : 'transparent',
+                    border: isGroupActive ? '1.5px solid var(--primary)' : '1px solid transparent',
+                    color: isGroupActive ? 'var(--primary)' : 'var(--text-3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -355,8 +354,8 @@ export default function Sidebar({
                         width: 7,
                         height: 7,
                         borderRadius: '50%',
-                        backgroundColor: '#DC2626',
-                        border: '1.5px solid #FFFFFF',
+                        backgroundColor: 'var(--danger)',
+                        border: '1.5px solid var(--bg-sidebar)',
                       }}
                     />
                   )}
@@ -374,21 +373,21 @@ export default function Sidebar({
                 style={{
                   padding: '9px 12px',
                   borderRadius: 8,
-                  backgroundColor: isExpanded ? '#F8FAFC' : 'transparent',
-                  border: isExpanded ? '1px solid #E2E8F0' : '1px solid transparent',
+                  backgroundColor: isExpanded ? 'var(--bg-alt)' : 'transparent',
+                  border: isExpanded ? '1px solid var(--border)' : '1px solid transparent',
                 }}
                 title={`${group.label} (Click to expand/collapse)`}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <GroupIcon size={15} color={isGroupActive ? '#0D9488' : '#64748B'} strokeWidth={isGroupActive ? 2.2 : 1.8} />
-                  <span style={{ color: isGroupActive ? '#0F172A' : '#475569', fontWeight: 800, fontSize: 11.5, letterSpacing: '0.04em' }}>
+                  <GroupIcon size={15} color={isGroupActive ? 'var(--primary)' : 'var(--text-4)'} strokeWidth={isGroupActive ? 2.2 : 1.8} />
+                  <span style={{ color: isGroupActive ? 'var(--text)' : 'var(--text-3)', fontWeight: 800, fontSize: 11.5, letterSpacing: '0.04em' }}>
                     {group.label.toUpperCase()}
                   </span>
                 </div>
                 {isExpanded ? (
-                  <ChevronDown size={14} color="#64748B" />
+                  <ChevronDown size={14} color="var(--text-3)" />
                 ) : (
-                  <ChevronRight size={14} color="#94A3B8" />
+                  <ChevronRight size={14} color="var(--text-4)" />
                 )}
               </button>
 
@@ -402,7 +401,7 @@ export default function Sidebar({
                     marginTop: 3,
                     marginLeft: 12,
                     paddingLeft: 10,
-                    borderLeft: '2px solid #E2E8F0',
+                    borderLeft: '2px solid var(--border)',
                   }}
                 >
                   {group.items.map(item => {
@@ -422,7 +421,7 @@ export default function Sidebar({
                         <ItemIcon
                           size={15}
                           strokeWidth={isItemActive ? 2.2 : 1.8}
-                          color={isItemActive ? '#0D9488' : '#64748B'}
+                          color={isItemActive ? 'var(--primary)' : 'var(--text-3)'}
                         />
                         <span style={{ flex: 1, fontWeight: isItemActive ? 700 : 500 }}>
                           {item.label}
@@ -460,9 +459,9 @@ export default function Sidebar({
       {/* ────────── BOTTOM SETTINGS & LOGOUT (PERMANENTLY ANCHORED) ────────── */}
       <div
         style={{
-          borderTop: '1px solid #E2E8F0',
+          borderTop: '1px solid var(--border)',
           padding: collapsed ? '10px 8px 14px' : '10px 12px 14px',
-          backgroundColor: '#F8FAFC',
+          backgroundColor: 'var(--bg-alt)',
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
@@ -483,9 +482,9 @@ export default function Sidebar({
               height: 44,
               margin: '0 auto',
               borderRadius: 10,
-              background: page === 'settings' ? '#F0FDFA' : 'transparent',
-              border: page === 'settings' ? '1.5px solid #0D9488' : '1px solid transparent',
-              color: page === 'settings' ? '#0D9488' : '#475569',
+              background: page === 'settings' ? 'var(--primary-light)' : 'transparent',
+              border: page === 'settings' ? '1.5px solid var(--primary)' : '1px solid transparent',
+              color: page === 'settings' ? 'var(--primary)' : 'var(--text-3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -503,7 +502,7 @@ export default function Sidebar({
             style={{
               fontSize: 13.5,
               fontWeight: page === 'settings' ? 700 : 500,
-              color: page === 'settings' ? '#0D9488' : '#334155',
+              color: page === 'settings' ? 'var(--primary)' : 'var(--text-2)',
               padding: '9px 12px',
               borderRadius: 8,
             }}
@@ -518,7 +517,7 @@ export default function Sidebar({
           <div
             style={{
               paddingTop: 8,
-              borderTop: '1px solid #E2E8F0',
+              borderTop: '1px solid var(--border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -531,7 +530,7 @@ export default function Sidebar({
                   width: 32,
                   height: 32,
                   borderRadius: 99,
-                  background: '#0D9488',
+                  background: 'var(--primary)',
                   color: '#FFFFFF',
                   fontSize: 12,
                   fontWeight: 800,
@@ -544,10 +543,10 @@ export default function Sidebar({
                 AR
               </div>
               <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Dr. Anita Rao
                 </p>
-                <p style={{ fontSize: 11, color: '#64748B' }}>Pharmacist-in-Charge</p>
+                <p style={{ fontSize: 11, color: 'var(--text-4)' }}>Pharmacist-in-Charge</p>
               </div>
             </div>
             <button
@@ -556,7 +555,7 @@ export default function Sidebar({
               style={{
                 padding: '6px 8px',
                 borderRadius: 6,
-                color: '#DC2626',
+                color: 'var(--danger)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
@@ -584,7 +583,7 @@ export default function Sidebar({
               borderRadius: 10,
               background: 'transparent',
               border: '1px solid transparent',
-              color: '#DC2626',
+              color: 'var(--danger)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -654,18 +653,18 @@ export function MobileSidebarDrawer({
           position: 'relative',
           width: '85%',
           maxWidth: 320,
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+          boxShadow: 'var(--shadow-lg)',
           zIndex: 151,
         }}
       >
         <div
           style={{
             padding: '16px 20px',
-            borderBottom: '1px solid #E2E8F0',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -677,7 +676,7 @@ export function MobileSidebarDrawer({
                 width: 34,
                 height: 34,
                 borderRadius: 8,
-                background: '#0D9488',
+                background: 'var(--primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -686,15 +685,15 @@ export function MobileSidebarDrawer({
               <Stethoscope size={18} color="white" />
             </div>
             <div>
-              <p style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>PharmaFlow</p>
-              <p style={{ fontSize: 11, color: '#64748B' }}>Operations Portal</p>
+              <p style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)' }}>PharmaFlow</p>
+              <p style={{ fontSize: 11, color: 'var(--text-4)' }}>Operations Portal</p>
             </div>
           </div>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
           >
-            <X size={20} color="#64748B" />
+            <X size={20} color="var(--text-3)" />
           </button>
         </div>
 
@@ -718,7 +717,7 @@ export function MobileSidebarDrawer({
                   fontSize: 10.5,
                   fontWeight: 800,
                   letterSpacing: '0.06em',
-                  color: '#94A3B8',
+                  color: 'var(--text-4)',
                   padding: '4px 12px',
                   textTransform: 'uppercase',
                 }}
@@ -756,7 +755,7 @@ export function MobileSidebarDrawer({
             </div>
           ))}
 
-          <div style={{ paddingTop: 8, borderTop: '1px solid #E2E8F0', marginTop: 8 }}>
+          <div style={{ paddingTop: 8, borderTop: '1px solid var(--border)', marginTop: 8 }}>
             <button
               onClick={() => {
                 onNavigate('settings');
@@ -774,16 +773,16 @@ export function MobileSidebarDrawer({
         <div
           style={{
             padding: 16,
-            borderTop: '1px solid #E2E8F0',
-            background: '#F8FAFC',
+            borderTop: '1px solid var(--border)',
+            background: 'var(--bg-alt)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}
         >
           <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Dr. Anita Rao</p>
-            <p style={{ fontSize: 11, color: '#64748B' }}>Pharmacist-in-Charge</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Dr. Anita Rao</p>
+            <p style={{ fontSize: 11, color: 'var(--text-4)' }}>Pharmacist-in-Charge</p>
           </div>
           <button
             onClick={onLogout}

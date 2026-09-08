@@ -586,14 +586,14 @@ export default function WhatIfSimulator({
           </div>
 
           {/* AI Decision Card */}
-          <div style={{ padding: 14, borderRadius: 10, backgroundColor: '#0F172A', color: '#FFFFFF', border: '1px solid #1E293B' }}>
+          <div style={{ padding: 14, borderRadius: 10, backgroundColor: 'var(--surface-raised)', color: 'var(--text)', border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <BrainCircuit size={16} color="#5EEAD4" />
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#5EEAD4', textTransform: 'uppercase' }}>
+              <BrainCircuit size={16} color="var(--primary-hover)" />
+              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary-hover)', textTransform: 'uppercase' }}>
                 FEFO & Economic Order Recommendation
               </span>
             </div>
-            <p style={{ fontSize: 12, lineHeight: 1.45, color: '#E2E8F0' }}>
+            <p style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--text-2)' }}>
               {isHighRisk
                 ? `Order size of ${orderQty} exceeds 45-day dispensing velocity. Reduce order to ${Math.max(0, projectedConsumption - currentStock)} units, or request distributor batches expiring in 2028.`
                 : `Order velocity of ${dailyUsage} units/day comfortably exhausts stock before expiration. Recommended for purchase.`}

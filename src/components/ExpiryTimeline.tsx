@@ -58,49 +58,49 @@ export function getBatchRisk(daysLeft: number, status: string): {
     return {
       level: 'RECALLED',
       badgeLabel: 'RECALLED',
-      color: '#B91C1C',
-      bg: '#FEF2F2',
-      border: '#FECACA',
-      dotColor: '#DC2626',
+      color: 'var(--danger)',
+      bg: 'var(--danger-light)',
+      border: 'var(--danger-border)',
+      dotColor: 'var(--danger)',
     };
   }
   if (daysLeft <= 0 || status === 'Expired') {
     return {
       level: 'EXPIRED',
       badgeLabel: 'EXPIRED',
-      color: '#991B1B',
-      bg: '#FEF2F2',
-      border: '#F87171',
-      dotColor: '#DC2626',
+      color: 'var(--danger)',
+      bg: 'var(--danger-light)',
+      border: 'var(--danger-border)',
+      dotColor: 'var(--danger)',
     };
   }
   if (daysLeft <= 30) {
     return {
       level: 'CRITICAL',
       badgeLabel: 'CRITICAL',
-      color: '#C2410C',
-      bg: '#FFF7ED',
-      border: '#FDBA74',
-      dotColor: '#EA580C',
+      color: 'var(--orange)',
+      bg: 'var(--orange-light)',
+      border: 'var(--orange-border)',
+      dotColor: 'var(--orange)',
     };
   }
   if (daysLeft <= 90 || status === 'Near Expiry') {
     return {
       level: 'NEAR EXPIRY',
       badgeLabel: 'NEAR EXPIRY',
-      color: '#B45309',
-      bg: '#FFFBEB',
-      border: '#FDE68A',
-      dotColor: '#D97706',
+      color: 'var(--warning)',
+      bg: 'var(--warning-light)',
+      border: 'var(--warning-border)',
+      dotColor: 'var(--warning)',
     };
   }
   return {
     level: 'SAFE',
     badgeLabel: 'SAFE',
-    color: '#15803D',
-    bg: '#F0FDF4',
-    border: '#BBF7D0',
-    dotColor: '#16A34A',
+    color: 'var(--success)',
+    bg: 'var(--success-light)',
+    border: 'var(--success-border)',
+    dotColor: 'var(--success)',
   };
 }
 
@@ -607,18 +607,18 @@ export default function ExpiryTimeline({
             top: hoveredBatch.y - 12,
             transform: 'translate(-50%, -100%)',
             zIndex: 999,
-            backgroundColor: '#0F172A',
-            color: '#FFFFFF',
+            backgroundColor: 'var(--surface-raised)',
+            color: 'var(--text)',
             padding: '12px 16px',
             borderRadius: 10,
-            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.35)',
+            boxShadow: 'var(--shadow-lg)',
             minWidth: 220,
             pointerEvents: 'none',
-            border: '1px solid #334155',
+            border: '1px solid var(--border)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#5EEAD4' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--primary-hover)' }}>
               {hoveredBatch.medicine.medicine}
             </span>
             <span
@@ -637,26 +637,26 @@ export default function ExpiryTimeline({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#94A3B8' }}>Batch Code:</span>
-              <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{hoveredBatch.medicine.batch}</span>
+              <span style={{ color: 'var(--text-4)' }}>Batch Code:</span>
+              <span style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--text)' }}>{hoveredBatch.medicine.batch}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#94A3B8' }}>Expiry Date:</span>
-              <span style={{ fontWeight: 600 }}>{hoveredBatch.medicine.expiry}</span>
+              <span style={{ color: 'var(--text-4)' }}>Expiry Date:</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>{hoveredBatch.medicine.expiry}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#94A3B8' }}>Time Remaining:</span>
-              <span style={{ fontWeight: 700, color: '#FCD34D' }}>
+              <span style={{ color: 'var(--text-4)' }}>Time Remaining:</span>
+              <span style={{ fontWeight: 700, color: 'var(--warning-dark)' }}>
                 {hoveredBatch.daysLeft <= 0 ? '0 days (Expired)' : `${hoveredBatch.daysLeft} days`}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#94A3B8' }}>Available Stock:</span>
-              <span style={{ fontWeight: 800, color: '#A7F3D0' }}>{hoveredBatch.medicine.quantity} units</span>
+              <span style={{ color: 'var(--text-4)' }}>Available Stock:</span>
+              <span style={{ fontWeight: 800, color: 'var(--success-dark)' }}>{hoveredBatch.medicine.quantity} units</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#94A3B8' }}>Distributor / Supplier:</span>
-              <span style={{ fontWeight: 600 }}>{hoveredBatch.medicine.supplier}</span>
+              <span style={{ color: 'var(--text-4)' }}>Distributor / Supplier:</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>{hoveredBatch.medicine.supplier}</span>
             </div>
           </div>
         </div>

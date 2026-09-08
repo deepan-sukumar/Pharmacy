@@ -374,8 +374,8 @@ function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string;
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22, flexWrap: 'wrap', gap: 14 }}>
       <div>
         {eyebrow && <p className="section-eyebrow">{eyebrow}</p>}
-        <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.5px' }}>{title}</h2>
-        {description && <p style={{ fontSize: 13.5, color: '#475569', marginTop: 3 }}>{description}</p>}
+        <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.5px' }}>{title}</h2>
+        {description && <p style={{ fontSize: 13.5, color: 'var(--text-3)', marginTop: 3 }}>{description}</p>}
       </div>
       {action}
     </div>
@@ -384,43 +384,43 @@ function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string;
 
 function Stat({ label, value, change, icon: Icon, tone = 'sage' }: { label: string; value: string; change?: string; icon: React.ElementType; tone?: string }) {
   const bg: Record<string, string> = {
-    sage: '#F0FDFA',
-    teal: '#F0FDFA',
-    green: '#F0FDF4',
-    amber: '#FFFBEB',
-    red: '#FEF2F2',
-    orange: '#FFF7ED',
+    sage: 'var(--primary-light)',
+    teal: 'var(--primary-light)',
+    green: 'var(--success-light)',
+    amber: 'var(--warning-light)',
+    red: 'var(--danger-light)',
+    orange: 'var(--orange-light)',
   };
   const fg: Record<string, string> = {
-    sage: '#0D9488',
-    teal: '#0D9488',
-    green: '#16A34A',
-    amber: '#D97706',
-    red: '#DC2626',
-    orange: '#EA580C',
+    sage: 'var(--primary)',
+    teal: 'var(--primary)',
+    green: 'var(--success)',
+    amber: 'var(--warning)',
+    red: 'var(--danger)',
+    orange: 'var(--orange)',
   };
   const borders: Record<string, string> = {
-    sage: '#CCFBF1',
-    teal: '#CCFBF1',
-    green: '#BBF7D0',
-    amber: '#FDE68A',
-    red: '#FECACA',
-    orange: '#FFEDD5',
+    sage: 'var(--primary-border)',
+    teal: 'var(--primary-border)',
+    green: 'var(--success-border)',
+    amber: 'var(--warning-border)',
+    red: 'var(--danger-border)',
+    orange: 'var(--orange-border)',
   };
 
   return (
     <div className="card" style={{ padding: '16px 18px', minHeight: 104, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <p style={{ fontSize: 11.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
-          <p className="stat-value" style={{ marginTop: 4, color: '#0F172A' }}>{value}</p>
+          <p style={{ fontSize: 11.5, color: 'var(--text-4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+          <p className="stat-value" style={{ marginTop: 4, color: 'var(--text)' }}>{value}</p>
         </div>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: bg[tone] || bg.sage, border: `1px solid ${borders[tone] || borders.sage}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Icon size={19} color={fg[tone] || fg.sage} strokeWidth={2} />
         </div>
       </div>
       {change && (
-        <p style={{ fontSize: 11, color: tone === 'red' ? '#DC2626' : tone === 'amber' ? '#D97706' : '#16A34A', marginTop: 4, display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+        <p style={{ fontSize: 11, color: tone === 'red' ? 'var(--danger)' : tone === 'amber' ? 'var(--warning)' : 'var(--success)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
           <ArrowUpRight size={12} /> {change}
         </p>
       )}
@@ -431,8 +431,8 @@ function Stat({ label, value, change, icon: Icon, tone = 'sage' }: { label: stri
 function Panel({ title, action, children, className }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <div className={`card ${className || ''}`} style={{ overflow: 'hidden' }}>
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>{title}</h3>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>{title}</h3>
         {action}
       </div>
       {children}
@@ -448,17 +448,17 @@ function Badge({ status }: { status: string }) {
 }
 
 function AlertRow({ icon: Icon, tone, title, detail }: { icon: React.ElementType; tone: string; title: string; detail: string }) {
-  const c: Record<string, string> = { amber: '#FFFBEB', red: '#FEF2F2', orange: '#FFF7ED' };
-  const tc: Record<string, string> = { amber: '#D97706', red: '#DC2626', orange: '#EA580C' };
-  const bc: Record<string, string> = { amber: '#FDE68A', red: '#FECACA', orange: '#FFEDD5' };
+  const c: Record<string, string> = { amber: 'var(--warning-light)', red: 'var(--danger-light)', orange: 'var(--orange-light)' };
+  const tc: Record<string, string> = { amber: 'var(--warning)', red: 'var(--danger)', orange: 'var(--orange)' };
+  const bc: Record<string, string> = { amber: 'var(--warning-border)', red: 'var(--danger-border)', orange: 'var(--orange-border)' };
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-      <div style={{ width: 34, height: 34, borderRadius: 8, background: c[tone] || '#F1F5F9', border: `1px solid ${bc[tone] || '#E2E8F0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon size={16} color={tc[tone] || '#64748B'} strokeWidth={2} />
+      <div style={{ width: 34, height: 34, borderRadius: 8, background: c[tone] || 'var(--bg-alt)', border: `1px solid ${bc[tone] || 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon size={16} color={tc[tone] || 'var(--text-3)'} strokeWidth={2} />
       </div>
       <div>
-        <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{title}</p>
-        <p style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>{detail}</p>
+        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{title}</p>
+        <p style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 2 }}>{detail}</p>
       </div>
     </div>
   );
@@ -712,18 +712,18 @@ function InvoiceUploadModal({
     <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,12,11,0.6)', backdropFilter: 'blur(5px)' }} onClick={onClose} />
 
-      <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 580, padding: 0, zIndex: 111 }}>
-        <div style={{ padding: '18px 24px', borderBottom: '1px solid #EFEFEA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 580, padding: 0, zIndex: 111, background: 'var(--surface-raised)' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#E8EFE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <FileText size={18} color="#526350" />
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <FileText size={18} color="var(--primary)" />
             </div>
             <div>
-              <h3 style={{ fontWeight: 800, fontSize: 16 }}>Distributor Invoice OCR Uploader</h3>
-              <p style={{ fontSize: 12, color: '#777777' }}>Automatic batch & expiry extraction from purchase bills</p>
+              <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>Distributor Invoice OCR Uploader</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-4)' }}>Automatic batch & expiry extraction from purchase bills</p>
             </div>
           </div>
-          <button onClick={onClose} className="btn btn-ghost" style={{ padding: 6, color: '#888888' }} title="Quit">
+          <button onClick={onClose} className="btn btn-ghost" style={{ padding: 6, color: 'var(--text-3)' }} title="Quit">
             <X size={18} />
           </button>
         </div>
@@ -733,20 +733,20 @@ function InvoiceUploadModal({
             <>
               <div
                 className="dropzone-box"
-                style={{ padding: '36px 20px', textAlign: 'center' }}
+                style={{ padding: '36px 20px', textAlign: 'center', background: 'var(--bg-alt)', border: '2px dashed var(--border)', borderRadius: 12, cursor: 'pointer' }}
                 onClick={handleUploadSample}
               >
-                <UploadCloud size={40} color="#6B8068" style={{ margin: '0 auto 10px' }} />
-                <p style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>
+                <UploadCloud size={40} color="var(--primary)" style={{ margin: '0 auto 10px' }} />
+                <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
                   {file ? file : 'Click or Drop Distributor Invoice (PDF / Image)'}
                 </p>
-                <p style={{ fontSize: 12, color: '#888888', marginTop: 4 }}>
+                <p style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 4 }}>
                   Supports GST Tax Invoices, Delivery Challans, and Drug Purchase Bills
                 </p>
 
                 <div style={{ marginTop: 18 }}>
                   <button
-                    className="btn btn-sage"
+                    className="btn btn-teal"
                     onClick={e => {
                       e.stopPropagation();
                       handleUploadSample();
@@ -760,11 +760,11 @@ function InvoiceUploadModal({
               {parsing && (
                 <div style={{ marginTop: 20 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                    <span style={{ fontWeight: 600, color: '#526350' }}>AI OCR extracting batches, quantities & expiry...</span>
-                    <span style={{ fontWeight: 800 }}>{progress}%</span>
+                    <span style={{ fontWeight: 600, color: 'var(--primary)' }}>AI OCR extracting batches, quantities & expiry...</span>
+                    <span style={{ fontWeight: 800, color: 'var(--text)' }}>{progress}%</span>
                   </div>
-                  <div className="progress-bar" style={{ height: 8 }}>
-                    <div className="progress-fill" style={{ width: `${progress}%`, background: '#6B8068' }} />
+                  <div className="progress-bar" style={{ height: 8, background: 'var(--bg-alt)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div className="progress-fill" style={{ width: `${progress}%`, background: 'var(--primary)', height: '100%', transition: 'width 0.2s ease' }} />
                   </div>
                 </div>
               )}
@@ -775,24 +775,24 @@ function InvoiceUploadModal({
             <div className="animate-fade-in">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <CheckCircle2 size={18} color="#52796F" />
-                  <span style={{ fontWeight: 800, fontSize: 14, color: '#111111' }}>Extracted Line Items (3)</span>
+                  <CheckCircle2 size={18} color="var(--success)" />
+                  <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--text)' }}>Extracted Line Items (3)</span>
                 </div>
-                <button onClick={handleReset} className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }}>
+                <button onClick={handleReset} className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 12, color: 'var(--text-3)' }}>
                   <RefreshCw size={13} /> Re-upload
                 </button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
                 {extractedItems.map(item => (
-                  <div key={item.id} style={{ background: '#F8FAF8', border: '1px solid #E5ECE4', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={item.id} style={{ background: 'var(--bg-alt)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <p style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{item.medicine}</p>
-                      <p style={{ fontSize: 11, color: '#666666', marginTop: 2 }}>Batch: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{item.batch}</span> · Exp: {item.expiry} · Supplier: {item.supplier}</p>
+                      <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{item.medicine}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>Batch: <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text)' }}>{item.batch}</span> · Exp: {item.expiry} · Supplier: {item.supplier}</p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontWeight: 800, fontSize: 14, color: '#526350' }}>+{item.quantity} units</p>
-                      <p style={{ fontSize: 11, color: '#888888' }}>₹ {item.unitPrice}/unit</p>
+                      <p style={{ fontWeight: 800, fontSize: 14, color: 'var(--primary)' }}>+{item.quantity} units</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-4)' }}>₹ {item.unitPrice}/unit</p>
                     </div>
                   </div>
                 ))}
@@ -801,12 +801,12 @@ function InvoiceUploadModal({
           )}
         </div>
 
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #EFEFEA', background: '#FAFAF8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button onClick={onClose} className="btn btn-secondary">
             Quit / Cancel
           </button>
           {extractedItems && (
-            <button onClick={handleConfirmImport} className="btn btn-sage">
+            <button onClick={handleConfirmImport} className="btn btn-teal">
               <Check size={15} /> Import All into Inventory
             </button>
           )}
@@ -850,64 +850,64 @@ function DispenseReceiptModal({
     <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,12,11,0.6)', backdropFilter: 'blur(5px)' }} onClick={onClose} />
 
-      <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 0, zIndex: 111, background: '#FFFFFF', borderRadius: 16 }}>
-        <div style={{ padding: '20px 24px', background: '#1F2421', color: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 0, zIndex: 111, background: 'var(--surface-raised)', borderRadius: 16, border: '1px solid var(--border)' }}>
+        <div style={{ padding: '20px 24px', background: 'var(--bg-sidebar)', color: 'var(--text)', borderTopLeftRadius: 16, borderTopRightRadius: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: '#526350', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Stethoscope size={15} color="white" />
               </div>
-              <span style={{ fontWeight: 900, fontSize: 16, letterSpacing: '-0.3px' }}>
-                WELLCARE <span style={{ color: '#A3B19B' }}>PHARMACY</span>
+              <span style={{ fontWeight: 900, fontSize: 16, letterSpacing: '-0.3px', color: 'var(--text)' }}>
+                WELLCARE <span style={{ color: 'var(--primary)' }}>PHARMACY</span>
               </span>
             </div>
-            <p style={{ fontSize: 11, color: '#A3B19B', marginTop: 4 }}>Reg Lic: PHARM-KA-2024-8842 · GSTIN: 29AAAAA0000A1Z5</p>
+            <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>Reg Lic: PHARM-KA-2024-8842 · GSTIN: 29AAAAA0000A1Z5</p>
           </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, padding: 6, color: 'white', cursor: 'pointer' }}>
+          <button onClick={onClose} style={{ background: 'var(--bg-alt)', border: '1px solid var(--border)', borderRadius: 8, padding: 6, color: 'var(--text-2)', cursor: 'pointer' }}>
             <X size={16} />
           </button>
         </div>
 
         <div style={{ padding: 24 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingBottom: 16, borderBottom: '1px dashed #E5E5E0', fontSize: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingBottom: 16, borderBottom: '1px dashed var(--border)', fontSize: 12 }}>
             <div>
-              <p style={{ color: '#888888' }}>Invoice / Rx No:</p>
-              <p style={{ fontWeight: 800, fontFamily: 'monospace', color: '#111111', marginTop: 2 }}>{data.rxId}</p>
+              <p style={{ color: 'var(--text-4)' }}>Invoice / Rx No:</p>
+              <p style={{ fontWeight: 800, fontFamily: 'monospace', color: 'var(--text)', marginTop: 2 }}>{data.rxId}</p>
             </div>
             <div>
-              <p style={{ color: '#888888' }}>Date & Time:</p>
-              <p style={{ fontWeight: 600, color: '#111111', marginTop: 2 }}>{data.date}</p>
+              <p style={{ color: 'var(--text-4)' }}>Date & Time:</p>
+              <p style={{ fontWeight: 600, color: 'var(--text)', marginTop: 2 }}>{data.date}</p>
             </div>
             <div>
-              <p style={{ color: '#888888' }}>Patient / Customer:</p>
-              <p style={{ fontWeight: 700, color: '#111111', marginTop: 2 }}>{data.customer}</p>
+              <p style={{ color: 'var(--text-4)' }}>Patient / Customer:</p>
+              <p style={{ fontWeight: 700, color: 'var(--text)', marginTop: 2 }}>{data.customer}</p>
             </div>
             <div>
-              <p style={{ color: '#888888' }}>Dispensed By:</p>
-              <p style={{ fontWeight: 600, color: '#111111', marginTop: 2 }}>{data.pharmacist}</p>
+              <p style={{ color: 'var(--text-4)' }}>Dispensed By:</p>
+              <p style={{ fontWeight: 600, color: 'var(--text)', marginTop: 2 }}>{data.pharmacist}</p>
             </div>
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#888888', textTransform: 'uppercase', marginBottom: 8 }}>Prescription Line Items</p>
+            <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-4)', textTransform: 'uppercase', marginBottom: 8 }}>Prescription Line Items</p>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#F8FAF8', borderBottom: '1px solid #EFEFEA' }}>
-                  <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: '#555555' }}>Item</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: '#555555' }}>Qty</th>
-                  <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#555555' }}>Amount</th>
+                <tr style={{ background: 'var(--bg-alt)', borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 700, color: 'var(--text-3)' }}>Item</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: 'var(--text-3)' }}>Qty</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--text-3)' }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td style={{ padding: '12px 10px', borderBottom: '1px solid #EFEFEA' }}>
-                    <p style={{ fontWeight: 700, color: '#111111' }}>{data.medicine}</p>
-                    <p style={{ fontSize: 11, color: '#888888', marginTop: 2 }}>Batch: {data.batch} · Exp: {data.expiry}</p>
+                  <td style={{ padding: '12px 10px', borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontWeight: 700, color: 'var(--text)' }}>{data.medicine}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>Batch: {data.batch} · Exp: {data.expiry}</p>
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, borderBottom: '1px solid #EFEFEA' }}>
+                  <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 700, color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>
                     {data.quantity}
                   </td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 700, borderBottom: '1px solid #EFEFEA' }}>
+                  <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>
                     ₹ {data.total}
                   </td>
                 </tr>
@@ -915,22 +915,22 @@ function DispenseReceiptModal({
             </table>
           </div>
 
-          <div style={{ marginTop: 14, padding: '12px 14px', background: '#F8FAF8', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#333333' }}>Total Paid (Inc. Taxes):</span>
-            <span style={{ fontSize: 18, fontWeight: 900, color: '#526350' }}>₹ {data.total}</span>
+          <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-alt)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-2)' }}>Total Paid (Inc. Taxes):</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--primary)' }}>₹ {data.total}</span>
           </div>
 
-          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: '#52796F' }}>
-            <CheckCircle2 size={15} color="#52796F" />
+          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--success)' }}>
+            <CheckCircle2 size={15} color="var(--success)" />
             <span>FEFO Certified · Safety Verified by Pharmacist</span>
           </div>
         </div>
 
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #EFEFEA', background: '#FAFAF8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
           <button onClick={onClose} className="btn btn-secondary">
             Done
           </button>
-          <button onClick={handlePrint} className="btn btn-sage">
+          <button onClick={handlePrint} className="btn btn-teal">
             <Printer size={15} /> Print / Save Invoice
           </button>
         </div>
@@ -980,7 +980,7 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
           title="Expiry Risk Distribution"
           action={
             <button
-              style={{ fontSize: 12, color: '#0D9488', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
               onClick={() => onNavigate('expiry')}
             >
               Full Expiry Table →
@@ -994,7 +994,7 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
           title="Critical Alerts & Risk Escalation"
           action={
             <button
-              style={{ fontSize: 12, color: '#0D9488', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
               onClick={() => onNavigate('alerts')}
             >
               See all 3 alerts →
@@ -2394,7 +2394,7 @@ function Recall({
 
   const handleSendNotice = () => {
     setNotifyModal(false);
-    showToast('Urgent SMS & WhatsApp recall notification broadcast to all 18 patients');
+    showToast('Urgent SMS & WhatsApp recall notification broadcast to all patients');
   };
 
   const impactedPatients = [
@@ -2406,14 +2406,14 @@ function Recall({
 
   if (hasError) {
     return (
-      <div className="card" style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, margin: '24px 0', border: '1px solid #FECACA' }}>
-        <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+      <div className="card" style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: 'var(--surface)', borderRadius: 12, margin: '24px 0', border: '1px solid var(--danger-light)' }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
           <AlertCircle size={28} />
         </div>
-        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', marginBottom: 6 }}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 6 }}>
           Unable to load recall data
         </h3>
-        <p style={{ fontSize: 13, color: '#64748B', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
           An unexpected error occurred while retrieving batch recall records. Please verify inventory connection and retry.
         </p>
         <button className="btn btn-primary" onClick={() => setHasError(false)}>
@@ -2444,17 +2444,16 @@ function Recall({
         }
       />
 
-      {/* Recalled Batches Summary List or Professional Empty State */}
       {recalledMedicines.length === 0 ? (
         <div
           className="card"
           style={{
             padding: '48px 24px',
             textAlign: 'center',
-            backgroundColor: '#FFFFFF',
+            backgroundColor: 'var(--surface)',
             borderRadius: 12,
             marginBottom: 24,
-            border: '1px solid #E2E8F0',
+            border: '1px solid var(--border)',
           }}
         >
           <div
@@ -2462,24 +2461,24 @@ function Recall({
               width: 56,
               height: 56,
               borderRadius: '50%',
-              backgroundColor: '#F0FDF4',
-              color: '#16A34A',
+              backgroundColor: 'var(--success-light)',
+              color: 'var(--success)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 16px',
             }}
           >
-            <ShieldCheck size={28} />
+            <CheckCircle2 size={28} />
           </div>
-          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', marginBottom: 6 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 6 }}>
             No Active Batch Recalls
           </h3>
-          <p style={{ fontSize: 13, color: '#64748B', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
-            All active medication inventory passes regulatory manufacturer safety guidelines. No manufacturer or regulatory quarantine alerts are active.
+          <p style={{ fontSize: 13, color: 'var(--text-3)', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
+            All medication inventory is verified clear of manufacturer and regulatory recalls. You can initiate a containment recall at any time if safety alerts arise.
           </p>
-          <button className="btn btn-danger" onClick={() => setCreateRecallModal(true)}>
-            <ShieldAlert size={15} /> Issue New Batch Recall Notice
+          <button className="btn btn-teal" onClick={() => setCreateRecallModal(true)}>
+            <Plus size={14} /> Issue Batch Recall
           </button>
         </div>
       ) : (
@@ -2487,13 +2486,13 @@ function Recall({
           <div
             key={rec.batch}
             className="card"
-            style={{ border: '1.5px solid #FECACA', overflow: 'hidden', marginBottom: 20 }}
+            style={{ border: '1.5px solid var(--danger-light)', overflow: 'hidden', marginBottom: 20 }}
           >
             <div
               style={{
                 padding: '16px 20px',
-                background: '#FEF2F2',
-                borderBottom: '1px solid #FECACA',
+                background: 'var(--danger-light)',
+                borderBottom: '1px solid var(--border)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -2507,23 +2506,23 @@ function Recall({
                     width: 44,
                     height: 44,
                     borderRadius: 10,
-                    background: '#FEE2E2',
+                    background: 'var(--surface-raised)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
                   }}
                 >
-                  <AlertCircle size={22} color="#DC2626" />
+                  <AlertCircle size={22} color="var(--danger)" />
                 </div>
                 <div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <h3 style={{ fontWeight: 900, fontSize: 16, color: '#0F172A' }}>
+                    <h3 style={{ fontWeight: 900, fontSize: 16, color: 'var(--text)' }}>
                       {rec.medicine} · Batch {rec.batch}
                     </h3>
                     <span className="chip badge-red">MANDATORY RECALL</span>
                   </div>
-                  <p style={{ fontSize: 12.5, color: '#991B1B', marginTop: 2 }}>
+                  <p style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 2 }}>
                     Manufacturer/Distributor {rec.supplier} notice issued: Packaging defect. Immediate patient isolation mandatory.
                   </p>
                 </div>
@@ -2547,7 +2546,7 @@ function Recall({
                 gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                 gap: 14,
                 padding: '18px 20px',
-                backgroundColor: '#FFFFFF',
+                backgroundColor: 'var(--surface)',
               }}
             >
               {[
@@ -2556,10 +2555,10 @@ function Recall({
                 { label: 'Units Dispensed to Date', val: '27', sub: 'Across 6 transactions', tone: 'blue' },
                 { label: 'Recall Resolution Status', val: '82%', sub: 'Advisories acknowledged', tone: 'green' },
               ].map(stat => (
-                <div key={stat.label} style={{ padding: '12px 14px', borderRadius: 10, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                  <p style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>{stat.label}</p>
-                  <p style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', marginTop: 2 }}>{stat.val}</p>
-                  <p style={{ fontSize: 11, color: stat.tone === 'red' ? '#DC2626' : stat.tone === 'amber' ? '#D97706' : '#16A34A', marginTop: 2, fontWeight: 600 }}>
+                <div key={stat.label} style={{ padding: '12px 14px', borderRadius: 10, backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>{stat.label}</p>
+                  <p style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>{stat.val}</p>
+                  <p style={{ fontSize: 11, color: stat.tone === 'red' ? 'var(--danger)' : stat.tone === 'amber' ? 'var(--warning)' : 'var(--success)', marginTop: 2, fontWeight: 600 }}>
                     {stat.sub}
                   </p>
                 </div>
@@ -2567,18 +2566,18 @@ function Recall({
             </div>
 
             {/* Containment Protocol Action Checklist */}
-            <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: '#0F172A' }}>ACTIONS TAKEN:</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#16A34A', fontWeight: 600 }}>
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg-subtle)', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>ACTIONS TAKEN:</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
                 <CheckCircle2 size={15} /> 1. Dispensing Locked
               </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#16A34A', fontWeight: 600 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
                 <CheckCircle2 size={15} /> 2. Audit Trail Queried
               </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#16A34A', fontWeight: 600 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
                 <CheckCircle2 size={15} /> 3. Emergency SMS Broadcast
               </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#D97706', fontWeight: 600 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--warning)', fontWeight: 600 }}>
                 <Clock3 size={15} /> 4. Supplier Return Claim Pending
               </span>
             </div>

@@ -9,9 +9,13 @@
 :root {
   /* Crisp White-Based Professional Healthcare Palette */
   --bg: #F8FAFC;
+  --bg-sidebar: #FFFFFF;
+  --bg-header: #FFFFFF;
   --bg-alt: #F1F5F9;
   --bg-subtle: #E2E8F0;
+  --bg-input: #FFFFFF;
   --surface: #FFFFFF;
+  --surface-hover: #F8FAFC;
   --surface-raised: #FFFFFF;
   --white: #FFFFFF;
 
@@ -75,61 +79,76 @@
   --radius-2xl: 22px;
 }
 
-/* ────────── DARK MODE DESIGN TOKENS ────────── */
+/* ────────── DARK MODE DESIGN TOKENS (CALM HEALTHCARE SLATE) ────────── */
 [data-theme="dark"], .dark {
-  --bg: #0B0F17;
-  --bg-alt: #111827;
-  --bg-subtle: #1F2937;
-  --surface: #111827;
-  --surface-raised: #1A2234;
-  --white: #111827;
+  /* Layer 1: App Background */
+  --bg: #0F1720;
 
-  --primary: #14B8A6;
-  --primary-light: rgba(20, 184, 166, 0.15);
-  --primary-dark: #0D9488;
-  --primary-hover: #2DD4BF;
-  --primary-border: #134E4A;
-  --primary-glow: rgba(20, 184, 166, 0.3);
+  /* Layer 2: Sidebar & Header */
+  --bg-sidebar: #111B26;
+  --bg-header: #121D29;
+  --bg-alt: #14202C;
+  --bg-subtle: #1A2838;
+  --bg-input: #14202C;
 
-  --text: #F8FAFC;
-  --text-2: #E2E8F0;
-  --text-3: #94A3B8;
-  --text-4: #64748B;
-  --text-muted: #64748B;
+  /* Layer 3: Cards & Surfaces */
+  --surface: #172330;
+  --surface-hover: #1C2B39;
 
-  --border: #1F2937;
-  --border-light: #162032;
-  --border-strong: #374151;
+  /* Layer 4: Elevated Modals & Tooltips */
+  --surface-raised: #1E2D3D;
+  --white: #172330;
 
-  --success: #22C55E;
-  --success-light: rgba(34, 197, 94, 0.15);
-  --success-border: rgba(34, 197, 94, 0.35);
+  /* Primary Brand: Professional Teal */
+  --primary: #18A999;
+  --primary-light: rgba(24, 169, 153, 0.14);
+  --primary-dark: #0E8476;
+  --primary-hover: #5DD6C9;
+  --primary-border: rgba(24, 169, 153, 0.35);
+  --primary-glow: rgba(24, 169, 153, 0.28);
+
+  /* High-Contrast WCAG Text Hierarchy */
+  --text: #F1F5F9;
+  --text-2: #A8B5C4;
+  --text-3: #8E9DAE;
+  --text-4: #7F8D9D;
+  --text-muted: #7F8D9D;
+
+  /* Layer 5: Subtle Slate Borders */
+  --border: #2A3A49;
+  --border-light: #1E2D3D;
+  --border-strong: #3B4D60;
+
+  /* Accessible Semantic States */
+  --success: #35C759;
+  --success-light: rgba(53, 199, 89, 0.14);
+  --success-border: rgba(53, 199, 89, 0.35);
   --success-dark: #4ADE80;
 
-  --info: #3B82F6;
-  --info-light: rgba(59, 130, 246, 0.15);
-  --info-border: rgba(59, 130, 246, 0.35);
+  --info: #4C9AFF;
+  --info-light: rgba(76, 154, 255, 0.14);
+  --info-border: rgba(76, 154, 255, 0.35);
   --info-dark: #60A5FA;
 
-  --warning: #F59E0B;
-  --warning-light: rgba(245, 158, 11, 0.15);
-  --warning-border: rgba(245, 158, 11, 0.35);
-  --warning-dark: #FBBF24;
+  --warning: #F5B84B;
+  --warning-light: rgba(245, 184, 75, 0.14);
+  --warning-border: rgba(245, 184, 75, 0.35);
+  --warning-dark: #FCD34D;
 
-  --danger: #EF4444;
-  --danger-light: rgba(239, 68, 68, 0.15);
-  --danger-border: rgba(239, 68, 68, 0.35);
-  --danger-dark: #F87171;
+  --danger: #FF6268;
+  --danger-light: rgba(255, 98, 104, 0.14);
+  --danger-border: rgba(255, 98, 104, 0.35);
+  --danger-dark: #FFA3A6;
 
-  --orange: #F97316;
-  --orange-light: rgba(249, 115, 22, 0.15);
-  --orange-border: rgba(249, 115, 22, 0.35);
+  --orange: #FA8C38;
+  --orange-light: rgba(250, 140, 56, 0.14);
+  --orange-border: rgba(250, 140, 56, 0.35);
 
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
-  --shadow: 0 4px 16px -1px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 10px 25px -3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 20px 30px -4px rgba(0, 0, 0, 0.6);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  --shadow: 0 4px 16px -1px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 25px -3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 30px -4px rgba(0, 0, 0, 0.45);
 }
 
 html {

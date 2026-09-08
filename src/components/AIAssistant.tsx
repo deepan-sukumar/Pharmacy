@@ -80,17 +80,17 @@ export default function AIAssistant({
                 alignItems: 'center',
                 padding: '8px 12px',
                 borderRadius: 8,
-                backgroundColor: '#FFFBEB',
-                border: '1px solid #FDE68A',
+                backgroundColor: 'var(--warning-light)',
+                border: '1px solid var(--warning-border)',
                 fontSize: 12,
               }}
             >
               <div>
-                <b style={{ color: '#0F172A' }}>{m.medicine}</b>
-                <span style={{ color: '#B45309', marginLeft: 8 }}>Batch {m.batch} ({m.expiry})</span>
+                <b style={{ color: 'var(--text)' }}>{m.medicine}</b>
+                <span style={{ color: 'var(--warning-dark)', marginLeft: 8 }}>Batch {m.batch} ({m.expiry})</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 700, color: '#D97706' }}>{m.quantity} units</span>
+                <span style={{ fontWeight: 700, color: 'var(--warning)' }}>{m.quantity} units</span>
                 <button
                   onClick={() => onNavigatePage('dispensing')}
                   className="btn btn-teal"
@@ -110,12 +110,12 @@ export default function AIAssistant({
       const highestRisk = inventory.find(m => m.status === 'Near Expiry' && m.medicine.includes('Vitamin D3')) || inventory[1];
       aiText = `Batch ${highestRisk.batch} (${highestRisk.medicine}) presents the highest financial and clinical expiry risk. There are ${highestRisk.quantity} units valued at ₹ ${(highestRisk.quantity * (highestRisk.unitPrice || 65)).toLocaleString()} with an average dispensing velocity of only 5 units/day.`;
       dataCard = (
-        <div style={{ padding: 12, borderRadius: 8, backgroundColor: '#FEF2F2', border: '1px solid #FECACA', marginTop: 8 }}>
+        <div style={{ padding: 12, borderRadius: 8, backgroundColor: 'var(--danger-light)', border: '1px solid var(--danger-border)', marginTop: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontWeight: 800, color: '#DC2626', fontSize: 12 }}>CRITICAL EXPOSURE: ~120 UNITS SURPLUS</span>
-            <span style={{ fontSize: 11, color: '#991B1B' }}>Supplier: {highestRisk.supplier}</span>
+            <span style={{ fontWeight: 800, color: 'var(--danger)', fontSize: 12 }}>CRITICAL EXPOSURE: ~120 UNITS SURPLUS</span>
+            <span style={{ fontSize: 11, color: 'var(--danger-dark)' }}>Supplier: {highestRisk.supplier}</span>
           </div>
-          <p style={{ fontSize: 11.5, color: '#450A0A', lineHeight: 1.4 }}>
+          <p style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
             Recommendation: Avoid new reorders and prioritize FEFO dispensing. Test exact write-off impact in the What-If Simulator.
           </p>
           <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
@@ -133,19 +133,19 @@ export default function AIAssistant({
       const totalRevenue = audits.reduce((sum, a) => sum + (a.totalAmount || a.quantity * 45), 0);
       aiText = `A total of ${totalUnits} medication units across ${audits.length} recorded prescriptions were safely dispensed with 100% batch traceability:`;
       dataCard = (
-        <div style={{ padding: 12, borderRadius: 8, backgroundColor: '#F0FDFA', border: '1px solid #99F6E4', marginTop: 8 }}>
+        <div style={{ padding: 12, borderRadius: 8, backgroundColor: 'var(--primary-light)', border: '1px solid var(--primary-border)', marginTop: 8 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 8, textAlign: 'center' }}>
             <div>
-              <p style={{ fontSize: 10.5, color: '#0F766E' }}>Total Units</p>
-              <b style={{ fontSize: 16, color: '#0D9488' }}>{totalUnits}</b>
+              <p style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Total Units</p>
+              <b style={{ fontSize: 16, color: 'var(--primary)' }}>{totalUnits}</b>
             </div>
             <div>
-              <p style={{ fontSize: 10.5, color: '#0F766E' }}>Prescriptions</p>
-              <b style={{ fontSize: 16, color: '#0D9488' }}>{audits.length}</b>
+              <p style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Prescriptions</p>
+              <b style={{ fontSize: 16, color: 'var(--primary)' }}>{audits.length}</b>
             </div>
             <div>
-              <p style={{ fontSize: 10.5, color: '#0F766E' }}>Audit Volume</p>
-              <b style={{ fontSize: 16, color: '#0D9488' }}>₹ {totalRevenue.toLocaleString()}</b>
+              <p style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Audit Volume</p>
+              <b style={{ fontSize: 16, color: 'var(--primary)' }}>₹ {totalRevenue.toLocaleString()}</b>
             </div>
           </div>
           <button onClick={() => onNavigatePage('audit')} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', fontSize: 11 }}>
@@ -160,12 +160,12 @@ export default function AIAssistant({
       aiText = `HealthCare Labs is associated with the highest volume of near-expiry inventory (Batch VD102 - 180 units of Vitamin D3 60K). MediSource also has 1 quarantined batch under active recall (AMX204).`;
       dataCard = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-          <div style={{ padding: 10, borderRadius: 8, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', fontSize: 12 }}>
+          <div style={{ padding: 10, borderRadius: 8, backgroundColor: 'var(--warning-light)', border: '1px solid var(--warning-border)', fontSize: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <b style={{ color: '#B45309' }}>HealthCare Labs</b>
-              <span style={{ color: '#D97706', fontWeight: 700 }}>180 units near expiry</span>
+              <b style={{ color: 'var(--warning-dark)' }}>HealthCare Labs</b>
+              <span style={{ color: 'var(--warning)', fontWeight: 700 }}>180 units near expiry</span>
             </div>
-            <p style={{ fontSize: 11, color: '#78350F', marginTop: 2 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
               Eligible for credit exchange per Supplier Agreement. Contact: care@healthcarelabs.com
             </p>
           </div>
@@ -181,15 +181,15 @@ export default function AIAssistant({
       aiText = `Operational anomaly scan identified 2 notable events across your pharmacy state:`;
       dataCard = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-          <div style={{ padding: 10, borderRadius: 8, backgroundColor: '#FEF2F2', border: '1px solid #FECACA', fontSize: 12 }}>
-            <b style={{ color: '#DC2626' }}>Anomaly 1: Recalled Batch in Storage</b>
-            <p style={{ fontSize: 11, color: '#7F1D1D', marginTop: 2 }}>
+          <div style={{ padding: 10, borderRadius: 8, backgroundColor: 'var(--danger-light)', border: '1px solid var(--danger-border)', fontSize: 12 }}>
+            <b style={{ color: 'var(--danger)' }}>Anomaly 1: Recalled Batch in Storage</b>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
               45 units of Amoxicillin 500mg (Batch AMX204) remain physically present. System has quarantined it from dispensing, but supplier dispatch is required.
             </p>
           </div>
-          <div style={{ padding: 10, borderRadius: 8, backgroundColor: '#FFF7ED', border: '1px solid #FFEDD5', fontSize: 12 }}>
-            <b style={{ color: '#EA580C' }}>Anomaly 2: High Velocity on Paracetamol</b>
-            <p style={{ fontSize: 11, color: '#7C2D12', marginTop: 2 }}>
+          <div style={{ padding: 10, borderRadius: 8, backgroundColor: 'var(--orange-light)', border: '1px solid var(--orange-border)', fontSize: 12 }}>
+            <b style={{ color: 'var(--orange)' }}>Anomaly 2: High Velocity on Paracetamol</b>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
               Dispensing velocity increased +18% this month; current buffer of 120 units will reach reorder trigger in 8 days.
             </p>
           </div>
@@ -289,16 +289,16 @@ export default function AIAssistant({
                 maxWidth: '82%',
                 borderRadius: m.from === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                 padding: '12px 16px',
-                backgroundColor: m.from === 'user' ? 'var(--primary)' : 'var(--surface)',
-                color: m.from === 'user' ? '#FFFFFF' : 'var(--text)',
-                border: m.from === 'user' ? 'none' : '1px solid var(--border)',
+                backgroundColor: m.from === 'user' ? 'var(--primary-light)' : 'var(--surface-raised)',
+                color: 'var(--text)',
+                border: m.from === 'user' ? '1.5px solid var(--primary-border)' : '1px solid var(--border)',
                 boxShadow: 'var(--shadow-sm)',
                 fontSize: 13,
                 lineHeight: 1.5,
               }}
             >
               {m.badge && (
-                <div style={{ fontSize: 9.5, fontWeight: 800, color: m.from === 'user' ? '#CCFBF1' : 'var(--primary)', letterSpacing: '0.06em', marginBottom: 4 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.06em', marginBottom: 4 }}>
                   {m.badge}
                 </div>
               )}
@@ -307,7 +307,7 @@ export default function AIAssistant({
               <div
                 style={{
                   fontSize: 10.5,
-                  color: m.from === 'user' ? '#CCFBF1' : 'var(--text-muted)',
+                  color: 'var(--text-muted)',
                   textAlign: 'right',
                   marginTop: 6,
                 }}
