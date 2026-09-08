@@ -1,0 +1,18 @@
+{
+  "name": "PharmaFlow - Pharmacy Operations & Expiry Tracking",
+  "short_name": "PharmaFlow",
+  "description": "Pharmacy Medication Dispensing Audit, FEFO Tracking & Expiry Risk Portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D9488",
+  "theme_color": "#0D9488",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

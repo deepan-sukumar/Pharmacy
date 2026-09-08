@@ -613,6 +613,104 @@ export default function Sidebar({
   );
 }
 
+/* ────────── MOBILE BOTTOM NAVIGATION BAR ────────── */
+export function MobileBottomNav({
+  page,
+  onNavigate,
+  onOpenMenu,
+  alertCount = 3,
+}: {
+  page: Page;
+  onNavigate: (p: Page) => void;
+  onOpenMenu: () => void;
+  alertCount?: number;
+}) {
+  const isInventoryActive = ['inventory', 'add-stock', 'expiry', 'suppliers'].includes(page);
+  const isDispenseActive = ['dispensing', 'audit', 'customers'].includes(page);
+  const isAlertsActive = ['alerts', 'recall'].includes(page);
+
+  return (
+    <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
+      <button
+        onClick={() => onNavigate('dashboard')}
+        className={`mobile-nav-tab ${page === 'dashboard' ? 'active' : ''}`}
+        title="Dashboard"
+      >
+        <Gauge size={20} strokeWidth={page === 'dashboard' ? 2.5 : 1.8} />
+        <span>Home</span>
+      </button>
+
+      <button
+        onClick={() => onNavigate('inventory')}
+        className={`mobile-nav-tab ${isInventoryActive ? 'active' : ''}`}
+        title="Inventory"
+      >
+        <Boxes size={20} strokeWidth={isInventoryActive ? 2.5 : 1.8} />
+        <span>Inventory</span>
+      </button>
+
+      <button
+        onClick={() => onNavigate('dispensing')}
+        className={`mobile-nav-tab ${isDispenseActive ? 'active' : ''}`}
+        title="Dispense Prescription"
+      >
+        <div
+          style={{
+            marginTop: -8,
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: isDispenseActive ? 'var(--primary)' : 'var(--primary-light)',
+            border: '2px solid var(--primary-border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: isDispenseActive ? '#FFFFFF' : 'var(--primary)',
+            boxShadow: '0 2px 8px var(--primary-glow)',
+          }}
+        >
+          <CreditCard size={18} strokeWidth={2.2} />
+        </div>
+        <span style={{ color: isDispenseActive ? 'var(--primary)' : undefined }}>Dispense</span>
+      </button>
+
+      <button
+        onClick={() => onNavigate('alerts')}
+        className={`mobile-nav-tab ${isAlertsActive ? 'active' : ''}`}
+        title="Alerts & Recalls"
+      >
+        <div style={{ position: 'relative' }}>
+          <Bell size={20} strokeWidth={isAlertsActive ? 2.5 : 1.8} />
+          {alertCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: -3,
+                right: -4,
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                backgroundColor: 'var(--danger)',
+                border: '1px solid var(--surface)',
+              }}
+            />
+          )}
+        </div>
+        <span>Alerts</span>
+      </button>
+
+      <button
+        onClick={onOpenMenu}
+        className="mobile-nav-tab"
+        title="Open Full Menu"
+      >
+        <PanelLeft size={20} strokeWidth={1.8} />
+        <span>Menu</span>
+      </button>
+    </nav>
+  );
+}
+
 /* ────────── MOBILE DRAWER NAVIGATION ────────── */
 export function MobileSidebarDrawer({
   open,
@@ -634,97 +732,146 @@ export function MobileSidebarDrawer({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 150,
+        zIndex: 200,
         display: 'flex',
       }}
     >
+      {/* Backdrop overlay */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'rgba(15, 23, 42, 0.45)',
-          backdropFilter: 'blur(3px)',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(4px)',
         }}
         onClick={onClose}
       />
+
+      {/* Slide-out drawer panel */}
       <div
         className="animate-slide-in-right"
         style={{
           position: 'relative',
           width: '85%',
           maxWidth: 320,
-          background: 'var(--surface)',
+          background: 'var(--bg-sidebar)',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: 'var(--shadow-lg)',
-          zIndex: 151,
+          zIndex: 201,
+          borderRight: '1px solid var(--border)',
         }}
       >
+        {/* Drawer Header */}
         <div
           style={{
-            padding: '16px 20px',
+            padding: '16px 18px',
             borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            background: 'var(--surface)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                background: 'var(--primary)',
+                width: 36,
+                height: 36,
+                borderRadius: 9,
+                background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                boxShadow: '0 2px 8px var(--primary-glow)',
               }}
             >
-              <Stethoscope size={18} color="white" />
+              <Stethoscope size={19} color="#FFFFFF" />
             </div>
             <div>
-              <p style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)' }}>PharmaFlow</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontWeight: 900, fontSize: 15, color: 'var(--text)', letterSpacing: '-0.3px' }}>
+                  PHARMAFLOW
+                </span>
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 800,
+                    color: 'var(--primary)',
+                    background: 'var(--primary-light)',
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                  }}
+                >
+                  PRO
+                </span>
+              </div>
               <p style={{ fontSize: 11, color: 'var(--text-4)' }}>Operations Portal</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
+            className="btn-ghost"
+            style={{
+              width: 32,
+              height: 32,
+              padding: 0,
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Close menu"
           >
-            <X size={20} color="var(--text-3)" />
+            <X size={18} color="var(--text-3)" />
           </button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 12px' }}>
+        {/* Drawer Navigation Links */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Dashboard */}
           <button
             onClick={() => {
               onNavigate('dashboard');
               onClose();
             }}
             className={`sidebar-subitem ${page === 'dashboard' ? 'active' : ''}`}
-            style={{ marginBottom: 12, padding: '10px 14px' }}
+            style={{
+              padding: '10px 14px',
+              fontSize: 13.5,
+              fontWeight: page === 'dashboard' ? 700 : 600,
+              borderRadius: 8,
+              borderLeft: page === 'dashboard' ? '3px solid var(--primary)' : 'none',
+              background: page === 'dashboard' ? 'var(--primary-light)' : 'transparent',
+              color: page === 'dashboard' ? 'var(--primary)' : 'var(--text-2)',
+            }}
           >
-            <Gauge size={18} />
-            <span style={{ fontWeight: 700 }}>Dashboard</span>
+            <Gauge size={18} strokeWidth={page === 'dashboard' ? 2.4 : 1.8} />
+            <span>Dashboard</span>
           </button>
 
+          {/* Grouped sections */}
           {navGroups.map(group => (
-            <div key={group.id} style={{ marginBottom: 12 }}>
-              <p
+            <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div
                 style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 10px',
                   fontSize: 10.5,
                   fontWeight: 800,
                   letterSpacing: '0.06em',
                   color: 'var(--text-4)',
-                  padding: '4px 12px',
                   textTransform: 'uppercase',
                 }}
               >
-                {group.label}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }}>
+                <group.icon size={13} color="var(--text-4)" />
+                <span>{group.label}</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 6 }}>
                 {group.items.map(item => {
                   const active = page === item.id || (page === 'add-stock' && item.id === 'inventory');
                   const Icon = item.icon;
@@ -736,14 +883,18 @@ export function MobileSidebarDrawer({
                         onClose();
                       }}
                       className={`sidebar-subitem ${active ? 'active' : ''}`}
-                      style={{ padding: '9px 14px' }}
+                      style={{
+                        padding: '9px 12px',
+                        fontSize: 13,
+                        borderRadius: 8,
+                      }}
                     >
-                      <Icon size={17} />
-                      <span style={{ flex: 1 }}>{item.label}</span>
-                      {item.count && (
+                      <Icon size={16} strokeWidth={active ? 2.2 : 1.8} color={active ? 'var(--primary)' : 'var(--text-3)'} />
+                      <span style={{ flex: 1, fontWeight: active ? 700 : 500 }}>{item.label}</span>
+                      {item.count !== undefined && (
                         <span
-                          className={`chip ${item.countTone === 'red' ? 'badge-red' : 'badge-amber'}`}
-                          style={{ padding: '1px 6px', fontSize: 10 }}
+                          className={`chip ${item.countTone === 'red' ? 'badge-red' : item.countTone === 'amber' ? 'badge-amber' : 'badge-teal'}`}
+                          style={{ padding: '1px 6px', fontSize: 10, fontWeight: 800 }}
                         >
                           {item.count}
                         </span>
@@ -755,44 +906,73 @@ export function MobileSidebarDrawer({
             </div>
           ))}
 
-          <div style={{ paddingTop: 8, borderTop: '1px solid var(--border)', marginTop: 8 }}>
+          {/* Settings Section */}
+          <div style={{ paddingTop: 10, borderTop: '1px solid var(--border)', marginTop: 4 }}>
             <button
               onClick={() => {
                 onNavigate('settings');
                 onClose();
               }}
               className={`sidebar-subitem ${page === 'settings' ? 'active' : ''}`}
-              style={{ padding: '9px 14px' }}
+              style={{ padding: '9px 12px', fontSize: 13.5 }}
             >
-              <SettingsIcon size={17} />
-              <span>Settings</span>
+              <SettingsIcon size={17} strokeWidth={page === 'settings' ? 2.2 : 1.8} />
+              <span>Settings & Profile</span>
             </button>
           </div>
         </div>
 
+        {/* Drawer Bottom Profile & Logout */}
         <div
           style={{
-            padding: 16,
+            padding: '14px 16px',
             borderTop: '1px solid var(--border)',
             background: 'var(--bg-alt)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: 10,
           }}
         >
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Dr. Anita Rao</p>
-            <p style={{ fontSize: 11, color: 'var(--text-4)' }}>Pharmacist-in-Charge</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: 'var(--primary)',
+                color: '#FFFFFF',
+                fontSize: 12,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              AR
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Dr. Anita Rao
+              </p>
+              <p style={{ fontSize: 10.5, color: 'var(--text-4)' }}>Pharmacist-in-Charge</p>
+            </div>
           </div>
           <button
-            onClick={onLogout}
+            onClick={() => {
+              onClose();
+              onLogout();
+            }}
             className="btn btn-danger"
-            style={{ padding: '6px 12px', fontSize: 12 }}
+            style={{ padding: '6px 12px', fontSize: 12, minHeight: 34 }}
+            title="Sign Out"
           >
-            <LogOut size={14} /> Logout
+            <LogOut size={13} /> Sign Out
           </button>
         </div>
       </div>
     </div>
   );
 }
+

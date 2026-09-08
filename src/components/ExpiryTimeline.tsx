@@ -276,9 +276,9 @@ export default function ExpiryTimeline({
         })}
       </div>
 
-      {/* 2. THE VISUAL PROPORTIONAL HORIZONTAL TIMELINE CONTAINER */}
+      {/* 2. THE VISUAL HORIZONTAL TIMELINE (DESKTOP & TABLET >= 768px) */}
       <div
-        className="card"
+        className="card hidden-mobile"
         style={{
           padding: '24px 20px',
           backgroundColor: 'var(--surface)',
@@ -451,7 +451,6 @@ export default function ExpiryTimeline({
 
             {/* 3. STAGGERED BATCH MARKER NODES & CARDS */}
             {staggeredBatches.map(b => {
-              // Y position based on rowLane: 0 => top, 1 => center, 2 => bottom
               const laneTop = b.rowLane === 0 ? 14 : b.rowLane === 1 ? 84 : 152;
 
               return (
@@ -493,7 +492,6 @@ export default function ExpiryTimeline({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {/* Status Dot */}
                     <span
                       style={{
                         width: 9,
@@ -505,7 +503,6 @@ export default function ExpiryTimeline({
                       }}
                     />
 
-                    {/* Batch & Expiry Text Info */}
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>
@@ -540,7 +537,6 @@ export default function ExpiryTimeline({
                     </div>
                   </div>
 
-                  {/* Vertical Connector Line to Axis */}
                   <div
                     style={{
                       width: 1.5,
@@ -594,6 +590,136 @@ export default function ExpiryTimeline({
             <Info size={13} color="var(--text-muted)" />
             <span>Hover on any batch marker for full stock & supplier audit details.</span>
           </div>
+        </div>
+      </div>
+
+      {/* 3. VERTICAL TIMELINE FOR MOBILE PHONE SCREENS (< 768px) */}
+      <div
+        className="card hidden-desktop"
+        style={{
+          padding: '18px 16px',
+          backgroundColor: 'var(--surface)',
+          borderRadius: 14,
+          border: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CalendarDays size={18} color="var(--primary)" />
+            <h3 style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+              Expiry Milestones
+            </h3>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-light)', padding: '2px 8px', borderRadius: 99 }}>
+            FEFO Order
+          </span>
+        </div>
+
+        {/* Vertical Timeline Spine */}
+        <div style={{ position: 'relative', paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Vertical continuous line */}
+          <div
+            style={{
+              position: 'absolute',
+              left: 7,
+              top: 6,
+              bottom: 12,
+              width: 2,
+              background: 'linear-gradient(to bottom, var(--danger) 0%, var(--warning) 40%, var(--success) 100%)',
+            }}
+          />
+
+          {sortedBatches.map(b => (
+            <div
+              key={b.batch}
+              onClick={() => onSelectBatch?.(b)}
+              style={{
+                position: 'relative',
+                cursor: 'pointer',
+              }}
+            >
+              {/* Spine Node Dot */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: -22 + 3,
+                  top: 14,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  backgroundColor: b.risk.dotColor,
+                  border: '2px solid var(--surface)',
+                  boxShadow: '0 0 0 2px ' + b.risk.bg,
+                }}
+              />
+
+              {/* Mobile Timeline Item Card */}
+              <div
+                style={{
+                  background: b.risk.bg,
+                  border: `1.5px solid ${b.risk.border}`,
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  boxShadow: 'var(--shadow-xs)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
+                      {b.medicine}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: 'var(--text-2)' }}>
+                        {b.batch}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-4)' }}>·</span>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                        Exp: {b.expiry}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      backgroundColor: b.risk.border,
+                      color: b.risk.color,
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    {b.risk.badgeLabel}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingTop: 6,
+                    borderTop: '1px solid ' + b.risk.border,
+                    fontSize: 11.5,
+                  }}
+                >
+                  <span style={{ color: 'var(--text-3)' }}>
+                    Supplier: <b>{b.supplier}</b>
+                  </span>
+                  <span style={{ fontWeight: 800, color: b.risk.color }}>
+                    {b.quantity} units ({b.daysLeft <= 0 ? 'Expired' : b.status === 'Recalled' ? 'Quarantined' : `${b.daysLeft}d left`})
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -664,3 +790,4 @@ export default function ExpiryTimeline({
     </div>
   );
 }
+

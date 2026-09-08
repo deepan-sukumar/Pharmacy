@@ -226,7 +226,7 @@ export default function Landing({ onSignIn, onGetStarted }: { onSignIn: () => vo
             <p className="section-desc" style={{ margin: '14px auto 0' }}>Explore every capability designed to protect inventory, simplify audits, and elevate patient care.</p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 'clamp(14px, 2.5vw, 24px)' }}>
             {features.map((f, i) => {
               const Icon = f.icon;
               const isHovered = activeFeature === i;

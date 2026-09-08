@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import type { Page, Medicine, Audit, Status, CustomerItem, SupplierItem } from './data';
 import { initialInventory, initialCustomers, initialSuppliers } from './data';
-import Sidebar, { MobileSidebarDrawer } from './components/Sidebar';
+import Sidebar, { MobileSidebarDrawer, MobileBottomNav } from './components/Sidebar';
 import WorkspaceTabs, { type TabItem } from './components/WorkspaceTabs';
 import { ExpiryRiskChart, StockMovementChart, MostDispensedRanking, DispensingTrendsChart } from './components/Charts';
 import WorkflowFlowchart from './components/WorkflowFlowchart';
@@ -1164,7 +1164,8 @@ function Inventory({
             </button>
           </div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        {/* Desktop Table View */}
+        <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: 'var(--bg-alt)' }}>
@@ -1203,6 +1204,54 @@ function Inventory({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
+          {rows.map(m => (
+            <div key={m.id} className="mobile-entity-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div>
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{m.medicine}</h4>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{m.supplier}</p>
+                </div>
+                <Badge status={m.status} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Batch</span>
+                  <p style={{ margin: '2px 0 0', fontFamily: 'monospace', fontWeight: 700, color: 'var(--text)' }}>{m.batch}</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Expiry</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 600, color: 'var(--text)' }}>{m.expiry}</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>In Stock</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 800, color: 'var(--primary)', fontSize: 14 }}>{m.quantity} units</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Price</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>₹ {m.unitPrice || 45}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: 12, flex: 1 }} onClick={() => setEdit(m)}>
+                  <Edit3 size={13} /> Edit
+                </button>
+                <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: 12, color: 'var(--danger)' }} onClick={() => { setInventory(inventory.filter(x => x.id !== m.id)); showToast(`Removed ${m.medicine} (${m.batch})`); }}>
+                  <Trash2 size={13} /> Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)', fontSize: 13 }}>
+              No medicines match your search criteria.
+            </div>
+          )}
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-3)' }}>Showing {rows.length} of {inventory.length} medicines</div>
       </div>
@@ -1716,7 +1765,34 @@ function Dispensing({
             </div>
             <div>
               <label className="label">Quantity</label>
-              <input className="input" type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value)))}/>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, borderRadius: 8, flexShrink: 0 }}
+                  onClick={() => setQty(Math.max(1, qty - 1))}
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  style={{ textAlign: 'center', fontWeight: 700, fontSize: 16, minWidth: 60 }}
+                  value={qty}
+                  onChange={e => setQty(Math.max(1, Number(e.target.value)))}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, borderRadius: 8, flexShrink: 0 }}
+                  onClick={() => setQty(qty + 1)}
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
               {chosen && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>Available: {chosen.quantity} units (₹ {chosen.unitPrice || 45}/unit)</p>}
             </div>
             <div>
@@ -1920,8 +1996,8 @@ function AuditPage({
           </div>
         </div>
 
-        {/* Audit Table */}
-        <div style={{ overflowX: 'auto' }}>
+        {/* Desktop Table View */}
+        <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr className="table-header">
@@ -1960,6 +2036,52 @@ function AuditPage({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
+          {paginatedRows.map(a => (
+            <div key={a.id} className="mobile-entity-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div>
+                  <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 800, color: 'var(--primary)' }}>
+                    {a.rxId || `RX-2026-${a.id.toString().slice(-4)}`}
+                  </span>
+                  <h4 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', margin: '3px 0 0' }}>{a.medicine}</h4>
+                </div>
+                <Badge status={a.status} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Customer</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>{a.customer}</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Quantity</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 800, color: 'var(--primary)' }}>{a.quantity} units</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Batch</span>
+                  <p style={{ margin: '2px 0 0', fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-2)' }}>{a.batch}</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Total Paid</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>₹ {(a.totalAmount || a.quantity * 45).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontSize: 11.5, color: 'var(--text-3)' }}>
+                <span>{a.date}</span>
+                <span>By {a.pharmacist}</span>
+              </div>
+            </div>
+          ))}
+          {paginatedRows.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)', fontSize: 13 }}>
+              No audit records match "{q}" in category "{statusFilter}".
+            </div>
+          )}
         </div>
 
         {/* Pagination & Counter Footer */}
@@ -2079,7 +2201,7 @@ function Customers({
             <Download size={14}/> Export
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 16, padding: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 'clamp(10px, 2.5vw, 16px)', padding: 'clamp(12px, 3vw, 20px)' }}>
           {filtered.map((c, i) => (
             <div
               key={c.id}
@@ -2283,7 +2405,8 @@ function Suppliers({
             <input placeholder="Search suppliers..." value={q} onChange={e => setQ(e.target.value)}/>
           </div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        {/* Desktop Table View */}
+        <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead><tr style={{ background: 'var(--bg-alt)' }}>
               {['Supplier', 'Active batches', 'Total purchases', 'Rating', ''].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
@@ -2303,6 +2426,44 @@ function Suppliers({
               </tr>
             ))}</tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
+          {filtered.map(s => (
+            <div key={s.id} className="mobile-entity-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div>
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{s.name}</h4>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{s.email}</p>
+                </div>
+                <span className="chip badge-green">★ {s.rating}</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Active Batches</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>{s.batches} batches</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Total Purchases</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>{s.purchases}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>📞 {s.phone}</span>
+                <button className="btn btn-secondary" style={{ padding: '5px 12px', fontSize: 11.5 }} onClick={() => showToast(`Supplier Contact: ${s.name} · Phone: ${s.phone}`)}>
+                  Contact
+                </button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)', fontSize: 13 }}>
+              No suppliers match your search query.
+            </div>
+          )}
         </div>
       </Panel>
 
@@ -2628,12 +2789,12 @@ function Recall({
 
       {/* Exposed Customers Identified from Dispensing Audit */}
       <div className="card" style={{ overflow: 'hidden', marginBottom: 20 }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
               Impacted Patients Traced from Dispensing Audit Log
             </h3>
-            <p style={{ fontSize: 11.5, color: '#64748B' }}>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
               Cross-referenced from historical prescriptions containing batch AMX204
             </p>
           </div>
@@ -2642,12 +2803,13 @@ function Recall({
           </button>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        {/* Desktop Table View */}
+        <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr className="table-header">
                 {['Patient Name', 'Phone Number', 'Dispense Date', 'Rx ID', 'Quantity', 'Recall Status', 'Action'].map(h => (
-                  <th key={h} style={{ padding: '11px 16px', fontSize: 11, fontWeight: 700, color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  <th key={h} style={{ padding: '11px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     {h}
                   </th>
                 ))}
@@ -2655,12 +2817,12 @@ function Recall({
             </thead>
             <tbody>
               {impactedPatients.map(p => (
-                <tr key={p.name} className="table-row" style={{ borderTop: '1px solid #E2E8F0' }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13, color: '#0F172A' }}>{p.name}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: '#475569' }}>{p.phone}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: '#64748B' }}>{p.date}</td>
-                  <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: '#0D9488', fontWeight: 700 }}>{p.rxId}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{p.qty} units</td>
+                <tr key={p.name} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{p.name}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--text-2)' }}>{p.phone}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--text-3)' }}>{p.date}</td>
+                  <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{p.rxId}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{p.qty} units</td>
                   <td style={{ padding: '12px 16px' }}>
                     <span
                       className={`chip ${
@@ -2687,6 +2849,53 @@ function Recall({
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
+          {impactedPatients.map(p => (
+            <div key={p.name} className="mobile-entity-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div>
+                  <h4 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{p.name}</h4>
+                  <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{p.phone}</p>
+                </div>
+                <span
+                  className={`chip ${
+                    p.status.includes('Claimed')
+                      ? 'badge-green'
+                      : p.status.includes('Confirmed')
+                      ? 'badge-blue'
+                      : 'badge-amber'
+                  }`}
+                >
+                  {p.status}
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Rx ID</span>
+                  <p style={{ margin: '2px 0 0', fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)' }}>{p.rxId}</p>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Dispensed</span>
+                  <p style={{ margin: '2px 0 0', fontWeight: 800, color: 'var(--text)' }}>{p.qty} units</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{p.date}</span>
+                <button
+                  onClick={() => showToast(`Dispatched follow-up SMS reminder to ${p.name}`)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: 11.5, padding: '5px 12px' }}
+                >
+                  Resend SMS
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -3533,6 +3742,13 @@ export default function PharmacistPortal({ onLogout }: { onLogout: () => void })
           {page === 'settings' && <PharmSettings showToast={showToast} />}
         </main>
       </div>
+
+      <MobileBottomNav
+        page={page}
+        onNavigate={p => { setFilterQuery(''); setPage(p); }}
+        onOpenMenu={() => setMobileDrawerOpen(true)}
+        alertsCount={3}
+      />
 
       {toast && (
         <div className="animate-slide-up" style={{ position: 'fixed', bottom: 74, right: 20, zIndex: 120, display: 'flex', alignItems: 'center', gap: 10, background: '#0F172A', color: 'white', padding: '11px 18px', borderRadius: 11, boxShadow: '0 8px 24px rgba(15,23,42,0.25)', fontSize: 13, fontWeight: 600 }}>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Truck, PackageCheck, QrCode, ShieldCheck, Boxes, CreditCard,
   MinusCircle, ClipboardCheck, AlertTriangle, BellRing,
-  Languages, ShieldAlert, Ban, Search, Send, FileCheck
+  Languages, ShieldAlert, Ban, Search, Send, FileCheck, ArrowDown
 } from 'lucide-react';
 
 export default function WorkflowFlowchart() {
@@ -49,6 +49,7 @@ export default function WorkflowFlowchart() {
             borderRadius: 10,
             gap: 4,
             border: '1px solid var(--border)',
+            flexWrap: 'wrap',
           }}
         >
           <button
@@ -78,7 +79,7 @@ export default function WorkflowFlowchart() {
       {/* ────────── FLOW 1: CORE PHARMACY WORKFLOW ────────── */}
       {activeFlow === 'core' && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', flexWrap: 'wrap', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
               End-to-End Stock Ingestion → Dispensing → Audit Trace
             </span>

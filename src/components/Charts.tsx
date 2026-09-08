@@ -143,7 +143,13 @@ export function ExpiryRiskChart({
       </div>
 
       {/* Breakdown Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+          gap: 10,
+        }}
+      >
         {segments.map(seg => {
           const Icon = seg.icon;
           const isSelected = activeSegment === seg.id;
@@ -192,14 +198,14 @@ export function ExpiryRiskChart({
             padding: '10px 12px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)' }}>
               Batches in category: {segments.find(s => s.id === activeSegment)?.label}
             </span>
             {onNavigateExpiry && (
               <button
                 onClick={onNavigateExpiry}
-                style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
               >
                 View in Expiry Table →
               </button>
@@ -219,13 +225,16 @@ export function ExpiryRiskChart({
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
+                    alignItems: 'center',
                     fontSize: 11.5,
-                    padding: '4px 0',
-                    borderBottom: '1px solid var(--border)',
+                    padding: '5px 0',
+                    borderBottom: '1px solid var(--border-light)',
+                    flexWrap: 'wrap',
+                    gap: 4,
                   }}
                 >
                   <span style={{ fontWeight: 600, color: 'var(--text)' }}>{m.medicine}</span>
-                  <span style={{ fontFamily: 'monospace', color: 'var(--text-3)' }}>
+                  <span style={{ fontFamily: 'monospace', color: 'var(--text-3)', fontSize: 11 }}>
                     {m.batch} · {m.quantity} units ({m.expiry})
                   </span>
                 </div>
