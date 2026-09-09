@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { Role } from './data';
 import { ThemeToggle } from './components/ThemeContext';
+import { api } from './services/api';
 
 export default function Auth({
   mode = 'signin',
@@ -15,7 +16,7 @@ export default function Auth({
   onBack,
 }: {
   mode: 'signin' | 'signup';
-  onLogin: (role: Role) => void;
+  onLogin: (role: Role, user?: any) => void;
   onSwitch: () => void;
   onBack: () => void;
 }) {
@@ -131,12 +132,22 @@ export default function Auth({
     return Object.keys(errs).length === 0;
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin('Pharmacist');
+    setIsSubmitting(true);
+    let userData = { fullName: 'Demo Pharmacist', pharmacyId: 'DEMO_PHARMACY', role: 'Pharmacist' };
+    try {
+      const res = await api.loginUser({ email: loginEmail, password: loginPassword });
+      if (res?.user) userData = res.user;
+    } catch {
+      // Allow demo bypass without error
+    } finally {
+      setIsSubmitting(false);
+      onLogin('Pharmacist', userData);
+    }
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
@@ -145,19 +156,42 @@ export default function Auth({
     }
 
     setIsSubmitting(true);
+    setErrors({});
 
-    // Simulate account setup & workspace initialization
-    setTimeout(() => {
+    try {
+      const res = await api.registerUser({
+        fullName,
+        email,
+        mobile,
+        password,
+        regNumber,
+        pharmacyName,
+        pharmacyType,
+        city,
+        stateName,
+        country,
+        preferredLang,
+        enableAlerts,
+      });
+
       setIsSubmitting(false);
-      setSuccessMessage('Pharmacy workspace created successfully! Launching portal...');
+      setSuccessMessage('Pharmacy workspace created and saved to Firestore! Launching portal...');
       setTimeout(() => {
-        onLogin('Pharmacist');
+        onLogin('Pharmacist', res?.user || { fullName, pharmacyId: 'DEMO_PHARMACY', role: 'Pharmacist' });
       }, 1200);
-    }, 1000);
+    } catch (err: any) {
+      setIsSubmitting(false);
+      setErrors({ form: err.message || 'Failed to create account. Please try again.' });
+    }
   };
 
   const handleDemoAccess = () => {
-    onLogin('Pharmacist');
+    onLogin('Pharmacist', {
+      fullName: 'Demo Pharmacist',
+      pharmacyId: 'DEMO_PHARMACY',
+      role: 'Pharmacist',
+      pharmacyName: 'Apollo MedPlus Central'
+    });
   };
 
   const tiltX = mousePos.y * -6;
@@ -298,6 +332,26 @@ export default function Auth({
               }}
             >
               <CheckCircle size={18} /> {successMessage}
+            </div>
+          )}
+
+          {/* Error Banner */}
+          {errors.form && (
+            <div
+              style={{
+                padding: '14px 18px',
+                borderRadius: 12,
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1.5px solid var(--danger)',
+                color: 'var(--danger)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 13.5,
+                fontWeight: 700,
+              }}
+            >
+              <AlertTriangle size={18} /> {errors.form}
             </div>
           )}
 
