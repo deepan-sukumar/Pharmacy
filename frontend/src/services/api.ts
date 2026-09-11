@@ -332,22 +332,24 @@ export const api = {
   // -------------------------------------------------------------
   // AI ASSISTANT & WHAT-IF SIMULATOR
   // -------------------------------------------------------------
-  async askAI(query: string) {
+  async askAI(query: string, language: string = 'English', conversationHistory: any[] = []) {
     const res = await fetch(`${API_BASE_URL}/ai/query`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, language, conversationHistory }),
     });
     return await res.json();
   },
 
   async simulateScenario(params: {
     medicine?: string;
+    batchId?: string;
     currentStock: number;
     orderQty: number;
     dailyUsage: number;
     daysToExpiry: number;
     unitCost: number;
+    leadTimeDays?: number;
   }) {
     const res = await fetch(`${API_BASE_URL}/ai/simulate`, {
       method: 'POST',
@@ -357,8 +359,123 @@ export const api = {
     return await res.json();
   },
 
+  async getTodayIntelligence() {
+    const res = await fetch(`${API_BASE_URL}/ai/intelligence`, { headers: getHeaders() });
+    return await res.json();
+  },
+
+  async getAuditInvestigation() {
+    const res = await fetch(`${API_BASE_URL}/ai/audit-investigation`, { headers: getHeaders() });
+    return await res.json();
+  },
+
+  async getExpiryRisk(batchId: string) {
+    const res = await fetch(`${API_BASE_URL}/ai/expiry-risk/${encodeURIComponent(batchId)}`, { headers: getHeaders() });
+    return await res.json();
+  },
+
   async getAnalytics() {
     const res = await fetch(`${API_BASE_URL}/reports/analytics`, { headers: getHeaders() });
+    return await res.json();
+  },
+
+  // -------------------------------------------------------------
+  // REAL SMS NOTIFICATION SYSTEM (AUTOMATIC + MANUAL)
+  // -------------------------------------------------------------
+  async sendManualSms(payload: {
+    customer?: string;
+    recipientName?: string;
+    phone?: string;
+    recipientPhone?: string;
+    notificationType: string;
+    medicine?: string;
+    batch?: string;
+    language?: string;
+    customVariables?: Record<string, any>;
+  }) {
+    const res = await fetch(`${API_BASE_URL}/sms/send-manual`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || 'Failed to dispatch SMS');
+    }
+    return data;
+  },
+
+  async triggerAutomaticSmsScan() {
+    const res = await fetch(`${API_BASE_URL}/sms/send-automatic-trigger`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return await res.json();
+  },
+
+  async getSmsReports(filters: {
+    source?: string;
+    status?: string;
+    language?: string;
+    notificationType?: string;
+    limit?: number;
+  } = {}) {
+    const params = new URLSearchParams();
+    if (filters.source) params.append('source', filters.source);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.language) params.append('language', filters.language);
+    if (filters.notificationType) params.append('notificationType', filters.notificationType);
+    if (filters.limit) params.append('limit', String(filters.limit));
+
+    const res = await fetch(`${API_BASE_URL}/sms/reports?${params.toString()}`, { headers: getHeaders() });
+    return await res.json();
+  },
+
+  async broadcastRecallSms(batch: string, reason?: string) {
+    const res = await fetch(`${API_BASE_URL}/sms/recall-broadcast`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ batch, reason }),
+    });
+    return await res.json();
+  },
+
+  async sendBatchRecallSms(params: { batchNumber: string; medicineName?: string; recallReason?: string }) {
+    return this.broadcastRecallSms(params.batchNumber, params.recallReason);
+  },
+
+  async sendDispenseSms(data: {
+    customerPhone?: string;
+    customerName?: string;
+    medicineName?: string;
+    quantity?: number;
+    rxId?: string;
+    totalAmount?: number;
+    language?: string;
+  }) {
+    if (!data.customerPhone) return null;
+    return this.sendManualSms({
+      recipientName: data.customerName || 'Valued Patient',
+      recipientPhone: data.customerPhone,
+      notificationType: 'DISPENSE_CONFIRMATION',
+      medicine: data.medicineName,
+      language: data.language || 'English',
+      customVariables: {
+        medicineName: data.medicineName,
+        quantity: data.quantity,
+        rxId: data.rxId,
+        totalAmount: data.totalAmount,
+      },
+    });
+  },
+
+  async getSmsTemplate(type: string, language: string = 'English', variables: any = {}) {
+    const params = new URLSearchParams({
+      type,
+      language,
+      variables: JSON.stringify(variables),
+    });
+    const res = await fetch(`${API_BASE_URL}/sms/templates?${params.toString()}`, { headers: getHeaders() });
     return await res.json();
   },
 
@@ -422,3 +539,4 @@ export const api = {
     return await res.json();
   },
 };
+

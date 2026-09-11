@@ -1,6 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const { db, isConnected } = require('./firebase');
+const { handleAIQuery } = require('./services/aiService');
+const { runWhatIfSimulation, calculateScenario, compareOrderScenarios } = require('./services/simulationService');
+const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports } = require('./services/smsService');
+const { renderSmsTemplate, SMS_TEMPLATES } = require('./services/smsTemplates');
+const { runNotificationCycle, startScheduler } = require('./services/schedulerService');
+const pharmacyTools = require('./services/pharmacyTools');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -77,6 +83,8 @@ let memoryStore = {
     }
   ]
 };
+
+pharmacyTools.setMemoryStore(memoryStore);
 
 // -------------------------------------------------------------
 // IDEMPOTENT FIRESTORE SEEDER (Runs safely on startup)
@@ -1132,69 +1140,21 @@ app.post('/api/import/excel', async (req, res) => {
 // -------------------------------------------------------------
 app.post('/api/ai/query', async (req, res) => {
   try {
-    const { query } = req.body;
+    const { query, language, conversationHistory } = req.body;
     const pharmacyId = getPharmacyId(req);
 
     if (!query) {
       return res.status(400).json({ error: 'Query prompt is required.' });
     }
 
-    // Retrieve real pharmacy context
-    let inventory = [];
-    let audits = [];
-
-    if (isConnected()) {
-      const invSnap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
-      inventory = invSnap.docs.map(d => d.data());
-      const audSnap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).limit(20).get();
-      audits = audSnap.docs.map(d => d.data());
-    } else {
-      inventory = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
-      audits = memoryStore.audits.filter(a => a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
-    }
-
-    const totalItems = inventory.length;
-    const totalStock = inventory.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0);
-    const nearExpiry = inventory.filter(i => i.status === 'Near Expiry');
-    const lowStock = inventory.filter(i => i.status === 'Low Stock');
-    const recalled = inventory.filter(i => i.status === 'Recalled');
-
-    const lower = query.toLowerCase();
-    let responseText = '';
-
-    if (lower.includes('expir') || lower.includes('near')) {
-      if (nearExpiry.length > 0) {
-        responseText = `⚠️ **Near-Expiry Warning**: You currently have **${nearExpiry.length} batch(es)** requiring attention:\n` +
-          nearExpiry.map(m => `• **${m.medicine}** (Batch \`${m.batch}\`): **${m.quantity} units** expiring in **${m.expiry}**. Supplier: *${m.supplier}*. Priority FEFO dispensing recommended.`).join('\n');
-      } else {
-        responseText = `✅ **Zero Near-Expiry Batches**: All active inventory items are within safe shelf-life periods.`;
-      }
-    } else if (lower.includes('low stock') || lower.includes('reorder') || lower.includes('stock')) {
-      responseText = `📊 **Current Stock Summary**:\n• Total Medicines in Catalog: **${totalItems}**\n• Total Units in Stock: **${totalStock} units**\n` +
-        (lowStock.length > 0
-          ? `\n⚠️ **Low Stock Batches (Need Reorder)**:\n` + lowStock.map(m => `• **${m.medicine}**: Only **${m.quantity} units** left (Supplier: *${m.supplier}*)`).join('\n')
-          : `\n✅ All stock levels are currently above minimum safety thresholds.`);
-    } else if (lower.includes('recall') || lower.includes('quarantine')) {
-      if (recalled.length > 0) {
-        responseText = `🚨 **Active Batch Recall Alert**:\n` +
-          recalled.map(r => `• **${r.medicine}** (Batch \`${r.batch}\`): **${r.quantity} units** strictly quarantined. Dispensing is locked across all POS counters.`).join('\n');
-      } else {
-        responseText = `✅ **No Active Recalls**: Zero batches are flagged under quarantine in your pharmacy.`;
-      }
-    } else if (lower.includes('dispens') || lower.includes('audit') || lower.includes('sale')) {
-      const recent = audits.slice(0, 3);
-      responseText = `📋 **Recent Dispensing Audit Trail** (${audits.length} total logged):\n` +
-        recent.map(a => `• **${a.medicine}** (${a.quantity} units) to *${a.customer}* on ${a.date} (Rx: \`${a.rxId}\`)`).join('\n');
-    } else {
-      responseText = `🤖 **PharmaFlow AI Assistant Analysis**:\n\nBased on your live pharmacy records:\n• Active Catalog: **${totalItems} Medicines** (${totalStock} Total Units)\n• Status Flags: **${nearExpiry.length} Near Expiry**, **${lowStock.length} Low Stock**, **${recalled.length} Recalled**.\n\nHow else can I assist with your batch tracking, expiry simulation, or dispensing compliance today?`;
-    }
-
-    res.json({
-      answer: responseText,
-      text: responseText,
-      message: responseText,
-      timestamp: new Date().toISOString()
+    const result = await handleAIQuery({
+      query,
+      pharmacyId,
+      language: language || 'English',
+      conversationHistory: conversationHistory || []
     });
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1202,46 +1162,128 @@ app.post('/api/ai/query', async (req, res) => {
 
 app.post('/api/ai/simulate', async (req, res) => {
   try {
-    const { medicine, currentStock, orderQty, dailyUsage, daysToExpiry, unitCost } = req.body;
-
-    const stock = Number(currentStock) || 100;
-    const order = Number(orderQty) || 0;
-    const usage = Number(dailyUsage) || 5;
-    const days = Number(daysToExpiry) || 45;
-    const cost = Number(unitCost) || 50;
-
-    const projectedTotal = stock + order;
-    const expectedConsumption = usage * days;
-    const projectedSurplus = projectedTotal - expectedConsumption;
-    const potentialWasteQty = Math.max(0, projectedSurplus);
-    const potentialWasteCost = potentialWasteQty * cost;
-    const daysUntilStockout = usage > 0 ? Math.floor(projectedTotal / usage) : 999;
-
-    let recommendation = '';
-    let riskLevel = 'Low';
-
-    if (potentialWasteQty > 0) {
-      riskLevel = potentialWasteQty > (projectedTotal * 0.3) ? 'High' : 'Medium';
-      recommendation = `⚠️ **Overstock Risk**: An order of ${order} units is projected to leave **${potentialWasteQty} units unused before expiry**, risking a loss of ₹ ${potentialWasteCost.toLocaleString('en-IN')}. Reduce reorder to ${Math.max(0, expectedConsumption - stock)} units.`;
-    } else {
-      riskLevel = 'Safe';
-      recommendation = `✅ **Optimal Order**: Stock of ${projectedTotal} units will be fully consumed in ~${Math.min(days, daysUntilStockout)} days well before expiration date.`;
-    }
-
-    res.json({
-      medicine: medicine || 'Selected Medicine',
-      projectedStock: projectedTotal,
-      expectedConsumption,
-      projectedSurplus,
-      potentialWasteQty,
-      potentialWasteCost,
-      daysUntilStockout,
-      riskLevel,
-      recommendation
-    });
+    const pharmacyId = getPharmacyId(req);
+    const result = await runWhatIfSimulation(pharmacyId, req.body);
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.get('/api/ai/intelligence', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const result = await pharmacyTools.getTodayPharmacyIntelligence(pharmacyId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/ai/audit-investigation', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const result = await pharmacyTools.getUnusualDispensingPatterns(pharmacyId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/ai/expiry-risk/:batchId', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const result = await pharmacyTools.calculateExpiryRisk(pharmacyId, req.params.batchId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// -------------------------------------------------------------
+// UNIFIED REAL SMS NOTIFICATION SYSTEM (AUTOMATIC + MANUAL)
+// -------------------------------------------------------------
+app.post('/api/sms/send-manual', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const {
+      customer, recipientName, phone, recipientPhone,
+      notificationType, medicine, batch, language, customVariables
+    } = req.body;
+
+    const result = await sendManualSms({
+      pharmacyId,
+      recipientName: recipientName || customer || 'Patient',
+      recipientPhone: recipientPhone || phone,
+      recipientType: 'customer',
+      notificationType: notificationType || 'NEAR_EXPIRY',
+      batchId: batch,
+      language: language || 'English',
+      variables: {
+        medicine,
+        batch,
+        pharmacy: 'Apollo MedPlus Express',
+        ...(customVariables || {})
+      }
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sms/send-automatic-trigger', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const result = await runNotificationCycle(pharmacyId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/sms/reports', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const result = await getSmsReports(pharmacyId, req.query);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sms/callback', async (req, res) => {
+  try {
+    const result = await processDeliveryStatusCallback(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sms/recall-broadcast', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const { batch, batchId, reason } = req.body;
+    const result = await sendRecallNotificationToAffectedCustomers(pharmacyId, batchId || batch, reason);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/sms/templates', (req, res) => {
+  const { type, language, variables } = req.query;
+  if (type) {
+    let parsedVars = {};
+    if (variables) {
+      try { parsedVars = JSON.parse(variables); } catch (e) {}
+    }
+    const rendered = renderSmsTemplate(type, language || 'English', parsedVars);
+    return res.json(rendered);
+  }
+  res.json(SMS_TEMPLATES);
 });
 
 // -------------------------------------------------------------
@@ -1329,4 +1371,5 @@ app.post('/api/settings', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 PharmaFlow Express Backend running on http://localhost:${PORT}`);
   console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
+  startScheduler();
 });

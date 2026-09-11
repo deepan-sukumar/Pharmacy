@@ -3,7 +3,7 @@ import {
   Gauge, Boxes, CalendarDays, Truck, CreditCard, ClipboardList,
   Users, Bell, ShieldAlert, BrainCircuit, SlidersHorizontal, BarChart3,
   Settings as SettingsIcon, Stethoscope, ChevronDown, ChevronRight,
-  LogOut, PanelLeftClose, PanelLeft, X, Sparkles
+  LogOut, PanelLeftClose, PanelLeft, X, Sparkles, MessageSquare
 } from 'lucide-react';
 import type { Page } from '../data';
 
@@ -54,6 +54,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'alerts', label: 'Alerts', icon: Bell, count: 3, countTone: 'amber' },
       { id: 'recall', label: 'Batch Recall', icon: ShieldAlert, count: 1, countTone: 'red' },
+      { id: 'sms-reports', label: 'SMS Notifications', icon: MessageSquare },
     ],
   },
   {
