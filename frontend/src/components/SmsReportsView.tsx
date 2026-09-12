@@ -98,12 +98,7 @@ export default function SmsReportsView({
 
   const handleSimulateDeliveryCallback = async (msgId: string) => {
     try {
-      const res = await fetch('http://localhost:5000/api/sms/callback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerMessageId: msgId, status: 'delivered' }),
-      });
-      const data = await res.json();
+      const data = await api.simulateCarrierCallback(msgId);
       if (data.success) {
         showToast(`Carrier webhook confirmed: ${msgId} marked DELIVERED`);
         fetchReports();

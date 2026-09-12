@@ -479,6 +479,15 @@ export const api = {
     return await res.json();
   },
 
+  async simulateCarrierCallback(msgId: string) {
+    const res = await fetch(`${API_BASE_URL}/sms/callback`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ providerMessageId: msgId, status: 'delivered' }),
+    });
+    return await res.json();
+  },
+
   // -------------------------------------------------------------
   // SETTINGS
   // -------------------------------------------------------------
