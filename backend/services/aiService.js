@@ -62,9 +62,10 @@ async function retrieveControlledPharmacyContext(pharmacyId, query) {
     context.returnEligible = await tools.getSupplierReturnEligibleBatches(pharmacyId);
   }
 
-  if (q.includes('stock') || q.includes('low') || q.includes('inventory') || q.includes('catalog') || q.includes('quantity')) {
+  if (q.includes('stock') || q.includes('low') || q.includes('inventory') || q.includes('catalog') || q.includes('quantity') || q.includes('buy') || q.includes('order') || q.includes('reorder') || q.includes('purchase') || q.includes('procure') || q.includes('sooner') || q.includes('shortage') || q.includes('replenish')) {
     context.inventorySummary = await tools.getInventorySummary(pharmacyId);
     context.lowStockMedicines = await tools.getLowStockMedicines(pharmacyId);
+    context.expiringBatches = await tools.getExpiringMedicines(pharmacyId, 30);
   }
 
   if (q.includes('dispens') || q.includes('audit') || q.includes('sale') || q.includes('rx') || q.includes('unusual') || q.includes('pattern')) {
@@ -99,7 +100,30 @@ function buildDeterministicOperationalResponse(query, context, language = 'Engli
   let badge = 'INVENTORY INTELLIGENCE';
   let text = '';
 
-  if (q.includes('expir') || q.includes('near')) {
+  if (q.includes('buy') || q.includes('sooner') || q.includes('reorder') || q.includes('order') || q.includes('procure') || q.includes('purchase') || q.includes('shortage') || q.includes('replenish')) {
+    badge = 'PROCUREMENT & REORDER INTELLIGENCE';
+    const lowStock = context.lowStockMedicines || [];
+    const expiring = context.expiringBatches || [];
+    const summary = context.inventorySummary || {};
+
+    let sections = [];
+    if (lowStock.length > 0) {
+      sections.push(`⚠️ **Immediate Reorder Needed (Low Stock Thresholds)**:\n` +
+        lowStock.map((m, idx) => `${idx + 1}. **${m.medicine}** (Batch \`${m.batch}\`) — **${m.currentQuantity} units remaining**\n   • Supplier: *${m.supplier}* | Unit Cost: ₹${m.unitPrice}\n   • Status: Below safe inventory buffer. Place purchase order to prevent stockout.`).join('\n'));
+    }
+
+    if (expiring.length > 0) {
+      sections.push(`⏳ **Replacement Stock Needed Soon (Expiring < 30 Days)**:\n` +
+        expiring.map((m, idx) => `• **${m.medicine}** (Batch \`${m.batch}\`): **${m.quantity} units** expiring on ${m.expiry} (${m.daysRemaining} days left). Order fresh replacement batch from *${m.supplier}*.`).join('\n'));
+    }
+
+    if (sections.length === 0) {
+      text = `✅ **Adequate Inventory Buffer**: All **${summary.totalMedicines || 6} catalog medicines** are currently above minimum safety reorder thresholds with healthy shelf-life runways. No urgent purchase orders required today.`;
+    } else {
+      text = `📋 **Operational Purchase & Reorder Analysis**:\n\n` + sections.join('\n\n') +
+        `\n\n💡 *Actionable Next Step*: Check the **What-If Simulator** tab to model exact reorder batch sizes (+100, +300, +500 units) against daily patient dispensing demand.`;
+    }
+  } else if (q.includes('expir') || q.includes('near')) {
     badge = 'EXPIRY RISK ALERT';
     const expiring = context.expiringBatches || [];
     if (expiring.length > 0) {
@@ -109,7 +133,7 @@ function buildDeterministicOperationalResponse(query, context, language = 'Engli
     } else {
       text = `✅ **Zero Near-Expiry Batches**: All active medication inventory items are safely within their standard shelf-life periods.`;
     }
-  } else if (q.includes('low stock') || q.includes('reorder') || q.includes('stock')) {
+  } else if (q.includes('low stock') || q.includes('stock')) {
     badge = 'STOCK LEVEL SUMMARY';
     const summary = context.inventorySummary || {};
     const lowStock = context.lowStockMedicines || [];

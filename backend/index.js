@@ -1368,8 +1368,13 @@ app.post('/api/settings', async (req, res) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
-  console.log(`🚀 PharmaFlow Express Backend running on http://localhost:${PORT}`);
-  console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
-  startScheduler();
-});
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 PharmaFlow Express Backend running on http://localhost:${PORT}`);
+    console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
+    startScheduler();
+  });
+}
+
+module.exports = app;
+

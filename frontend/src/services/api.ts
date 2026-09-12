@@ -1,5 +1,6 @@
 // API Client for interacting with the Node.js / Express Backend & Firebase Firestore
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port !== '5000' ? 'http://localhost:5000/api' : '/api');
+
 
 let activePharmacyId = 'DEMO_PHARMACY';
 
@@ -338,8 +339,13 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ query, language, conversationHistory }),
     });
-    return await res.json();
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `Server responded with error (${res.status})`);
+    }
+    return data;
   },
+
 
   async simulateScenario(params: {
     medicine?: string;
