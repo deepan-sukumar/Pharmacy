@@ -11,7 +11,25 @@ const pharmacyTools = require('./services/pharmacyTools');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// Permissive CORS for development and production Vercel domains
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin or any origin (reflecting origin for credentials support)
+    callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-pharmacy-id', 'X-Requested-With', 'Accept', 'X-Api-Version']
+}));
+
+// Normalizes requests on Vercel Serverless if /api prefix is stripped or preserved
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api')) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
+
 app.use(express.json({ limit: '15mb' }));
 
 // Helper to extract pharmacy / workspace ID
@@ -168,6 +186,8 @@ seedInitialDataIfEmpty();
 // -------------------------------------------------------------
 app.get('/api/health', (req, res) => {
   res.json({
+    ok: true,
+    service: 'pharmaflow-api',
     status: 'ok',
     firebaseConnected: isConnected(),
     mode: isConnected() ? 'Firestore (Cloud)' : 'Local Fallback Mode',
@@ -804,7 +824,7 @@ app.put('/api/customers/:id', async (req, res) => {
       return res.json({ id, ...updates });
     }
 
-    const index = memoryStore.customers.findIndex(c => c.id === id);
+    const index = memoryStore.customers.findIndex(c => String(c.id) === String(id));
     if (index !== -1) {
       memoryStore.customers[index] = { ...memoryStore.customers[index], ...updates };
       return res.json(memoryStore.customers[index]);
@@ -1469,6 +1489,18 @@ app.post('/api/sms/send-automatic-trigger', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
     const result = await runNotificationCycle(pharmacyId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/sms/recall-broadcast', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const { batch, batchId, reason } = req.body;
+    const targetBatch = batch || batchId;
+    const result = await sendRecallNotificationToAffectedCustomers(pharmacyId, targetBatch, reason);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });

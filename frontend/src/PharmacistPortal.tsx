@@ -2580,6 +2580,7 @@ function Customers({
   const [q, setQ] = useState('');
   const [selectedCust, setSelectedCust] = useState<CustomerItem | null>(null);
   const [addModal, setAddModal] = useState(false);
+  const [editModal, setEditModal] = useState(false);
   const [form, setForm] = useState<{
     name: string;
     phone: string;
@@ -2596,41 +2597,126 @@ function Customers({
     communicationPreference: 'SMS'
   });
 
+  const [editForm, setEditForm] = useState<{
+    id: string | number;
+    name: string;
+    phone: string;
+    email: string;
+    allergies: string;
+    preferredLang: string;
+    communicationPreference: 'WHATSAPP' | 'SMS';
+    alerts: boolean;
+  }>({
+    id: '',
+    name: '',
+    phone: '',
+    email: '',
+    allergies: '',
+    preferredLang: 'English',
+    communicationPreference: 'SMS',
+    alerts: true,
+  });
+
   const filtered = customersList.filter(c => c.name.toLowerCase().includes(q.toLowerCase()) || c.phone.includes(q));
 
   const handleAdd = async () => {
-    if (!form.name) {
+    if (!form.name.trim()) {
       showToast('Please enter customer name');
       return;
     }
+    const commPref = form.communicationPreference === 'WHATSAPP' ? 'WHATSAPP' : 'SMS';
     try {
       const added = await api.addCustomer({
-        name: form.name,
-        phone: form.phone || '+91 98000 00000',
-        email: form.email || `${form.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        name: form.name.trim(),
+        phone: form.phone ? form.phone.trim() : '+91 98000 00000',
+        email: form.email ? form.email.trim() : `${form.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
         allergies: form.allergies || 'None',
         preferredLang: form.preferredLang || 'English',
-        communicationPreference: form.communicationPreference || 'SMS',
+        communicationPreference: commPref,
       });
       setCustomersList([...customersList, added]);
     } catch {
       const newC: CustomerItem = {
         id: Date.now(),
-        name: form.name,
-        phone: form.phone || '+91 98000 00000',
-        email: form.email || `${form.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        name: form.name.trim(),
+        phone: form.phone ? form.phone.trim() : '+91 98000 00000',
+        email: form.email ? form.email.trim() : `${form.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
         visits: 1,
         lastVisit: 'Today',
         allergies: form.allergies || 'None',
         alerts: true,
         preferredLang: form.preferredLang || 'English',
-        communicationPreference: form.communicationPreference || 'SMS',
+        communicationPreference: commPref,
       };
       setCustomersList([...customersList, newC]);
     }
     setAddModal(false);
     setForm({ name: '', phone: '', email: '', allergies: '', preferredLang: 'English', communicationPreference: 'SMS' });
-    showToast(`Added customer "${form.name}"`);
+    showToast(`Added customer "${form.name}" (Preference: ${commPref})`);
+  };
+
+  const openEditModal = (c: CustomerItem) => {
+    setEditForm({
+      id: c.id,
+      name: c.name,
+      phone: c.phone || '',
+      email: c.email || '',
+      allergies: c.allergies || '',
+      preferredLang: c.preferredLang || 'English',
+      communicationPreference: (c.communicationPreference === 'WHATSAPP' ? 'WHATSAPP' : 'SMS'),
+      alerts: c.alerts ?? true,
+    });
+    setEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm.name.trim()) {
+      showToast('Customer name cannot be empty');
+      return;
+    }
+    const commPref = editForm.communicationPreference === 'WHATSAPP' ? 'WHATSAPP' : 'SMS';
+    const updates: Partial<CustomerItem> = {
+      name: editForm.name.trim(),
+      phone: editForm.phone.trim(),
+      email: editForm.email.trim(),
+      allergies: editForm.allergies.trim() || 'None',
+      preferredLang: editForm.preferredLang,
+      communicationPreference: commPref,
+      alerts: editForm.alerts,
+    };
+
+    try {
+      const updated = await api.updateCustomer(editForm.id, updates);
+      setCustomersList(prev => prev.map(c => c.id === editForm.id ? { ...c, ...updates, ...updated } : c));
+      if (selectedCust && selectedCust.id === editForm.id) {
+        setSelectedCust({ ...selectedCust, ...updates, ...updated });
+      }
+    } catch (err: any) {
+      setCustomersList(prev => prev.map(c => c.id === editForm.id ? { ...c, ...updates } : c));
+      if (selectedCust && selectedCust.id === editForm.id) {
+        setSelectedCust({ ...selectedCust, ...updates });
+      }
+    }
+
+    setEditModal(false);
+    showToast(`Updated customer "${editForm.name}" (Preference: ${commPref})`);
+  };
+
+  const handleQuickPreferenceChange = async (c: CustomerItem, newPref: 'WHATSAPP' | 'SMS') => {
+    try {
+      await api.updateCustomer(c.id, { communicationPreference: newPref });
+      setCustomersList(prev => prev.map(item => item.id === c.id ? { ...item, communicationPreference: newPref } : item));
+      if (selectedCust && selectedCust.id === c.id) {
+        setSelectedCust({ ...selectedCust, communicationPreference: newPref });
+      }
+      showToast(`Updated ${c.name}'s preferred channel to ${newPref === 'WHATSAPP' ? 'WhatsApp' : 'SMS'}`);
+    } catch {
+      setCustomersList(prev => prev.map(item => item.id === c.id ? { ...item, communicationPreference: newPref } : item));
+      if (selectedCust && selectedCust.id === c.id) {
+        setSelectedCust({ ...selectedCust, communicationPreference: newPref });
+      }
+      showToast(`Updated ${c.name}'s preferred channel to ${newPref === 'WHATSAPP' ? 'WhatsApp' : 'SMS'}`);
+    }
   };
 
   return (
@@ -2677,10 +2763,10 @@ function Customers({
                 <div style={{ width: 40, height: 40, borderRadius: '50%', background: i % 2 ? 'var(--primary-light)' : 'var(--info-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13.5, color: i % 2 ? 'var(--primary)' : 'var(--info)' }}>
                   {c.name.split(' ').map(x => x[0]).join('')}
                 </div>
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{c.name}</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</p>
                   <p style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{c.phone}</p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                     <span
                       className="chip"
                       style={{
@@ -2729,41 +2815,103 @@ function Customers({
         </div>
       </div>
 
+      {/* Selected Customer Modal (Details + Direct Preference Switch + Edit) */}
       {selectedCust && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setSelectedCust(null)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 0, zIndex: 111 }}>
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 0, zIndex: 111, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary)' }}>
                   {selectedCust.name.split(' ').map(x => x[0]).join('')}
                 </div>
                 <div>
-                  <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>{selectedCust.name}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{selectedCust.phone} · {selectedCust.email}</p>
+                  <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)', margin: 0 }}>{selectedCust.name}</h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>{selectedCust.phone} · {selectedCust.email}</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedCust(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={() => openEditModal(selectedCust)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: 11.5, padding: '4px 10px' }}
+                >
+                  Edit Customer
+                </button>
+                <button onClick={() => setSelectedCust(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
+              </div>
             </div>
 
             <div style={{ padding: 24 }}>
               <div style={{ background: 'var(--bg-alt)', borderRadius: 12, padding: 14, marginBottom: 18, border: '1px solid var(--border)' }}>
-                <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>Clinical & Channel Preference</p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                  <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>Preferred Channel:</span>
-                  <span
-                    className="chip"
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      backgroundColor: selectedCust.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                      color: selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
-                    }}
-                  >
-                    {selectedCust.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
+                <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', margin: 0 }}>Clinical & Channel Preference</p>
+                
+                {/* Communication Preference Card with live interactive switcher */}
+                <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                    Preferred Communication Method
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <label
+                      onClick={() => handleQuickPreferenceChange(selectedCust, 'WHATSAPP')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: `1.5px solid ${selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--border)'}`,
+                        background: selectedCust.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.12)' : 'var(--bg-alt)',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--text-2)',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="quickCommToggle"
+                        checked={selectedCust.communicationPreference === 'WHATSAPP'}
+                        onChange={() => handleQuickPreferenceChange(selectedCust, 'WHATSAPP')}
+                        style={{ accentColor: '#16A34A' }}
+                      />
+                      <span>🟢 WhatsApp</span>
+                    </label>
+
+                    <label
+                      onClick={() => handleQuickPreferenceChange(selectedCust, 'SMS')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: `1.5px solid ${selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary)' : 'var(--border)'}`,
+                        background: selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary-light)' : 'var(--bg-alt)',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary)' : 'var(--text-2)',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="quickCommToggle"
+                        checked={selectedCust.communicationPreference !== 'WHATSAPP'}
+                        onChange={() => handleQuickPreferenceChange(selectedCust, 'SMS')}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      <span>📱 SMS</span>
+                    </label>
+                  </div>
+                  <span style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 6, display: 'block' }}>
+                    {selectedCust.communicationPreference === 'WHATSAPP' ? 'Safety notifications routed through WhatsApp.' : 'Safety notifications routed through device SMS composer.'}
                   </span>
                 </div>
-                <p style={{ fontSize: 13, marginTop: 6, color: 'var(--text)' }}>Preferred Language: <b>{selectedCust.preferredLang || 'English'}</b></p>
+
+                <p style={{ fontSize: 13, marginTop: 10, color: 'var(--text)' }}>Preferred Language: <b>{selectedCust.preferredLang || 'English'}</b></p>
                 <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>Known Allergies: <b>{selectedCust.allergies || 'None reported'}</b></p>
                 <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>Refill & Expiry Reminders: <b>{selectedCust.alerts ? 'Enabled' : 'Disabled'}</b></p>
               </div>
@@ -2772,22 +2920,22 @@ function Customers({
                 Prescription & Dispense History
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
-                {audits.filter(a => a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).map(a => (
+                {audits.filter(a => a.customer && a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).map(a => (
                   <div key={a.id} style={{ padding: '10px 12px', background: 'var(--surface-raised)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
                     <div>
-                      <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{a.medicine}</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.date} · Batch: {a.batch}</p>
+                      <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', margin: 0 }}>{a.medicine}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0' }}>{a.date} · Batch: {a.batch}</p>
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{a.quantity} units</span>
                   </div>
                 ))}
-                {audits.filter(a => a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).length === 0 && (
+                {audits.filter(a => a.customer && a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).length === 0 && (
                   <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: 12 }}>No previous dispensing history found.</p>
                 )}
               </div>
             </div>
 
-            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
               {onOpenSafetyCommunication ? (
                 <button
                   className="btn btn-teal"
@@ -2813,25 +2961,39 @@ function Customers({
                   <MessageSquare size={14} /> Send Direct SMS
                 </button>
               ) : null}
-              <button className="btn btn-secondary" onClick={() => setSelectedCust(null)}>Close</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" onClick={() => openEditModal(selectedCust)}>Edit</button>
+                <button className="btn btn-secondary" onClick={() => setSelectedCust(null)}>Close</button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Add New Customer Modal */}
       {addModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setAddModal(false)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 440, padding: 0, zIndex: 111 }}>
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 460, padding: 0, zIndex: 111, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 800, color: 'var(--text)' }}>Add New Customer</h3>
+              <h3 style={{ fontWeight: 800, color: 'var(--text)', margin: 0 }}>Add New Customer</h3>
               <button onClick={() => setAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
             </div>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div><label className="label">Customer Full Name *</label><input className="input" placeholder="e.g. Ramesh Patel" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></div>
-              <div><label className="label">Phone Number</label><input className="input" placeholder="e.g. +91 98450 12345" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}/></div>
-              <div><label className="label">Email Address</label><input className="input" placeholder="e.g. ramesh@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></div>
-              <div><label className="label">Preferred Language</label>
+              <div>
+                <label className="label">Customer Full Name *</label>
+                <input className="input" placeholder="e.g. Ramesh Patel" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/>
+              </div>
+              <div>
+                <label className="label">Mobile Number</label>
+                <input className="input" placeholder="e.g. +91 98450 12345" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}/>
+              </div>
+              <div>
+                <label className="label">Email Address</label>
+                <input className="input" placeholder="e.g. ramesh@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/>
+              </div>
+              <div>
+                <label className="label">Preferred Language</label>
                 <select className="input" value={form.preferredLang} onChange={e => setForm({ ...form, preferredLang: e.target.value })}>
                   <option value="English">English</option>
                   <option value="Tamil">Tamil (தமிழ்)</option>
@@ -2841,23 +3003,200 @@ function Customers({
                 </select>
               </div>
               <div>
-                <label className="label" style={{ marginBottom: 6, display: 'block' }}>Communication Preference</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${form.communicationPreference === 'WHATSAPP' ? 'var(--primary)' : 'var(--border)'}`, background: form.communicationPreference === 'WHATSAPP' ? 'var(--primary-light)' : 'var(--bg-alt)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                    <input type="radio" name="custCommPref" checked={form.communicationPreference === 'WHATSAPP'} onChange={() => setForm({ ...form, communicationPreference: 'WHATSAPP' })} style={{ display: 'none' }} />
-                    <span>🟢 WhatsApp</span>
+                <label className="label" style={{ marginBottom: 8, display: 'block', fontWeight: 800 }}>
+                  Preferred Communication Method
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10 }}>
+                  <label
+                    onClick={() => setForm({ ...form, communicationPreference: 'WHATSAPP' })}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: `2px solid ${form.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--border)'}`,
+                      background: form.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.12)' : 'var(--bg-alt)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="radio"
+                        name="custCommPrefAdd"
+                        checked={form.communicationPreference === 'WHATSAPP'}
+                        onChange={() => setForm({ ...form, communicationPreference: 'WHATSAPP' })}
+                        style={{ accentColor: '#16A34A' }}
+                      />
+                      <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--text)' }}>🟢 WhatsApp</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', paddingLeft: 20, lineHeight: 1.3 }}>
+                      Receive safety notifications through WhatsApp.
+                    </span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${form.communicationPreference === 'SMS' ? 'var(--primary)' : 'var(--border)'}`, background: form.communicationPreference === 'SMS' ? 'var(--primary-light)' : 'var(--bg-alt)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                    <input type="radio" name="custCommPref" checked={form.communicationPreference === 'SMS'} onChange={() => setForm({ ...form, communicationPreference: 'SMS' })} style={{ display: 'none' }} />
-                    <span>📱 SMS</span>
+
+                  <label
+                    onClick={() => setForm({ ...form, communicationPreference: 'SMS' })}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: `2px solid ${form.communicationPreference === 'SMS' ? 'var(--primary)' : 'var(--border)'}`,
+                      background: form.communicationPreference === 'SMS' ? 'var(--primary-light)' : 'var(--bg-alt)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="radio"
+                        name="custCommPrefAdd"
+                        checked={form.communicationPreference === 'SMS'}
+                        onChange={() => setForm({ ...form, communicationPreference: 'SMS' })}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--text)' }}>📱 SMS</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', paddingLeft: 20, lineHeight: 1.3 }}>
+                      Receive safety notifications through SMS.
+                    </span>
                   </label>
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, display: 'block' }}>Default: SMS unless patient specifically requests WhatsApp.</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, display: 'block' }}>
+                  Default: SMS unless patient specifically requests WhatsApp.
+                </span>
               </div>
-              <div><label className="label">Known Drug Allergies</label><input className="input" placeholder="e.g. Penicillin, Sulfa" value={form.allergies} onChange={e => setForm({ ...form, allergies: e.target.value })}/></div>
+              <div>
+                <label className="label">Known Drug Allergies</label>
+                <input className="input" placeholder="e.g. Penicillin, Sulfa" value={form.allergies} onChange={e => setForm({ ...form, allergies: e.target.value })}/>
+              </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
                 <button className="btn btn-secondary" onClick={() => setAddModal(false)}>Cancel</button>
                 <button className="btn btn-teal" onClick={handleAdd}>Save Customer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {editModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 115, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setEditModal(false)} />
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 460, padding: 0, zIndex: 116, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontWeight: 800, color: 'var(--text)', margin: 0 }}>Edit Customer Profile</h3>
+              <button onClick={() => setEditModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
+            </div>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label className="label">Customer Full Name *</label>
+                <input className="input" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })}/>
+              </div>
+              <div>
+                <label className="label">Mobile Number</label>
+                <input className="input" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })}/>
+              </div>
+              <div>
+                <label className="label">Email Address</label>
+                <input className="input" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })}/>
+              </div>
+              <div>
+                <label className="label">Preferred Language</label>
+                <select className="input" value={editForm.preferredLang} onChange={e => setEditForm({ ...editForm, preferredLang: e.target.value })}>
+                  <option value="English">English</option>
+                  <option value="Tamil">Tamil (தமிழ்)</option>
+                  <option value="Telugu">Telugu (తెలుగు)</option>
+                  <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
+                  <option value="Hindi">Hindi (हिन्दी)</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" style={{ marginBottom: 8, display: 'block', fontWeight: 800 }}>
+                  Preferred Communication Method
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10 }}>
+                  <label
+                    onClick={() => setEditForm({ ...editForm, communicationPreference: 'WHATSAPP' })}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: `2px solid ${editForm.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--border)'}`,
+                      background: editForm.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.12)' : 'var(--bg-alt)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="radio"
+                        name="custCommPrefEdit"
+                        checked={editForm.communicationPreference === 'WHATSAPP'}
+                        onChange={() => setEditForm({ ...editForm, communicationPreference: 'WHATSAPP' })}
+                        style={{ accentColor: '#16A34A' }}
+                      />
+                      <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--text)' }}>🟢 WhatsApp</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', paddingLeft: 20, lineHeight: 1.3 }}>
+                      Receive safety notifications through WhatsApp.
+                    </span>
+                  </label>
+
+                  <label
+                    onClick={() => setEditForm({ ...editForm, communicationPreference: 'SMS' })}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: `2px solid ${editForm.communicationPreference === 'SMS' ? 'var(--primary)' : 'var(--border)'}`,
+                      background: editForm.communicationPreference === 'SMS' ? 'var(--primary-light)' : 'var(--bg-alt)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="radio"
+                        name="custCommPrefEdit"
+                        checked={editForm.communicationPreference === 'SMS'}
+                        onChange={() => setEditForm({ ...editForm, communicationPreference: 'SMS' })}
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--text)' }}>📱 SMS</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', paddingLeft: 20, lineHeight: 1.3 }}>
+                      Receive safety notifications through SMS.
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="label">Known Drug Allergies</label>
+                <input className="input" placeholder="e.g. Penicillin, Sulfa" value={editForm.allergies} onChange={e => setEditForm({ ...editForm, allergies: e.target.value })}/>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  id="editAlerts"
+                  checked={editForm.alerts}
+                  onChange={e => setEditForm({ ...editForm, alerts: e.target.checked })}
+                  style={{ accentColor: 'var(--primary)', width: 16, height: 16 }}
+                />
+                <label htmlFor="editAlerts" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+                  Enable automated safety & refill alerts
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
+                <button className="btn btn-secondary" onClick={() => setEditModal(false)}>Cancel</button>
+                <button className="btn btn-teal" onClick={handleSaveEdit}>Save Changes</button>
               </div>
             </div>
           </div>

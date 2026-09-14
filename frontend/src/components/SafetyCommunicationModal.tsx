@@ -212,7 +212,7 @@ export default function SafetyCommunicationModal({
             </div>
             <div>
               <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)', margin: 0 }}>
-                {isRecall ? 'Send Batch Recall Notification' : 'Send Expiry Safety Notification'}
+                {isRecall ? 'Send Safety Notification — Recall' : 'Send Safety Notification — Near Expiry'}
               </h3>
               <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
                 Pharmacist-Controlled Patient Communication Workflow
@@ -228,24 +228,35 @@ export default function SafetyCommunicationModal({
         <div style={{ padding: 22, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Patient & Batch Info Summary */}
           <div style={{ background: 'var(--bg-alt)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 12 }}>
               <div>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Patient</span>
-                <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 15, color: 'var(--text)' }}>{customerName}</p>
-                <p style={{ margin: '2px 0 0', fontSize: 12.5, color: 'var(--text-2)', fontFamily: 'monospace' }}>{customerPhone || 'No phone recorded'}</p>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Customer</span>
+                <p style={{ margin: '2px 0 0', fontWeight: 800, fontSize: 14.5, color: 'var(--text)' }}>{customerName}</p>
               </div>
 
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Saved Preference</span>
+              <div>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Mobile</span>
+                <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-2)', fontFamily: 'monospace', fontWeight: 600 }}>{customerPhone || 'No phone recorded'}</p>
+              </div>
+
+              <div>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Preferred</span>
                 <div style={{ marginTop: 2 }}>
                   <span className={`chip ${customerPreference === 'WHATSAPP' ? 'badge-green' : 'badge-teal'}`} style={{ fontSize: 11, fontWeight: 700 }}>
-                    {customerPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS (Button Phone)'}
+                    {customerPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
                   </span>
                 </div>
               </div>
+
+              <div>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Reason</span>
+                <p style={{ margin: '2px 0 0', fontSize: 12.5, fontWeight: 700, color: isRecall ? 'var(--danger)' : 'var(--warning)' }}>
+                  {isRecall ? (recallReason || 'Batch Recall') : 'Near Expiry'}
+                </p>
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 10, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
               <div>
                 <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600 }}>Medicine</span>
                 <p style={{ margin: '2px 0 0', fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{medicineName}</p>
@@ -255,9 +266,9 @@ export default function SafetyCommunicationModal({
                 <p style={{ margin: '2px 0 0', fontSize: 12.5, fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)' }}>{batchNumber}</p>
               </div>
               <div>
-                <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600 }}>{isRecall ? 'Status' : 'Expiry Date'}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600 }}>{isRecall ? 'Batch Status' : 'Expiry Date'}</span>
                 <p style={{ margin: '2px 0 0', fontSize: 12.5, fontWeight: 700, color: isRecall ? 'var(--danger)' : 'var(--warning)' }}>
-                  {isRecall ? 'RECALLED' : expiryDate}
+                  {isRecall ? 'QUARANTINED / RECALLED' : expiryDate}
                 </p>
               </div>
             </div>
@@ -265,11 +276,14 @@ export default function SafetyCommunicationModal({
 
           {/* Channel Choice Cards */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 8 }}>
-              Choose Communication Method
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <label style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
+                Choose Communication:
+              </label>
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Pharmacist can override recommendation</span>
+            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>
               {/* WhatsApp Card */}
               <div
                 onClick={() => setSelectedChannel('WHATSAPP')}
@@ -283,22 +297,26 @@ export default function SafetyCommunicationModal({
                   position: 'relative'
                 }}
               >
-                {customerPreference === 'WHATSAPP' && (
-                  <span style={{ position: 'absolute', top: -8, right: 10, background: '#10B981', color: '#FFF', fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 10, textTransform: 'uppercase' }}>
-                    Recommended
-                  </span>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10B981' }}>
-                    <MessageCircle size={18} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10B981' }}>
+                      <MessageCircle size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
+                        🟢 WhatsApp
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Smartphone App</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>WhatsApp</h4>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Smartphone App</p>
-                  </div>
+                  {customerPreference === 'WHATSAPP' && (
+                    <span style={{ background: '#10B981', color: '#FFF', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase' }}>
+                      Recommended
+                    </span>
+                  )}
                 </div>
                 <p style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.35 }}>
-                  Opens WhatsApp chat with pre-filled message on customer's number.
+                  Receive safety notifications through WhatsApp on customer's number.
                 </p>
               </div>
 
@@ -315,22 +333,26 @@ export default function SafetyCommunicationModal({
                   position: 'relative'
                 }}
               >
-                {customerPreference === 'SMS' && (
-                  <span style={{ position: 'absolute', top: -8, right: 10, background: 'var(--primary)', color: '#FFF', fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 10, textTransform: 'uppercase' }}>
-                    Recommended
-                  </span>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                    <Smartphone size={18} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                      <Smartphone size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
+                        📱 SMS
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Button / Standard Phone</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>SMS</h4>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Button / Feature Phone</p>
-                  </div>
+                  {customerPreference === 'SMS' && (
+                    <span style={{ background: 'var(--primary)', color: '#FFF', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase' }}>
+                      Recommended
+                    </span>
+                  )}
                 </div>
                 <p style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.35 }}>
-                  Opens device SMS composer on pharmacist's phone. No app needed by customer.
+                  Receive safety notifications through SMS composer on pharmacist's phone.
                 </p>
               </div>
             </div>

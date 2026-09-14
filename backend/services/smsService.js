@@ -596,7 +596,7 @@ async function sendManualSms(options) {
 /**
  * Recall SMS Broadcast: Finds and notifies ONLY customers who received the recalled batch
  */
-async function sendRecallNotificationToAffectedCustomers(pharmacyId, batchId, reason = '') {
+async function sendRecallNotificationToAffectedCustomers(pharmacyId, batchId, reason = '', overrideDuplicateCheck = true) {
   const { getRecalledBatchCustomers, getBatchDetails } = require('./pharmacyTools');
   
   const batchInfo = await getBatchDetails(pharmacyId, batchId);
@@ -626,6 +626,7 @@ async function sendRecallNotificationToAffectedCustomers(pharmacyId, batchId, re
       batchId,
       language: patient.preferredLang || 'English',
       notificationSource: 'automatic',
+      overrideDuplicateCheck,
       variables: {
         medicine: batchInfo?.medicine || 'Prescribed Medication',
         batch: batchId,

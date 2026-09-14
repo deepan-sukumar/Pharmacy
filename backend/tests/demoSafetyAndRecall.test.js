@@ -14,6 +14,7 @@
  * 10. Multi-Tenant Isolation (No Leakage to Other Pharmacies)
  */
 
+process.env.SMS_PROVIDER = 'MOCK_TEST_PROVIDER';
 const assert = require('assert');
 const http = require('http');
 const app = require('../index');
@@ -23,6 +24,7 @@ const PORT = 5055;
 const BASE_URL = `http://localhost:${PORT}`;
 
 async function runTests() {
+  process.env.SMS_PROVIDER = 'MOCK_TEST_PROVIDER';
   console.log('\n🧪 Running Demo Customers, Expiry SMS & Batch Recall Test Suite...\n');
   let passed = 0;
   let total = 0;

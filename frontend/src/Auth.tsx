@@ -23,6 +23,7 @@ export default function Auth({
   // Signin form state
   const [loginEmail, setLoginEmail] = useState('pharmacist@demo.com');
   const [loginPassword, setLoginPassword] = useState('demo123');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [remember, setRemember] = useState(true);
 
   // Signup form state
@@ -1019,12 +1020,33 @@ export default function Auth({
                     <Lock size={16} color="var(--text-muted)" style={{ position: 'absolute', left: 13, top: 12 }} />
                     <input
                       className="input"
-                      style={{ paddingLeft: 40, height: 42, fontSize: 13.5 }}
-                      type="password"
+                      style={{ paddingLeft: 40, paddingRight: 42, height: 42, fontSize: 13.5 }}
+                      type={showLoginPassword ? 'text' : 'password'}
                       value={loginPassword}
                       onChange={e => setLoginPassword(e.target.value)}
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 4,
+                      }}
+                    >
+                      {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
