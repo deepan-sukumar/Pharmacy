@@ -3,7 +3,7 @@ const cors = require('cors');
 const { db, isConnected } = require('./firebase');
 const { handleAIQuery } = require('./services/aiService');
 const { runWhatIfSimulation, calculateScenario, compareOrderScenarios } = require('./services/simulationService');
-const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports, checkSmsDeliveryStatus, syncAllPendingSmsStatuses } = require('./services/smsService');
+const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports, checkSmsDeliveryStatus, syncAllPendingSmsStatuses, checkSmsLocalCredits } = require('./services/smsService');
 const { renderSmsTemplate, SMS_TEMPLATES } = require('./services/smsTemplates');
 const { runNotificationCycle, startScheduler } = require('./services/schedulerService');
 const pharmacyTools = require('./services/pharmacyTools');
@@ -1333,6 +1333,34 @@ app.get('/api/sms/reports', async (req, res) => {
     const pharmacyId = getPharmacyId(req);
     const result = await getSmsReports(pharmacyId, req.query);
     res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// SMS Configuration and Gateway Status endpoint
+app.get('/api/sms/config-status', async (req, res) => {
+  try {
+    const apiKey = process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
+    const isSandboxEnv = process.env.SMSLOCAL_SANDBOX === 'true';
+    const isMock = !apiKey || apiKey === 'mock_key' || isSandboxEnv || apiKey.toLowerCase().includes('test') || apiKey.toLowerCase().includes('sandbox');
+    
+    const creditCheck = await checkSmsLocalCredits();
+
+    res.json({
+      success: true,
+      isLiveConfigured: !isMock && Boolean(apiKey),
+      mode: isMock ? 'sandbox' : 'live',
+      provider: isMock ? 'SMSLocal Sandbox (Test / Simulation Mode)' : 'SMSLocal Live Gateway',
+      senderId: process.env.SMS_SENDER_ID || 'PHFLOW',
+      route: '1 (Transactional)',
+      dltActive: true,
+      creditsInfo: creditCheck,
+      dltTemplates: {
+        nearExpiry: process.env.SMS_DLT_TEMPLATE_ID_EXPIRY || '110716182910001',
+        recall: process.env.SMS_DLT_TEMPLATE_ID_RECALL || '110716182910002'
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

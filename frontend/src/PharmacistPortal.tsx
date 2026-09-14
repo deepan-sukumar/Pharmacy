@@ -7,7 +7,7 @@ import {
   Check, Send, QrCode, FileText, MoreHorizontal, ChevronRight,
   Activity, CheckCircle2, ShieldCheck, Sparkles, RefreshCw,
   Camera, Zap, UploadCloud, Printer, Settings as SettingsIcon, LayoutDashboard,
-  RotateCcw, ClipboardCheck, Ban, MessageSquare
+  RotateCcw, ClipboardCheck, Ban, MessageSquare, ExternalLink
 } from 'lucide-react';
 import type { Page, Medicine, Audit, Status, CustomerItem, SupplierItem } from './data';
 import { initialInventory, initialCustomers, initialSuppliers } from './data';
@@ -3481,6 +3481,21 @@ function Recall({
           </div>
         </div>
       )}
+
+      {/* Customer SMS & Traceability Modal */}
+      <CustomerSmsDetailsModal
+        isOpen={isCustomerModalOpen}
+        onClose={() => setIsCustomerModalOpen(false)}
+        smsLog={selectedCustomerForModal}
+        customer={selectedCustomerForModal ? {
+          name: selectedCustomerForModal.recipientName,
+          phone: selectedCustomerForModal.recipientPhone,
+          preferredLang: selectedCustomerForModal.language,
+          address: '',
+          chronicConditions: []
+        } : null}
+        showToast={showToast}
+      />
     </>
   );
 }

@@ -513,6 +513,13 @@ export const api = {
     return await res.json();
   },
 
+  async getSmsConfigStatus() {
+    const res = await fetch(`${API_BASE_URL}/sms/config-status`, {
+      headers: getHeaders(),
+    });
+    return await res.json();
+  },
+
   async getCustomerDetailsTraceability(identifier: string) {
     const res = await fetch(`${API_BASE_URL}/customers/${encodeURIComponent(identifier)}/details-traceability`, {
       headers: getHeaders(),

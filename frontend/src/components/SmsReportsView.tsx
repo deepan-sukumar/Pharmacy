@@ -67,6 +67,17 @@ export default function SmsReportsView({
   const [selectedLogForDetails, setSelectedLogForDetails] = useState<SmsLogItem | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
+  const [configStatus, setConfigStatus] = useState<any>(null);
+
+  const fetchConfigStatus = async () => {
+    try {
+      const cfg = await api.getSmsConfigStatus();
+      setConfigStatus(cfg);
+    } catch {
+      setConfigStatus(null);
+    }
+  };
+
   const fetchReports = async () => {
     setLoading(true);
     try {
@@ -82,7 +93,7 @@ export default function SmsReportsView({
           setSummary(data.summary);
         } else {
           const total = data.logs.length;
-          const del = data.logs.filter((l: any) => l.status === 'delivered').length;
+          const del = data.logs.filter((l: any) => l.status === 'delivered' && !l.isSandbox).length;
           const sub = data.logs.filter((l: any) => l.status === 'submitted' || l.status === 'sent').length;
           const pend = data.logs.filter((l: any) => l.status === 'pending').length;
           const fail = data.logs.filter((l: any) => l.status === 'failed' || l.status === 'undelivered').length;
@@ -109,6 +120,7 @@ export default function SmsReportsView({
   };
 
   useEffect(() => {
+    fetchConfigStatus();
     fetchReports();
   }, [sourceFilter, statusFilter, typeFilter]);
 
@@ -239,9 +251,15 @@ export default function SmsReportsView({
               <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
                 Real SMS Notification Engine & Delivery Audit
               </h2>
-              <span className="chip badge-teal" style={{ fontSize: 10 }}>
-                <Radio size={12} /> SMSLocal & Gateway Synced
-              </span>
+              {configStatus?.isLiveConfigured ? (
+                <span className="chip badge-green" style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Radio size={12} /> SMSLocal Live Gateway (Route 1 Transactional)
+                </span>
+              ) : (
+                <span className="chip badge-amber" style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Radio size={12} /> SMSLocal Sandbox / Test Mode (Handset Delivery Disabled)
+                </span>
+              )}
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
               Handset carrier delivery tracking with dynamic patient batch traceability and DLT compliance.
@@ -596,40 +614,48 @@ export default function SmsReportsView({
                     {/* Status & Last Checked */}
                     <td style={{ padding: '12px 16px' }}>
                       <div>
-                        <span
-                          className={`chip ${
-                            log.status === 'delivered'
-                              ? 'badge-green'
-                              : log.status === 'submitted' || log.status === 'sent'
-                              ? 'badge-blue'
-                              : log.status === 'pending'
-                              ? 'badge-amber'
-                              : 'badge-red'
-                          }`}
-                          style={{ fontSize: 11 }}
-                        >
-                          {log.status === 'delivered' ? (
-                            <>
-                              <CheckCircle2 size={12} /> Delivered
-                            </>
-                          ) : log.status === 'submitted' || log.status === 'sent' ? (
-                            <>
-                              <Clock size={12} /> Submitted
-                            </>
-                          ) : log.status === 'pending' ? (
-                            <>
-                              <Clock size={12} /> Pending DLR
-                            </>
-                          ) : (
-                            <>
-                              <XCircle size={12} /> Failed
-                            </>
-                          )}
-                        </span>
+                        {log.isSandbox ? (
+                          <span className="chip badge-amber" style={{ fontSize: 10.5 }}>
+                            {log.status === 'delivered' ? '🧪 Sandbox / Test (Simulated)' : log.status === 'failed' ? '🔴 Failed' : '🧪 Sandbox Submitted'}
+                          </span>
+                        ) : (
+                          <span
+                            className={`chip ${
+                              log.status === 'delivered'
+                                ? 'badge-green'
+                                : log.status === 'submitted' || log.status === 'sent'
+                                ? 'badge-blue'
+                                : log.status === 'pending'
+                                ? 'badge-amber'
+                                : 'badge-red'
+                            }`}
+                            style={{ fontSize: 11 }}
+                          >
+                            {log.status === 'delivered' ? (
+                              <>
+                                <CheckCircle2 size={12} /> Delivered
+                              </>
+                            ) : log.status === 'submitted' || log.status === 'sent' ? (
+                              <>
+                                <Clock size={12} /> Submitted
+                              </>
+                            ) : log.status === 'pending' ? (
+                              <>
+                                <Clock size={12} /> Pending DLR
+                              </>
+                            ) : (
+                              <>
+                                <XCircle size={12} /> Failed
+                              </>
+                            )}
+                          </span>
+                        )}
 
                         {/* Status detail / timestamps */}
                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
-                          {log.status === 'delivered' && log.deliveredAt ? (
+                          {log.isSandbox ? (
+                            <span style={{ color: 'var(--warning)', fontStyle: 'italic' }}>Test message — not delivered to handset</span>
+                          ) : log.status === 'delivered' && log.deliveredAt ? (
                             <span>Delivered at: {new Date(log.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           ) : log.status === 'delivered' ? (
                             <span>Carrier confirmed</span>
@@ -639,15 +665,6 @@ export default function SmsReportsView({
                             <span>Waiting for carrier confirmation</span>
                           )}
                         </div>
-
-                        {/* Sandbox Tag if applicable */}
-                        {log.isSandbox && (
-                          <div style={{ marginTop: 2 }}>
-                            <span className="chip badge-amber" style={{ fontSize: 9, padding: '1px 5px' }} title="Provider simulated carrier transmission">
-                              🧪 Test / Sandbox
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </td>
 
