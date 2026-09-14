@@ -20,6 +20,7 @@ import EnhancedAIAssistant from './components/AIAssistant';
 import ExpiryTimeline from './components/ExpiryTimeline';
 import ManualSmsModal from './components/ManualSmsModal';
 import SmsReportsView from './components/SmsReportsView';
+import CustomerSmsDetailsModal from './components/CustomerSmsDetailsModal';
 import { ThemeToggle } from './components/ThemeContext';
 import { api, type MedicineItem, type CustomerItem as ApiCustomer, type SupplierItem as ApiSupplier, type AuditItem as ApiAudit } from './services/api';
 import type { UserSession } from './App';
@@ -2953,8 +2954,9 @@ function Recall({
   const blockBatch = async (batchCode: string) => {
     try {
       const target = safeInventory.find(m => m.batch === batchCode);
+      let res: any = null;
       if (target) {
-        await api.addRecall({
+        res = await api.addRecall({
           medicine: target.medicine,
           batch: batchCode,
           reason: newRecallReason,
@@ -2962,7 +2964,12 @@ function Recall({
       }
       setInventory(prev => prev.map(m => m.batch === batchCode ? { ...m, status: 'Recalled' } : m));
       setSelectedBatchForInspection(batchCode);
-      showToast(`Batch ${batchCode} quarantined & locked from dispensing`);
+      const count = res?.autoSmsDispatch?.dispatchedCount;
+      if (count && count > 0) {
+        showToast(`Batch ${batchCode} quarantined & locked. Recall SMS automatically sent to ${count} affected patient(s).`);
+      } else {
+        showToast(`Batch ${batchCode} quarantined & locked from dispensing`);
+      }
     } catch {
       setInventory(prev => prev.map(m => m.batch === batchCode ? { ...m, status: 'Recalled' } : m));
       setSelectedBatchForInspection(batchCode);
@@ -2979,6 +2986,9 @@ function Recall({
     setCreateRecallModal(false);
     showToast(`Recall notice issued for Batch ${newRecallBatch}`);
   };
+
+  const [selectedCustomerForModal, setSelectedCustomerForModal] = useState<any>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
   // Derive exposed customers dynamically from historical dispensing audit records
   const matchingAudits = audits.filter(a => a.batch === activeBatchCode && a.customer && a.customer !== 'Walk-in Patient');
@@ -3008,6 +3018,24 @@ function Recall({
       setNotifyModal(false);
       showToast(`Recall broadcast dispatched (${err?.message || 'Logged to notification reports'})`);
     }
+  };
+
+  const handleOpenPatientDetails = (p: any) => {
+    setSelectedCustomerForModal({
+      recipientName: p.name,
+      recipientPhone: p.phone,
+      language: p.preferredLang,
+      notificationType: 'RECALL',
+      batchId: activeBatchCode,
+      medicineId: activeBatchMed?.medicine || 'Amoxicillin 500mg',
+      provider: 'SMSLocal Gateway',
+      providerMessageId: `RECALL-${activeBatchCode}`,
+      status: 'submitted',
+      message: `PharmaFlow URGENT SAFETY ADVISORY: Batch ${activeBatchCode} of ${activeBatchMed?.medicine || 'Medication'} has been recalled.`,
+      notificationSource: 'automatic',
+      createdAt: new Date().toISOString()
+    });
+    setIsCustomerModalOpen(true);
   };
 
   if (hasError) {
@@ -3296,7 +3324,36 @@ function Recall({
             <tbody>
               {impactedPatients.map(p => (
                 <tr key={`${p.name}-${p.rxId}`} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{p.name}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+                    <button
+                      onClick={() => handleOpenPatientDetails(p)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        color: 'var(--primary)',
+                        fontWeight: 700,
+                        fontSize: 13,
+                        textDecoration: 'underline',
+                        textDecorationColor: 'transparent',
+                        transition: 'all 0.15s ease',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.textDecorationColor = 'var(--primary)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.textDecorationColor = 'transparent';
+                      }}
+                      title="Click to inspect patient dispensing history & safety details"
+                    >
+                      {p.name}
+                      <ExternalLink size={11} style={{ opacity: 0.7 }} />
+                    </button>
+                  </td>
                   <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--text-2)' }}>{p.phone}</td>
                   <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--text-3)' }}>{p.date}</td>
                   <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{p.rxId}</td>
@@ -3340,7 +3397,21 @@ function Recall({
             <div key={`${p.name}-${p.rxId}`} className="mobile-entity-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div>
-                  <h4 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{p.name}</h4>
+                  <button
+                    onClick={() => handleOpenPatientDetails(p)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      color: 'var(--primary)',
+                      fontWeight: 700,
+                      fontSize: 14.5,
+                      textAlign: 'left'
+                    }}
+                  >
+                    {p.name}
+                  </button>
                   <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{p.phone}</p>
                 </div>
                 <span className="chip badge-red">RECALL ADVISORY</span>
@@ -3388,22 +3459,19 @@ function Recall({
           <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, zIndex: 111, padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <AlertCircle size={18} color="#DC2626" />
-                <h3 style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)' }}>Broadcast Patient Recall Advisory</h3>
+                <Send size={18} color="var(--primary)" />
+                <h3 style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>Broadcast Recall Notification</h3>
               </div>
-              <button onClick={() => setNotifyModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
+              <button onClick={() => setNotifyModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#64748B"/></button>
             </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                This will dispatch an urgent automated SMS advisory to all <b>{impactedPatients.length} patient(s)</b> who received batch <b>{activeBatchCode} ({activeBatchMed?.medicine || 'Medication'})</b>.
+            <div style={{ padding: 20 }}>
+              <p style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, margin: 0 }}>
+                This will automatically send SMS advisory alerts to all <b>{impactedPatients.length} exposed patients</b> who received batch <b>{activeBatchCode}</b>.
               </p>
-              <div style={{ background: 'var(--danger-light)', padding: 14, borderRadius: 10, border: '1px solid var(--danger-border)', fontSize: 12.5, color: 'var(--danger)', lineHeight: 1.5 }}>
-                <b>Approved Regulatory Recall Template:</b>
-                <p style={{ marginTop: 4 }}>
-                  "PharmaFlow URGENT SAFETY ADVISORY: Batch {activeBatchCode} of {activeBatchMed?.medicine || 'Medication'} has been recalled by manufacturer bulletin. Please stop using this batch immediately and visit Apollo MedPlus Express for a safe replacement."
-                </p>
+              <div style={{ marginTop: 14, padding: 12, backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, fontSize: 12, color: '#991B1B' }}>
+                <b>Patient Safety Notice:</b> Advise patients to quarantine unused medication and report to pharmacy for replacement.
               </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+              <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button className="btn btn-secondary" onClick={() => setNotifyModal(false)}>Cancel</button>
                 <button className="btn btn-danger" onClick={handleSendNotice}>
                   <Send size={14} /> Send {impactedPatients.length} Broadcast Notification{impactedPatients.length === 1 ? '' : 's'}

@@ -498,6 +498,28 @@ export const api = {
     return await res.json();
   },
 
+  async getSmsDeliveryStatus(msgId: string) {
+    const res = await fetch(`${API_BASE_URL}/sms/status/${encodeURIComponent(msgId)}`, {
+      headers: getHeaders(),
+    });
+    return await res.json();
+  },
+
+  async syncAllSmsStatuses() {
+    const res = await fetch(`${API_BASE_URL}/sms/sync-delivery-status`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return await res.json();
+  },
+
+  async getCustomerDetailsTraceability(identifier: string) {
+    const res = await fetch(`${API_BASE_URL}/customers/${encodeURIComponent(identifier)}/details-traceability`, {
+      headers: getHeaders(),
+    });
+    return await res.json();
+  },
+
   // -------------------------------------------------------------
   // SETTINGS
   // -------------------------------------------------------------

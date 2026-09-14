@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
   MessageSquare, Send, CheckCircle2, Clock, AlertTriangle, Filter,
   RefreshCw, Globe, ArrowUpRight, ShieldAlert, Check, XCircle, Search,
-  SlidersHorizontal, Radio
+  SlidersHorizontal, Radio, ExternalLink, Activity
 } from 'lucide-react';
 import { api, type CustomerItem } from '../services/api';
+import CustomerSmsDetailsModal from './CustomerSmsDetailsModal';
 
 interface SmsReportsViewProps {
   onOpenManualSms: (customer?: CustomerItem) => void;
@@ -20,11 +21,18 @@ interface SmsLogItem {
   language: string;
   provider: string;
   providerMessageId: string;
-  status: 'sent' | 'delivered' | 'failed' | 'queued' | 'undelivered';
+  status: 'submitted' | 'sent' | 'pending' | 'delivered' | 'failed' | 'queued' | 'expired' | 'undelivered';
+  isSandbox?: boolean;
+  sandboxDetails?: string | null;
   notificationSource: 'automatic' | 'manual';
   message: string;
   createdAt: string;
+  sentAt?: string | null;
+  deliveredAt?: string | null;
+  lastStatusCheckedAt?: string | null;
   errorMessage?: string;
+  medicineId?: string;
+  batchId?: string;
 }
 
 export default function SmsReportsView({
@@ -36,12 +44,15 @@ export default function SmsReportsView({
   const [summary, setSummary] = useState({
     totalSms: 0,
     sent: 0,
+    submitted: 0,
+    pending: 0,
     delivered: 0,
     failed: 0,
+    expired: 0,
     queued: 0,
     automaticCount: 0,
     manualCount: 0,
-    deliveryRatePct: 100,
+    deliveryRatePct: 0,
   });
   const [loading, setLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<'all' | 'automatic' | 'manual'>('all');
@@ -49,6 +60,12 @@ export default function SmsReportsView({
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  // Customer Details Modal State
+  const [selectedLogForDetails, setSelectedLogForDetails] = useState<SmsLogItem | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   const fetchReports = async () => {
     setLoading(true);
@@ -61,16 +78,28 @@ export default function SmsReportsView({
 
       if (data && data.logs) {
         setLogs(data.logs);
-        setSummary(data.summary || {
-          totalSms: data.logs.length,
-          sent: data.logs.filter((l: any) => l.status === 'sent').length,
-          delivered: data.logs.filter((l: any) => l.status === 'delivered').length,
-          failed: data.logs.filter((l: any) => l.status === 'failed').length,
-          queued: 0,
-          automaticCount: data.logs.filter((l: any) => l.notificationSource === 'automatic').length,
-          manualCount: data.logs.filter((l: any) => l.notificationSource === 'manual').length,
-          deliveryRatePct: 98,
-        });
+        if (data.summary) {
+          setSummary(data.summary);
+        } else {
+          const total = data.logs.length;
+          const del = data.logs.filter((l: any) => l.status === 'delivered').length;
+          const sub = data.logs.filter((l: any) => l.status === 'submitted' || l.status === 'sent').length;
+          const pend = data.logs.filter((l: any) => l.status === 'pending').length;
+          const fail = data.logs.filter((l: any) => l.status === 'failed' || l.status === 'undelivered').length;
+          setSummary({
+            totalSms: total,
+            sent: sub,
+            submitted: sub,
+            pending: pend,
+            delivered: del,
+            failed: fail,
+            expired: data.logs.filter((l: any) => l.status === 'expired').length,
+            queued: 0,
+            automaticCount: data.logs.filter((l: any) => l.notificationSource === 'automatic').length,
+            manualCount: data.logs.filter((l: any) => l.notificationSource === 'manual').length,
+            deliveryRatePct: total > 0 ? Math.round((del / total) * 100) : 0,
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to load SMS reports:', err);
@@ -96,6 +125,33 @@ export default function SmsReportsView({
     }
   };
 
+  const handleSyncStatuses = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await api.syncAllSmsStatuses();
+      showToast(`Synced ${res.checkedCount || 0} carrier delivery reports.`);
+      fetchReports();
+    } catch (err: any) {
+      showToast(`Sync error: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleCheckSingleStatus = async (msgId: string) => {
+    try {
+      const res = await api.getSmsDeliveryStatus(msgId);
+      if (res.success) {
+        showToast(`Carrier status updated: ${res.status.toUpperCase()}`);
+        fetchReports();
+      } else {
+        showToast(res.error || 'Failed to check status');
+      }
+    } catch (err: any) {
+      showToast(`Error: ${err.message}`);
+    }
+  };
+
   const handleSimulateDeliveryCallback = async (msgId: string) => {
     try {
       const data = await api.simulateCarrierCallback(msgId);
@@ -106,6 +162,35 @@ export default function SmsReportsView({
     } catch (err) {
       showToast('Delivery callback failed');
     }
+  };
+
+  const handleResend = async (log: SmsLogItem) => {
+    const itemKey = log.id || log.providerMessageId;
+    setResendingId(itemKey);
+    try {
+      showToast(`Re-dispatching SMS to ${log.recipientName} (${log.recipientPhone})...`);
+      const res = await api.sendManualSms({
+        recipientName: log.recipientName,
+        recipientPhone: log.recipientPhone,
+        notificationType: log.notificationType,
+        language: log.language,
+      });
+      if (res.success) {
+        showToast(`New SMS dispatched (Ref: ${res.providerMessageId || 'OK'})`);
+      } else {
+        showToast(`Resend failed: ${res.error || 'Unknown error'}`);
+      }
+      fetchReports();
+    } catch (err: any) {
+      showToast(`Resend error: ${err.message}`);
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const openCustomerDetails = (log: SmsLogItem) => {
+    setSelectedLogForDetails(log);
+    setIsDetailsModalOpen(true);
   };
 
   const filteredLogs = logs.filter(item => {
@@ -152,19 +237,29 @@ export default function SmsReportsView({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-                Real SMS Notification Engine & Audit Reports
+                Real SMS Notification Engine & Delivery Audit
               </h2>
               <span className="chip badge-teal" style={{ fontSize: 10 }}>
-                <Radio size={12} /> Live Gateway Synced
+                <Radio size={12} /> SMSLocal & Gateway Synced
               </span>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-              Unified delivery tracking for both automated system triggers and pharmacist-initiated manual alerts.
+              Handset carrier delivery tracking with dynamic patient batch traceability and DLT compliance.
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={handleSyncStatuses}
+            className="btn btn-secondary"
+            disabled={isSyncing}
+            style={{ fontSize: 12 }}
+            title="Poll SMSLocal delivery report endpoint for pending messages"
+          >
+            <Activity size={14} className={isSyncing ? 'animate-spin' : ''} />
+            {isSyncing ? 'Syncing DLR...' : 'Sync Delivery Reports'}
+          </button>
           <button
             onClick={handleTriggerAutomaticScan}
             className="btn btn-secondary"
@@ -216,20 +311,33 @@ export default function SmsReportsView({
           </div>
         </div>
 
-        {/* Metric 3: Confirmed Delivered */}
+        {/* Metric 3: Confirmed Handset Delivered */}
         <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--success)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>
-            Delivered & Confirmed
+            Handset Delivered (Confirmed)
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--success)', marginTop: 4 }}>
-            {summary.delivered + summary.sent}
+            {summary.delivered}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Delivery Rate: <b>{summary.deliveryRatePct}%</b>
+            Carrier Verified Delivery Rate: <b>{summary.deliveryRatePct}%</b>
           </div>
         </div>
 
-        {/* Metric 4: Failed / Queued */}
+        {/* Metric 4: In-Transit / Pending Carrier */}
+        <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--warning)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', textTransform: 'uppercase' }}>
+            In Transit / Pending DLR
+          </span>
+          <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--warning)', marginTop: 4 }}>
+            {summary.submitted + summary.pending}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+            Awaiting carrier delivery report
+          </div>
+        </div>
+
+        {/* Metric 5: Failed / Undelivered */}
         <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--danger)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--danger)', textTransform: 'uppercase' }}>
             Failed / Undelivered
@@ -316,8 +424,9 @@ export default function SmsReportsView({
             style={{ fontSize: 12, padding: '5px 10px', height: 34 }}
           >
             <option value="all">All Statuses</option>
-            <option value="delivered">Delivered</option>
-            <option value="sent">Sent</option>
+            <option value="delivered">Delivered (Confirmed)</option>
+            <option value="submitted">Submitted / In-Transit</option>
+            <option value="pending">Pending DLR</option>
             <option value="failed">Failed</option>
           </select>
 
@@ -346,7 +455,7 @@ export default function SmsReportsView({
             <Search size={14} style={{ position: 'absolute', left: 9, top: 10, color: 'var(--text-muted)' }} />
           </div>
 
-          <button onClick={fetchReports} className="btn btn-ghost" style={{ padding: 6 }}>
+          <button onClick={fetchReports} className="btn btn-ghost" style={{ padding: 6 }} title="Refresh">
             <RefreshCw size={15} />
           </button>
         </div>
@@ -398,12 +507,47 @@ export default function SmsReportsView({
                       </div>
                     </td>
 
-                    {/* Recipient */}
+                    {/* Recipient - Clickable with interactive hover */}
                     <td style={{ padding: '12px 16px' }}>
-                      <b style={{ color: 'var(--text)' }}>{log.recipientName}</b>
-                      <div style={{ color: 'var(--text-3)', fontSize: 11.5 }}>
-                        {log.recipientPhone}
-                      </div>
+                      <button
+                        onClick={() => openCustomerDetails(log)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          display: 'inline-flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-start',
+                        }}
+                        title="Click to inspect medicine details & batch traceability"
+                      >
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color: 'var(--primary)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            textDecoration: 'underline',
+                            textDecorationColor: 'transparent',
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.textDecorationColor = 'var(--primary)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.textDecorationColor = 'transparent';
+                          }}
+                        >
+                          {log.recipientName}
+                          <ExternalLink size={11} style={{ opacity: 0.7 }} />
+                        </span>
+                        <span style={{ color: 'var(--text-3)', fontSize: 11.5, marginTop: 1 }}>
+                          {log.recipientPhone}
+                        </span>
+                      </button>
                     </td>
 
                     {/* Notification Type */}
@@ -449,65 +593,87 @@ export default function SmsReportsView({
                       </div>
                     </td>
 
-                    {/* Status */}
+                    {/* Status & Last Checked */}
                     <td style={{ padding: '12px 16px' }}>
-                      <span
-                        className={`chip ${
-                          log.status === 'delivered'
-                            ? 'badge-green'
-                            : log.status === 'sent'
-                            ? 'badge-blue'
-                            : 'badge-red'
-                        }`}
-                        style={{ fontSize: 11 }}
-                      >
-                        {log.status === 'delivered' ? (
-                          <>
-                            <CheckCircle2 size={12} /> Delivered
-                          </>
-                        ) : log.status === 'sent' ? (
-                          <>
-                            <Check size={12} /> Sent (Pending Carrier)
-                          </>
-                        ) : (
-                          <>
-                            <XCircle size={12} /> Failed
-                          </>
+                      <div>
+                        <span
+                          className={`chip ${
+                            log.status === 'delivered'
+                              ? 'badge-green'
+                              : log.status === 'submitted' || log.status === 'sent'
+                              ? 'badge-blue'
+                              : log.status === 'pending'
+                              ? 'badge-amber'
+                              : 'badge-red'
+                          }`}
+                          style={{ fontSize: 11 }}
+                        >
+                          {log.status === 'delivered' ? (
+                            <>
+                              <CheckCircle2 size={12} /> Delivered
+                            </>
+                          ) : log.status === 'submitted' || log.status === 'sent' ? (
+                            <>
+                              <Clock size={12} /> Submitted
+                            </>
+                          ) : log.status === 'pending' ? (
+                            <>
+                              <Clock size={12} /> Pending DLR
+                            </>
+                          ) : (
+                            <>
+                              <XCircle size={12} /> Failed
+                            </>
+                          )}
+                        </span>
+
+                        {/* Status detail / timestamps */}
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+                          {log.status === 'delivered' && log.deliveredAt ? (
+                            <span>Delivered at: {new Date(log.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          ) : log.status === 'delivered' ? (
+                            <span>Carrier confirmed</span>
+                          ) : log.status === 'failed' ? (
+                            <span style={{ color: 'var(--danger)' }}>{log.errorMessage ? `Reason: ${log.errorMessage.slice(0, 30)}` : 'Gateway rejected'}</span>
+                          ) : (
+                            <span>Waiting for carrier confirmation</span>
+                          )}
+                        </div>
+
+                        {/* Sandbox Tag if applicable */}
+                        {log.isSandbox && (
+                          <div style={{ marginTop: 2 }}>
+                            <span className="chip badge-amber" style={{ fontSize: 9, padding: '1px 5px' }} title="Provider simulated carrier transmission">
+                              🧪 Test / Sandbox
+                            </span>
+                          </div>
                         )}
-                      </span>
+                      </div>
                     </td>
 
                     {/* Actions */}
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      {log.status === 'sent' ? (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
+                        {log.status !== 'delivered' && log.status !== 'failed' && (
+                          <button
+                            onClick={() => handleSimulateDeliveryCallback(log.providerMessageId)}
+                            className="btn btn-ghost"
+                            title="Verify Carrier Delivery Callback (Test/Sim)"
+                            style={{ fontSize: 11, padding: '3px 7px' }}
+                          >
+                            Verify Callback
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleSimulateDeliveryCallback(log.providerMessageId)}
-                          className="btn btn-ghost"
-                          title="Simulate Carrier Delivery Callback"
-                          style={{ fontSize: 11, padding: '3px 7px' }}
-                        >
-                          Verify Carrier Callback
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            showToast(`Resending SMS to ${log.recipientPhone}...`);
-                            api.sendManualSms({
-                              recipientName: log.recipientName,
-                              recipientPhone: log.recipientPhone,
-                              notificationType: log.notificationType,
-                              language: log.language,
-                            }).then(() => {
-                              showToast('SMS re-dispatched');
-                              fetchReports();
-                            });
-                          }}
+                          onClick={() => handleResend(log)}
+                          disabled={resendingId === (log.id || log.providerMessageId)}
                           className="btn btn-ghost"
                           style={{ fontSize: 11, padding: '3px 7px' }}
+                          title="Send a fresh SMS attempt"
                         >
-                          Resend
+                          {resendingId === (log.id || log.providerMessageId) ? 'Sending...' : 'Resend'}
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -516,6 +682,17 @@ export default function SmsReportsView({
           </table>
         </div>
       </div>
+
+      {/* Customer SMS Details & Traceability Modal */}
+      <CustomerSmsDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        smsLog={selectedLogForDetails}
+        customer={customersList.find(c => c.name === selectedLogForDetails?.recipientName || c.phone === selectedLogForDetails?.recipientPhone)}
+        onRefreshSms={fetchReports}
+        showToast={showToast}
+      />
     </div>
   );
 }
+

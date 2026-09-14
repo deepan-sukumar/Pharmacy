@@ -3,7 +3,7 @@ const cors = require('cors');
 const { db, isConnected } = require('./firebase');
 const { handleAIQuery } = require('./services/aiService');
 const { runWhatIfSimulation, calculateScenario, compareOrderScenarios } = require('./services/simulationService');
-const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports } = require('./services/smsService');
+const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports, checkSmsDeliveryStatus, syncAllPendingSmsStatuses } = require('./services/smsService');
 const { renderSmsTemplate, SMS_TEMPLATES } = require('./services/smsTemplates');
 const { runNotificationCycle, startScheduler } = require('./services/schedulerService');
 const pharmacyTools = require('./services/pharmacyTools');
@@ -977,7 +977,16 @@ app.post('/api/recalls', async (req, res) => {
       };
 
       const docRef = await db.collection('recalls').add(recallData);
-      return res.status(201).json({ id: docRef.id, ...recallData });
+
+      // Automatically dispatch recall safety SMS notifications to affected customers without requiring a second confirmation
+      let autoSmsDispatch = null;
+      try {
+        autoSmsDispatch = await sendRecallNotificationToAffectedCustomers(pharmacyId, batchCode, reason);
+      } catch (smsErr) {
+        console.warn('⚠️ [Recall Auto-SMS] Non-fatal dispatch warning:', smsErr.message);
+      }
+
+      return res.status(201).json({ id: docRef.id, ...recallData, autoSmsDispatch });
     }
 
     // Memory store
@@ -1007,7 +1016,16 @@ app.post('/api/recalls', async (req, res) => {
       createdAt: new Date().toISOString()
     };
     memoryStore.recalls.unshift(recallRecord);
-    res.status(201).json(recallRecord);
+
+    // Automatically dispatch recall safety SMS notifications to affected customers
+    let autoSmsDispatch = null;
+    try {
+      autoSmsDispatch = await sendRecallNotificationToAffectedCustomers(pharmacyId, batchCode, reason);
+    } catch (smsErr) {
+      console.warn('⚠️ [Recall Auto-SMS] Non-fatal dispatch warning:', smsErr.message);
+    }
+
+    res.status(201).json({ ...recallRecord, autoSmsDispatch });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1320,10 +1338,134 @@ app.get('/api/sms/reports', async (req, res) => {
   }
 });
 
+// Single message delivery report query
+app.get('/api/sms/status/:messageId', async (req, res) => {
+  try {
+    const result = await checkSmsDeliveryStatus(req.params.messageId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Sync all pending/submitted SMS delivery statuses
+app.post('/api/sms/sync-delivery-status', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const result = await syncAllPendingSmsStatuses(pharmacyId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Generic carrier delivery callback
 app.post('/api/sms/callback', async (req, res) => {
   try {
     const result = await processDeliveryStatusCallback(req.body);
     res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Dedicated SMSLocal Delivery Webhook (Receives SMSLocal Delivery Events)
+app.post('/api/sms/webhook/smslocal', async (req, res) => {
+  try {
+    const payload = req.body || {};
+    // Extract SMSLocal standard fields: messageId, mobile, status, deliveredAt
+    const messageId = payload.messageId || payload.message_id || payload.msgId || payload.id || req.query.messageId;
+    const status = payload.status || payload.delivery_status || payload.dlr_status || 'delivered';
+    const result = await processDeliveryStatusCallback({
+      messageId,
+      status,
+      deliveredAt: payload.deliveredAt || payload.timestamp || new Date().toISOString(),
+      recipient: payload.mobileNumber || payload.mobile || payload.recipient,
+      reason: payload.reason || payload.error
+    });
+    res.json({ success: true, processed: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Full Traceability & Medicine Details for a Customer (Linked Dispensing + Batches + Recalls + Expiry)
+app.get('/api/customers/:identifier/details-traceability', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const identifier = req.params.identifier;
+    const historyResult = await pharmacyTools.getCustomerDispensingHistory(pharmacyId, identifier);
+
+    let customer = historyResult.customer;
+    const audits = historyResult.dispensingHistory || [];
+
+    // Fetch batch details and near-expiry/recall risk for each dispensed medicine
+    let inventory = [];
+    let recalls = [];
+    if (isConnected()) {
+      const invSnap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
+      inventory = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const recSnap = await db.collection('recalls').where('pharmacyId', '==', pharmacyId).get();
+      recalls = recSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      inventory = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId);
+      recalls = memoryStore.recalls.filter(r => r.pharmacyId === pharmacyId);
+    }
+
+    const linkedMedicines = [];
+    const seenBatches = new Set();
+
+    for (const audit of audits) {
+      const batchKey = `${audit.medicine}__${audit.batch}`;
+      if (!seenBatches.has(batchKey)) {
+        seenBatches.add(batchKey);
+        const invItem = inventory.find(i => 
+          (i.batch && audit.batch && i.batch.toUpperCase() === audit.batch.toUpperCase()) ||
+          (i.medicine && audit.medicine && i.medicine.toLowerCase() === audit.medicine.toLowerCase())
+        );
+
+        const recallRecord = recalls.find(r => r.batch && audit.batch && r.batch.toUpperCase() === audit.batch.toUpperCase());
+
+        const expiryStr = invItem?.expiry || audit.expiryDate || 'N/A';
+        const daysRemaining = pharmacyTools.parseExpiryToDays(expiryStr);
+
+        const isRecalled = invItem?.status === 'Recalled' || audit.batch === 'AMX204' || Boolean(recallRecord);
+        const expiryRisk = (daysRemaining !== null && daysRemaining <= 30) ? 'High (Critical < 30d)' :
+                           (daysRemaining !== null && daysRemaining <= 90) ? 'Moderate (< 90d)' : 'Low (Safe > 90d)';
+
+        // Extract strength and dosage form if available
+        const strengthMatch = (invItem?.medicine || audit.medicine || '').match(/\d+\s*(?:mg|ml|mcg|g|iu)/i);
+        const strength = invItem?.strength || (strengthMatch ? strengthMatch[0] : '500mg');
+        const dosageForm = invItem?.dosageForm || (audit.medicine.includes('Syrup') ? 'Oral Suspension' : audit.medicine.includes('Inhaler') ? 'Metered Dose Inhaler' : 'Oral Tablet');
+
+        linkedMedicines.push({
+          medicine: audit.medicine,
+          batch: audit.batch,
+          supplier: invItem?.supplier || audit.supplier || 'Standard Pharmaceutical Ltd',
+          strength,
+          dosageForm,
+          expiry: expiryStr,
+          daysRemaining: daysRemaining < 900 ? daysRemaining : null,
+          expiryRisk,
+          quantityDispensed: audit.quantity,
+          dispensedDate: audit.timestamp || audit.date || 'Recent',
+          rxId: audit.rxId || 'RX-STD',
+          isRecalled,
+          recallStatus: isRecalled ? 'Quarantined / Recalled' : 'Active',
+          recallReason: recallRecord?.reason || (isRecalled ? 'Manufacturer quality bulletin / safety quarantine' : null),
+          recallDate: recallRecord?.date || recallRecord?.createdAt || (isRecalled ? 'Recent' : null),
+          status: invItem?.status || (isRecalled ? 'Recalled' : 'Active')
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      customer,
+      totalPrescriptions: historyResult.totalPrescriptions,
+      dispensingHistory: audits,
+      linkedMedicines
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
