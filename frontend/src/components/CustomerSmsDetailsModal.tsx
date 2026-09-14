@@ -172,10 +172,10 @@ export default function CustomerSmsDetailsModal({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-                SMS Notification & Traceability Audit
+                Patient Safety Communication & Traceability Audit
               </h3>
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
-                Patient safety alert and verified carrier delivery log
+                Patient safety advisory and pharmacist outreach log
               </p>
             </div>
           </div>

@@ -1835,7 +1835,8 @@ function Expiry({
         </Panel>
       </div>
       <Panel title="Priority Batches for FEFO Dispensing">
-        <div style={{ overflowX: 'auto' }}>
+        {/* Desktop Table View */}
+        <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead><tr style={{ background: 'var(--bg-alt)' }}>
               {['Medicine', 'Batch', 'Expiry', 'Days Left', 'Risk', 'Action'].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
@@ -1858,6 +1859,47 @@ function Expiry({
               </tr>
             ))}</tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards View */}
+        <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
+          {inventory.slice(0, 5).map((m, i) => (
+            <div key={m.batch} className="mobile-entity-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div>
+                  <h4 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{m.medicine}</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>{m.batch}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-4)' }}>·</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Exp: {m.expiry}</span>
+                  </div>
+                </div>
+                <Badge status={m.status} />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, padding: '8px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
+                <span style={{ color: 'var(--text-3)' }}>Days Remaining:</span>
+                <span style={{ fontWeight: 800, color: 'var(--warning-dark)' }}>{[12, 42, 68, 103, 150][i] || 90} days left</span>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => onNavigate?.('dispensing')}
+                  className="btn btn-secondary"
+                  style={{ fontSize: 11.5, padding: '6px 12px' }}
+                >
+                  Dispense
+                </button>
+                <button
+                  onClick={() => onNavigate?.('sms-reports')}
+                  className="btn btn-teal"
+                  style={{ fontSize: 11.5, padding: '6px 12px', fontWeight: 700 }}
+                >
+                  Safety Notify →
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </Panel>
     </>

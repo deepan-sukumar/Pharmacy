@@ -785,7 +785,22 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   box-shadow: var(--shadow-sm);
 }
 
-/* ────────── RESPONSIVE BREAKPOINTS ────────── */
+/* ────────── RESPONSIVE BREAKPOINTS & MOBILE FIXES ────────── */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
+.break-words {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
 @media (max-width: 1280px) {
   .responsive-stats-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -819,14 +834,44 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .desktop-table-view { display: none !important; }
   .mobile-cards-view { display: flex !important; flex-direction: column; gap: 12px; }
 
+  /* Fluid Mobile Header */
+  header {
+    height: 60px !important;
+    padding: 0 12px !important;
+  }
+
+  /* Zero Horizontal Overflow on Mobile */
   .main-content-wrapper { 
     margin-left: 0 !important; 
     width: 100% !important; 
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
     padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
-  .section-padding { padding: 48px 0; }
-  .container { padding: 0 16px; }
+  main {
+    padding: 14px 12px calc(80px + env(safe-area-inset-bottom, 0px)) !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Responsive Mobile Typography */
+  h1, .section-title {
+    font-size: 20px !important;
+    letter-spacing: -0.4px !important;
+  }
+  h2 {
+    font-size: 18px !important;
+  }
+  h3 {
+    font-size: 15px !important;
+  }
+  .stat-value {
+    font-size: 22px !important;
+  }
+
+  .section-padding { padding: 36px 0; }
+  .container { padding: 0 12px; }
 
   .responsive-stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -845,7 +890,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     background: var(--surface);
     border-top: 1px solid var(--border);
     z-index: 90;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
     justify-content: space-around;
     align-items: center;
     backdrop-filter: blur(12px);
@@ -880,13 +925,19 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   /* Ensure comfortable touch targets on mobile */
   .btn {
     min-height: 42px;
-    padding: 9px 16px;
-    font-size: 13.5px;
+    padding: 9px 14px;
+    font-size: 13px;
   }
   .btn-lg {
     min-height: 48px;
-    padding: 12px 20px;
-    font-size: 15px;
+    padding: 12px 18px;
+    font-size: 14.5px;
+  }
+
+  /* Universal Mobile Modal Responsiveness */
+  .animate-scale-in,
+  .animate-fade-in {
+    max-width: calc(100vw - 20px) !important;
   }
 }
 
