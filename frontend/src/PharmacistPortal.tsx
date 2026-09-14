@@ -19,6 +19,7 @@ import EnhancedWhatIfSimulator from './components/WhatIfSimulator';
 import EnhancedAIAssistant from './components/AIAssistant';
 import ExpiryTimeline from './components/ExpiryTimeline';
 import ManualSmsModal from './components/ManualSmsModal';
+import SafetyCommunicationModal from './components/SafetyCommunicationModal';
 import SmsReportsView from './components/SmsReportsView';
 import CustomerSmsDetailsModal from './components/CustomerSmsDetailsModal';
 import { ThemeToggle } from './components/ThemeContext';
@@ -1902,6 +1903,8 @@ function Dispensing({
     showToast(`Prescription / Batch scanned: ${scanned.medicine} (${scanned.batch})`);
   };
 
+  const [newCustPref, setNewCustPref] = useState<'WHATSAPP' | 'SMS'>('SMS');
+
   const handleAddCustomer = async () => {
     if (!newCustName) return;
     try {
@@ -1910,6 +1913,8 @@ function Dispensing({
         phone: newCustPhone || '+91 98000 00000',
         email: `${newCustName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
         allergies: 'None',
+        preferredLang: 'English',
+        communicationPreference: newCustPref,
       });
       setCustomersList([...customersList, added]);
     } catch {
@@ -1922,6 +1927,8 @@ function Dispensing({
         lastVisit: 'Just now',
         allergies: 'None',
         alerts: true,
+        preferredLang: 'English',
+        communicationPreference: newCustPref,
       };
       setCustomersList([...customersList, newCust]);
     }
@@ -1929,6 +1936,7 @@ function Dispensing({
     setNewCustomerModal(false);
     setNewCustName('');
     setNewCustPhone('');
+    setNewCustPref('SMS');
     showToast(`Customer "${newCustName}" registered`);
   };
 
@@ -2210,6 +2218,20 @@ function Dispensing({
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div><label className="label">Customer Full Name *</label><input className="input" placeholder="e.g. Ramesh Patel" value={newCustName} onChange={e => setNewCustName(e.target.value)}/></div>
               <div><label className="label">Phone Number</label><input className="input" placeholder="e.g. +91 98450 12345" value={newCustPhone} onChange={e => setNewCustPhone(e.target.value)}/></div>
+              <div>
+                <label className="label" style={{ marginBottom: 6, display: 'block' }}>Communication Preference</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${newCustPref === 'WHATSAPP' ? 'var(--primary)' : 'var(--border)'}`, background: newCustPref === 'WHATSAPP' ? 'var(--primary-light)' : 'var(--bg-alt)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                    <input type="radio" name="quickCommPref" checked={newCustPref === 'WHATSAPP'} onChange={() => setNewCustPref('WHATSAPP')} style={{ display: 'none' }} />
+                    <span>🟢 WhatsApp</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${newCustPref === 'SMS' ? 'var(--primary)' : 'var(--border)'}`, background: newCustPref === 'SMS' ? 'var(--primary-light)' : 'var(--bg-alt)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                    <input type="radio" name="quickCommPref" checked={newCustPref === 'SMS'} onChange={() => setNewCustPref('SMS')} style={{ display: 'none' }} />
+                    <span>📱 SMS</span>
+                  </label>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, display: 'block' }}>Default: SMS unless patient specifically requests WhatsApp.</span>
+              </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
                 <button className="btn btn-secondary" onClick={() => setNewCustomerModal(false)}>Cancel</button>
                 <button className="btn btn-teal" onClick={handleAddCustomer}>Add & Select</button>
@@ -2492,17 +2514,33 @@ function Customers({
   audits,
   showToast,
   onOpenManualSms,
+  onOpenSafetyCommunication,
 }: {
   customersList: CustomerItem[];
   setCustomersList: React.Dispatch<React.SetStateAction<CustomerItem[]>>;
   audits: Audit[];
   showToast: (s: string) => void;
   onOpenManualSms?: (cust: CustomerItem) => void;
+  onOpenSafetyCommunication?: (cust: any, type?: string, details?: any) => void;
 }) {
   const [q, setQ] = useState('');
   const [selectedCust, setSelectedCust] = useState<CustomerItem | null>(null);
   const [addModal, setAddModal] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', allergies: '' });
+  const [form, setForm] = useState<{
+    name: string;
+    phone: string;
+    email: string;
+    allergies: string;
+    preferredLang: string;
+    communicationPreference: 'WHATSAPP' | 'SMS';
+  }>({
+    name: '',
+    phone: '',
+    email: '',
+    allergies: '',
+    preferredLang: 'English',
+    communicationPreference: 'SMS'
+  });
 
   const filtered = customersList.filter(c => c.name.toLowerCase().includes(q.toLowerCase()) || c.phone.includes(q));
 
@@ -2517,6 +2555,8 @@ function Customers({
         phone: form.phone || '+91 98000 00000',
         email: form.email || `${form.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
         allergies: form.allergies || 'None',
+        preferredLang: form.preferredLang || 'English',
+        communicationPreference: form.communicationPreference || 'SMS',
       });
       setCustomersList([...customersList, added]);
     } catch {
@@ -2529,11 +2569,13 @@ function Customers({
         lastVisit: 'Today',
         allergies: form.allergies || 'None',
         alerts: true,
+        preferredLang: form.preferredLang || 'English',
+        communicationPreference: form.communicationPreference || 'SMS',
       };
       setCustomersList([...customersList, newC]);
     }
     setAddModal(false);
-    setForm({ name: '', phone: '', email: '', allergies: '' });
+    setForm({ name: '', phone: '', email: '', allergies: '', preferredLang: 'English', communicationPreference: 'SMS' });
     showToast(`Added customer "${form.name}"`);
   };
 
@@ -2560,8 +2602,8 @@ function Customers({
             onClick={() => {
               downloadCSV(
                 'customers_directory.csv',
-                ['Name', 'Phone', 'Email', 'Total Visits', 'Last Visit', 'Known Drug Allergies', 'SMS Alerts Enabled'],
-                customersList.map(c => [c.name, c.phone, c.email, c.visits, c.lastVisit, c.allergies || 'None', c.alerts ? 'Yes' : 'No'])
+                ['Name', 'Phone', 'Email', 'Preferred Channel', 'Language', 'Total Visits', 'Last Visit', 'Known Drug Allergies', 'SMS Alerts Enabled'],
+                customersList.map(c => [c.name, c.phone, c.email, c.communicationPreference || 'SMS', c.preferredLang || 'English', c.visits, c.lastVisit, c.allergies || 'None', c.alerts ? 'Yes' : 'No'])
               );
               showToast('Downloaded customers_directory.csv');
             }}
@@ -2569,7 +2611,7 @@ function Customers({
             <Download size={14}/> Export
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 'clamp(10px, 2.5vw, 16px)', padding: 'clamp(12px, 3vw, 20px)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: 'clamp(10px, 2.5vw, 16px)', padding: 'clamp(12px, 3vw, 20px)' }}>
           {filtered.map((c, i) => (
             <div
               key={c.id}
@@ -2584,6 +2626,23 @@ function Customers({
                 <div>
                   <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{c.name}</p>
                   <p style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{c.phone}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <span
+                      className="chip"
+                      style={{
+                        fontSize: 10,
+                        padding: '1px 6px',
+                        backgroundColor: c.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                        color: c.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
+                        fontWeight: 700
+                      }}
+                    >
+                      {c.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
+                    </span>
+                    <span className="chip" style={{ fontSize: 10, padding: '1px 6px', color: 'var(--text-3)', background: 'var(--bg-alt)' }}>
+                      {c.preferredLang || 'English'}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 20, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
@@ -2635,9 +2694,24 @@ function Customers({
 
             <div style={{ padding: 24 }}>
               <div style={{ background: 'var(--bg-alt)', borderRadius: 12, padding: 14, marginBottom: 18, border: '1px solid var(--border)' }}>
-                <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>Clinical Information</p>
-                <p style={{ fontSize: 13, marginTop: 4, color: 'var(--text)' }}>Known Allergies: <b>{selectedCust.allergies || 'None reported'}</b></p>
-                <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>SMS Refill & Expiry Reminders: <b>{selectedCust.alerts ? 'Enabled' : 'Disabled'}</b></p>
+                <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>Clinical & Channel Preference</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>Preferred Channel:</span>
+                  <span
+                    className="chip"
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      backgroundColor: selectedCust.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                      color: selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
+                    }}
+                  >
+                    {selectedCust.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, marginTop: 6, color: 'var(--text)' }}>Preferred Language: <b>{selectedCust.preferredLang || 'English'}</b></p>
+                <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>Known Allergies: <b>{selectedCust.allergies || 'None reported'}</b></p>
+                <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>Refill & Expiry Reminders: <b>{selectedCust.alerts ? 'Enabled' : 'Disabled'}</b></p>
               </div>
 
               <h4 style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 10 }}>
@@ -2660,7 +2734,19 @@ function Customers({
             </div>
 
             <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              {onOpenManualSms && (
+              {onOpenSafetyCommunication ? (
+                <button
+                  className="btn btn-teal"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}
+                  onClick={() => {
+                    const cust = selectedCust;
+                    setSelectedCust(null);
+                    onOpenSafetyCommunication(cust, 'MANUAL');
+                  }}
+                >
+                  <Send size={14} /> Send Safety Message
+                </button>
+              ) : onOpenManualSms ? (
                 <button
                   className="btn btn-teal"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}
@@ -2672,7 +2758,7 @@ function Customers({
                 >
                   <MessageSquare size={14} /> Send Direct SMS
                 </button>
-              )}
+              ) : null}
               <button className="btn btn-secondary" onClick={() => setSelectedCust(null)}>Close</button>
             </div>
           </div>
@@ -2691,6 +2777,29 @@ function Customers({
               <div><label className="label">Customer Full Name *</label><input className="input" placeholder="e.g. Ramesh Patel" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></div>
               <div><label className="label">Phone Number</label><input className="input" placeholder="e.g. +91 98450 12345" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}/></div>
               <div><label className="label">Email Address</label><input className="input" placeholder="e.g. ramesh@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></div>
+              <div><label className="label">Preferred Language</label>
+                <select className="input" value={form.preferredLang} onChange={e => setForm({ ...form, preferredLang: e.target.value })}>
+                  <option value="English">English</option>
+                  <option value="Tamil">Tamil (தமிழ்)</option>
+                  <option value="Telugu">Telugu (తెలుగు)</option>
+                  <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
+                  <option value="Hindi">Hindi (हिन्दी)</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" style={{ marginBottom: 6, display: 'block' }}>Communication Preference</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${form.communicationPreference === 'WHATSAPP' ? 'var(--primary)' : 'var(--border)'}`, background: form.communicationPreference === 'WHATSAPP' ? 'var(--primary-light)' : 'var(--bg-alt)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                    <input type="radio" name="custCommPref" checked={form.communicationPreference === 'WHATSAPP'} onChange={() => setForm({ ...form, communicationPreference: 'WHATSAPP' })} style={{ display: 'none' }} />
+                    <span>🟢 WhatsApp</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${form.communicationPreference === 'SMS' ? 'var(--primary)' : 'var(--border)'}`, background: form.communicationPreference === 'SMS' ? 'var(--primary-light)' : 'var(--bg-alt)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                    <input type="radio" name="custCommPref" checked={form.communicationPreference === 'SMS'} onChange={() => setForm({ ...form, communicationPreference: 'SMS' })} style={{ display: 'none' }} />
+                    <span>📱 SMS</span>
+                  </label>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, display: 'block' }}>Default: SMS unless patient specifically requests WhatsApp.</span>
+              </div>
               <div><label className="label">Known Drug Allergies</label><input className="input" placeholder="e.g. Penicillin, Sulfa" value={form.allergies} onChange={e => setForm({ ...form, allergies: e.target.value })}/></div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
                 <button className="btn btn-secondary" onClick={() => setAddModal(false)}>Cancel</button>
@@ -2926,6 +3035,7 @@ function Recall({
   showToast,
   onNavigate,
   onOpenManualSms,
+  onOpenSafetyCommunication,
 }: {
   inventory: Medicine[];
   setInventory: React.Dispatch<React.SetStateAction<Medicine[]>>;
@@ -2934,6 +3044,7 @@ function Recall({
   showToast: (s: string) => void;
   onNavigate?: (p: string) => void;
   onOpenManualSms?: (cust: any, type?: any, payload?: any) => void;
+  onOpenSafetyCommunication?: (cust: any, type?: string, details?: any) => void;
 }) {
   const [notifyModal, setNotifyModal] = useState(false);
   const [createRecallModal, setCreateRecallModal] = useState(false);
@@ -3001,7 +3112,9 @@ function Recall({
       qty: a.quantity,
       status: 'Advisory Pending',
       rxId: a.rxId || `RX-2026-${String(a.id).slice(-5)}`,
-      preferredLang: (cust as any)?.preferredLang || 'English'
+      preferredLang: (cust as any)?.preferredLang || 'English',
+      communicationPreference: ((cust as any)?.communicationPreference || 'SMS') as 'WHATSAPP' | 'SMS',
+      customerObj: cust || null,
     };
   });
 
@@ -3314,7 +3427,7 @@ function Recall({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr className="table-header">
-                {['Patient Name', 'Phone Number', 'Dispense Date', 'Rx ID', 'Quantity', 'Language', 'Action'].map(h => (
+                {['Patient Name', 'Phone Number', 'Dispense Date', 'Rx ID', 'Quantity', 'Preferred Channel', 'Action'].map(h => (
                   <th key={h} style={{ padding: '11px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     {h}
                   </th>
@@ -3358,25 +3471,65 @@ function Recall({
                   <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--text-3)' }}>{p.date}</td>
                   <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{p.rxId}</td>
                   <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{p.qty} units</td>
-                  <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-2)' }}>{p.preferredLang}</td>
                   <td style={{ padding: '12px 16px' }}>
-                    <button
-                      onClick={() => {
-                        if (onOpenManualSms) {
-                          onOpenManualSms(
-                            { name: p.name, phone: p.phone, preferredLang: p.preferredLang },
-                            'RECALL',
-                            { medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg', batchNumber: activeBatchCode }
-                          );
-                        } else {
-                          showToast(`Dispatched recall SMS to ${p.name}`);
-                        }
+                    <span
+                      className="chip"
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        backgroundColor: p.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                        color: p.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
                       }}
-                      className="btn btn-teal"
-                      style={{ fontSize: 11, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                     >
-                      <MessageSquare size={13} /> Send SMS
-                    </button>
+                      {p.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button
+                        onClick={() => {
+                          if (onOpenSafetyCommunication) {
+                            onOpenSafetyCommunication(
+                              {
+                                name: p.name,
+                                phone: p.phone,
+                                preferredLang: p.preferredLang,
+                                communicationPreference: p.communicationPreference,
+                                rxId: p.rxId,
+                                qty: p.qty,
+                                date: p.date,
+                              },
+                              'RECALL',
+                              {
+                                medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg',
+                                batchNumber: activeBatchCode,
+                                recallReason: newRecallReason,
+                              }
+                            );
+                          } else if (onOpenManualSms) {
+                            onOpenManualSms(
+                              { name: p.name, phone: p.phone, preferredLang: p.preferredLang },
+                              'RECALL',
+                              { medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg', batchNumber: activeBatchCode }
+                            );
+                          } else {
+                            showToast(`Dispatched recall notification to ${p.name}`);
+                          }
+                        }}
+                        className="btn btn-teal"
+                        style={{ fontSize: 11.5, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      >
+                        <Send size={12} /> Send Message
+                      </button>
+                      <button
+                        onClick={() => handleOpenPatientDetails(p)}
+                        className="btn btn-ghost"
+                        style={{ fontSize: 11.5, padding: '4px 8px' }}
+                        title="View patient details & traceability"
+                      >
+                        Details
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -3414,7 +3567,17 @@ function Recall({
                   </button>
                   <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{p.phone}</p>
                 </div>
-                <span className="chip badge-red">RECALL ADVISORY</span>
+                <span
+                  className="chip"
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    backgroundColor: p.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                    color: p.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
+                  }}
+                >
+                  {p.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
+                </span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
@@ -3430,23 +3593,50 @@ function Recall({
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                 <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{p.date}</span>
-                <button
-                  onClick={() => {
-                    if (onOpenManualSms) {
-                      onOpenManualSms(
-                        { name: p.name, phone: p.phone, preferredLang: p.preferredLang },
-                        'RECALL',
-                        { medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg', batchNumber: activeBatchCode }
-                      );
-                    } else {
-                      showToast(`Dispatched recall SMS to ${p.name}`);
-                    }
-                  }}
-                  className="btn btn-teal"
-                  style={{ fontSize: 11.5, padding: '5px 12px' }}
-                >
-                  <MessageSquare size={13} /> Send SMS
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => {
+                      if (onOpenSafetyCommunication) {
+                        onOpenSafetyCommunication(
+                          {
+                            name: p.name,
+                            phone: p.phone,
+                            preferredLang: p.preferredLang,
+                            communicationPreference: p.communicationPreference,
+                            rxId: p.rxId,
+                            qty: p.qty,
+                            date: p.date,
+                          },
+                          'RECALL',
+                          {
+                            medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg',
+                            batchNumber: activeBatchCode,
+                            recallReason: newRecallReason,
+                          }
+                        );
+                      } else if (onOpenManualSms) {
+                        onOpenManualSms(
+                          { name: p.name, phone: p.phone, preferredLang: p.preferredLang },
+                          'RECALL',
+                          { medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg', batchNumber: activeBatchCode }
+                        );
+                      } else {
+                        showToast(`Dispatched recall notification to ${p.name}`);
+                      }
+                    }}
+                    className="btn btn-teal"
+                    style={{ fontSize: 11.5, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <Send size={12} /> Send Message
+                  </button>
+                  <button
+                    onClick={() => handleOpenPatientDetails(p)}
+                    className="btn btn-ghost"
+                    style={{ fontSize: 11.5, padding: '5px 8px' }}
+                  >
+                    Details
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -4152,11 +4342,31 @@ export default function PharmacistPortal({
   const [smsInitialType, setSmsInitialType] = useState<any>('GENERAL_ANNOUNCEMENT');
   const [smsInitialPayload, setSmsInitialPayload] = useState<any>({});
 
+  const [safetyCommOpen, setSafetyCommOpen] = useState(false);
+  const [safetyCommData, setSafetyCommData] = useState<{
+    customer?: any;
+    type?: string;
+    medicineName?: string;
+    batchNumber?: string;
+    expiryDate?: string;
+    recallReason?: string;
+  }>({});
+
+  const handleOpenSafetyCommunication = (cust?: any, type: string = 'MANUAL', details?: any) => {
+    setSafetyCommData({
+      customer: cust || null,
+      type,
+      medicineName: details?.medicineName || '',
+      batchNumber: details?.batchNumber || '',
+      expiryDate: details?.expiryDate || '',
+      recallReason: details?.recallReason || 'Packaging seal defect reported by manufacturer bulletin',
+    });
+    setSafetyCommOpen(true);
+  };
+
   const handleOpenManualSms = (cust?: any, type?: any, payload?: any) => {
-    setSelectedCustomerForSms(cust || null);
-    if (type) setSmsInitialType(type);
-    if (payload) setSmsInitialPayload(payload);
-    setManualSmsOpen(true);
+    // Forward to unified safety communication modal with recommended channel
+    handleOpenSafetyCommunication(cust, type, payload);
   };
 
   useEffect(() => {
@@ -4218,7 +4428,7 @@ export default function PharmacistPortal({
   const safetyTabs: TabItem[] = [
     { id: 'alerts', label: 'Safety & System Alerts', badge: 3, badgeVariant: 'danger' },
     { id: 'recall', label: 'Batch Recall & Quarantine', badge: inventory.filter(m => m.status === 'Recalled').length || 1, badgeVariant: 'danger' },
-    { id: 'sms-reports', label: 'SMS & Delivery Reports' },
+    { id: 'sms-reports', label: 'SMS & Notifications' },
   ];
 
   const aiTabs: TabItem[] = [
@@ -4340,6 +4550,7 @@ export default function PharmacistPortal({
               audits={audits}
               showToast={showToast}
               onOpenManualSms={handleOpenManualSms}
+              onOpenSafetyCommunication={handleOpenSafetyCommunication}
             />
           )}
           {page === 'alerts' && <AlertsPage onNavigate={p => setPage(p as Page)} showToast={showToast} />}
@@ -4361,11 +4572,12 @@ export default function PharmacistPortal({
               showToast={showToast}
               onNavigate={p => setPage(p as Page)}
               onOpenManualSms={handleOpenManualSms}
+              onOpenSafetyCommunication={handleOpenSafetyCommunication}
             />
           )}
           {page === 'sms-reports' && (
             <SmsReportsView
-              onOpenManualSms={(c?: CustomerItem) => handleOpenManualSms(c)}
+              onOpenManualSms={(c?: CustomerItem) => handleOpenSafetyCommunication(c, 'MANUAL')}
               showToast={showToast}
               customersList={customersList}
             />
@@ -4396,6 +4608,24 @@ export default function PharmacistPortal({
         onNavigate={p => { setFilterQuery(''); setPage(p); }}
         onOpenMenu={() => setMobileDrawerOpen(true)}
         alertCount={3}
+      />
+
+      <SafetyCommunicationModal
+        isOpen={safetyCommOpen}
+        onClose={() => {
+          setSafetyCommOpen(false);
+          setSafetyCommData({});
+        }}
+        targetCustomer={safetyCommData.customer}
+        notificationType={safetyCommData.type || 'MANUAL'}
+        medicineName={safetyCommData.medicineName}
+        batchNumber={safetyCommData.batchNumber}
+        expiryDate={safetyCommData.expiryDate}
+        recallReason={safetyCommData.recallReason}
+        onSuccess={(result) => {
+          showToast(`Safety action recorded: ${result?.status?.replace(/_/g, ' ') || 'Completed'}`);
+        }}
+        showToast={showToast}
       />
 
       <ManualSmsModal

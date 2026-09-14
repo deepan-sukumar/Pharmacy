@@ -946,9 +946,14 @@ async function getSmsReports(pharmacyId = 'DEMO_PHARMACY', filters = {}) {
   const total = logs.length;
   const delivered = logs.filter(l => l.status === 'delivered' && !l.isSandbox).length;
   const submitted = logs.filter(l => l.status === 'submitted' || l.status === 'sent').length;
-  const pending = logs.filter(l => l.status === 'pending').length;
-  const failed = logs.filter(l => l.status === 'failed').length;
+  const pending = logs.filter(l => l.status === 'pending' || l.status === 'COMMUNICATION_INITIATED').length;
+  const failed = logs.filter(l => l.status === 'failed' || l.status === 'FAILED').length;
   const expired = logs.filter(l => l.status === 'expired').length;
+  const whatsappOpened = logs.filter(l => l.status === 'WHATSAPP_OPENED' || l.selectedChannel === 'WHATSAPP').length;
+  const smsComposerOpened = logs.filter(l => l.status === 'SMS_COMPOSER_OPENED' || (l.selectedChannel === 'SMS' && l.provider?.includes('Composer'))).length;
+  const cancelledCount = logs.filter(l => l.status === 'CANCELLED').length;
+  const expiryCount = logs.filter(l => l.notificationType === 'NEAR_EXPIRY' || l.notificationType === 'EXPIRED').length;
+  const recallCount = logs.filter(l => l.notificationType === 'RECALL').length;
   const automaticCount = logs.filter(l => l.notificationSource === 'automatic').length;
   const manualCount = logs.filter(l => l.notificationSource === 'manual').length;
 
@@ -963,6 +968,11 @@ async function getSmsReports(pharmacyId = 'DEMO_PHARMACY', filters = {}) {
       failed,
       expired,
       queued: 0,
+      whatsappOpened,
+      smsComposerOpened,
+      cancelledCount,
+      expiryCount,
+      recallCount,
       automaticCount,
       manualCount,
       deliveryRatePct: total > 0 ? Math.round((delivered / total) * 100) : 0

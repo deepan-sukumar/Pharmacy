@@ -4,6 +4,8 @@ export type Status = 'Available'|'Near Expiry'|'Recalled'|'Low Stock'|'Expired';
 export type Medicine = { id: number | string; medicine: string; batch: string; expiry: string; quantity: number; supplier: string; status: Status; unitPrice?: number };
 export type Audit = { id: number | string; date: string; medicine: string; batch: string; quantity: number; customer: string; pharmacist: string; status: string; rxId?: string; totalAmount?: number };
 
+export type CommunicationPreference = 'WHATSAPP' | 'SMS';
+
 export type CustomerItem = {
   id: number | string;
   name: string;
@@ -13,6 +15,8 @@ export type CustomerItem = {
   lastVisit: string;
   allergies?: string;
   alerts: boolean;
+  preferredLang?: string;
+  communicationPreference?: CommunicationPreference;
 };
 
 export type SupplierItem = {
@@ -35,11 +39,14 @@ export const initialInventory: Medicine[] = [
 ];
 
 export const initialCustomers: CustomerItem[] = [
-  { id: 1, name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true },
-  { id: 2, name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: 'Yesterday', allergies: 'None', alerts: true },
-  { id: 3, name: 'Arun Kumar', phone: '+91 94480 77109', email: 'arun.k@example.com', visits: 6, lastVisit: 'Aug 18', allergies: 'Sulfa drugs', alerts: true },
-  { id: 4, name: 'Kavya S', phone: '+91 99001 22584', email: 'kavya.s@example.com', visits: 4, lastVisit: 'Aug 12', allergies: 'None', alerts: false },
-  { id: 5, name: 'Meena Devi', phone: '+91 96114 64190', email: 'meena.d@example.com', visits: 3, lastVisit: 'Aug 04', allergies: 'Aspirin', alerts: true },
+  { id: 1, name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true, preferredLang: 'English', communicationPreference: 'SMS' },
+  { id: 2, name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'Hindi', communicationPreference: 'SMS' },
+  { id: 3, name: 'Arun Kumar', phone: '+91 94480 77109', email: 'arun.k@example.com', visits: 6, lastVisit: 'Aug 18', allergies: 'Sulfa drugs', alerts: true, preferredLang: 'Kannada', communicationPreference: 'SMS' },
+  { id: 4, name: 'Kavya S', phone: '+91 99001 22584', email: 'kavya.s@example.com', visits: 4, lastVisit: 'Aug 12', allergies: 'None', alerts: false, preferredLang: 'Tamil', communicationPreference: 'SMS' },
+  { id: 5, name: 'Meena Devi', phone: '+91 96114 64190', email: 'meena.d@example.com', visits: 3, lastVisit: 'Aug 04', allergies: 'Aspirin', alerts: true, preferredLang: 'Telugu', communicationPreference: 'SMS' },
+  { id: 'demo-cust-deepak', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+  { id: 'demo-cust-manish', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+  { id: 'demo-cust-deeps', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
 ];
 
 export const initialSuppliers: SupplierItem[] = [

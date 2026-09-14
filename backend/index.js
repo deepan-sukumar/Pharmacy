@@ -42,15 +42,15 @@ let memoryStore = {
     { id: 'demo-med-exp-001', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'DEMO-EXP-001', expiry: getDynamicExpiryDate(30), quantity: 77, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 85, barcode: '890103400777' },
   ],
   customers: [
-    { id: 'demo-cust-1', pharmacyId: 'DEMO_PHARMACY', name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true, preferredLang: 'English' },
-    { id: 'demo-cust-2', pharmacyId: 'DEMO_PHARMACY', name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'Hindi' },
-    { id: 'demo-cust-3', pharmacyId: 'DEMO_PHARMACY', name: 'Arun Kumar', phone: '+91 94480 77109', email: 'arun.k@example.com', visits: 6, lastVisit: 'Aug 18', allergies: 'Sulfa drugs', alerts: true, preferredLang: 'Kannada' },
-    { id: 'demo-cust-4', pharmacyId: 'DEMO_PHARMACY', name: 'Kavya S', phone: '+91 99001 22584', email: 'kavya.s@example.com', visits: 4, lastVisit: 'Aug 12', allergies: 'None', alerts: false, preferredLang: 'Tamil' },
-    { id: 'demo-cust-5', pharmacyId: 'DEMO_PHARMACY', name: 'Meena Devi', phone: '+91 96114 64190', email: 'meena.d@example.com', visits: 3, lastVisit: 'Aug 04', allergies: 'Aspirin', alerts: true, preferredLang: 'Telugu' },
-    // Dedicated Test/Demo Customers for Expiry & Recall SMS workflows
-    { id: 'demo-cust-deepak', pharmacyId: 'DEMO_PHARMACY', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English' },
-    { id: 'demo-cust-manish', pharmacyId: 'DEMO_PHARMACY', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'English' },
-    { id: 'demo-cust-deeps', pharmacyId: 'DEMO_PHARMACY', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English' },
+    { id: 'demo-cust-1', pharmacyId: 'DEMO_PHARMACY', name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true, preferredLang: 'English', communicationPreference: 'SMS' },
+    { id: 'demo-cust-2', pharmacyId: 'DEMO_PHARMACY', name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'Hindi', communicationPreference: 'SMS' },
+    { id: 'demo-cust-3', pharmacyId: 'DEMO_PHARMACY', name: 'Arun Kumar', phone: '+91 94480 77109', email: 'arun.k@example.com', visits: 6, lastVisit: 'Aug 18', allergies: 'Sulfa drugs', alerts: true, preferredLang: 'Kannada', communicationPreference: 'SMS' },
+    { id: 'demo-cust-4', pharmacyId: 'DEMO_PHARMACY', name: 'Kavya S', phone: '+91 99001 22584', email: 'kavya.s@example.com', visits: 4, lastVisit: 'Aug 12', allergies: 'None', alerts: false, preferredLang: 'Tamil', communicationPreference: 'SMS' },
+    { id: 'demo-cust-5', pharmacyId: 'DEMO_PHARMACY', name: 'Meena Devi', phone: '+91 96114 64190', email: 'meena.d@example.com', visits: 3, lastVisit: 'Aug 04', allergies: 'Aspirin', alerts: true, preferredLang: 'Telugu', communicationPreference: 'SMS' },
+    // Dedicated Test/Demo Customers for Expiry & Recall safety workflows
+    { id: 'demo-cust-deepak', pharmacyId: 'DEMO_PHARMACY', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+    { id: 'demo-cust-manish', pharmacyId: 'DEMO_PHARMACY', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+    { id: 'demo-cust-deeps', pharmacyId: 'DEMO_PHARMACY', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
   ],
   suppliers: [
     { id: 'demo-supp-1', pharmacyId: 'DEMO_PHARMACY', name: 'ABC Pharma', email: 'supp@abcpharma.com', batches: 24, purchases: '₹ 2,48,600', rating: 'Excellent', phone: '+91 80 4122 8890' },
@@ -727,10 +727,25 @@ app.get('/api/customers', async (req, res) => {
         return res.json(memoryStore.customers);
       }
 
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const items = snapshot.docs.map(doc => {
+        const data = doc.data();
+        let commPref = data.communicationPreference;
+        if (!commPref) {
+          const nameLower = (data.name || '').toLowerCase();
+          commPref = (nameLower.includes('deepak') || nameLower.includes('manish') || nameLower.includes('deeps')) ? 'WHATSAPP' : 'SMS';
+        }
+        return { id: doc.id, ...data, communicationPreference: commPref };
+      });
       return res.json(items);
     }
-    const filtered = memoryStore.customers.filter(c => c.pharmacyId === pharmacyId);
+    const filtered = memoryStore.customers.filter(c => c.pharmacyId === pharmacyId).map(c => {
+      let commPref = c.communicationPreference;
+      if (!commPref) {
+        const nameLower = (c.name || '').toLowerCase();
+        commPref = (nameLower.includes('deepak') || nameLower.includes('manish') || nameLower.includes('deeps')) ? 'WHATSAPP' : 'SMS';
+      }
+      return { ...c, communicationPreference: commPref };
+    });
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -740,7 +755,7 @@ app.get('/api/customers', async (req, res) => {
 app.post('/api/customers', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
-    const { name, phone, email, allergies, alerts, preferredLang } = req.body;
+    const { name, phone, email, allergies, alerts, preferredLang, communicationPreference } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ error: 'Customer name and phone number are required.' });
@@ -754,6 +769,7 @@ app.post('/api/customers', async (req, res) => {
       allergies: allergies || 'None',
       alerts: alerts ?? true,
       preferredLang: preferredLang || 'English',
+      communicationPreference: communicationPreference === 'WHATSAPP' ? 'WHATSAPP' : 'SMS',
       visits: 1,
       lastVisit: 'Today',
       createdAt: new Date().toISOString()
@@ -776,8 +792,12 @@ app.post('/api/customers', async (req, res) => {
 app.put('/api/customers/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
     delete updates.id;
+
+    if (updates.communicationPreference) {
+      updates.communicationPreference = updates.communicationPreference === 'WHATSAPP' ? 'WHATSAPP' : 'SMS';
+    }
 
     if (isConnected()) {
       await db.collection('customers').doc(id).set(updates, { merge: true });
@@ -1286,8 +1306,135 @@ app.get('/api/ai/expiry-risk/:batchId', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// UNIFIED REAL SMS NOTIFICATION SYSTEM (AUTOMATIC + MANUAL)
+// PHARMACIST-CONTROLLED SAFETY COMMUNICATION (WHATSAPP + SMS)
 // -------------------------------------------------------------
+app.post('/api/communications/log', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const {
+      customerId,
+      customer,
+      recipientName,
+      phone,
+      recipientPhone,
+      notificationType,
+      medicine,
+      medicineId,
+      batch,
+      batchId,
+      reason,
+      communicationPreference,
+      selectedChannel,
+      message,
+      language,
+      pharmacistId,
+      status
+    } = req.body;
+
+    const targetPhone = recipientPhone || phone;
+    if (!targetPhone) {
+      return res.status(400).json({ error: 'Recipient mobile number is required.' });
+    }
+
+    const channel = (selectedChannel || 'SMS').toUpperCase();
+    const defaultStatus = channel === 'WHATSAPP' ? 'WHATSAPP_OPENED' : 'SMS_COMPOSER_OPENED';
+    const finalStatus = status || defaultStatus;
+
+    const logRecord = {
+      pharmacyId,
+      customerId: customerId || null,
+      recipientName: recipientName || customer || 'Patient',
+      recipientPhone: targetPhone,
+      e164Phone: targetPhone.startsWith('+') ? targetPhone : `+91${targetPhone.replace(/\D/g, '').slice(-10)}`,
+      recipientType: 'customer',
+      notificationType: notificationType || 'SAFETY_COMMUNICATION',
+      medicineId: medicineId || medicine || null,
+      batchId: batchId || batch || null,
+      reason: reason || (notificationType === 'RECALL' ? 'Batch Recall Advisory' : 'Near Expiry Alert'),
+      communicationPreference: communicationPreference || (channel === 'WHATSAPP' ? 'WHATSAPP' : 'SMS'),
+      selectedChannel: channel,
+      message: message || '',
+      language: language || 'English',
+      pharmacistId: pharmacistId || 'Pharmacist',
+      provider: channel === 'WHATSAPP' ? 'Pharmacist Direct WhatsApp' : 'Pharmacist Device SMS Composer',
+      providerMessageId: `COMM-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      status: finalStatus,
+      isSandbox: false,
+      sandboxDetails: null,
+      notificationSource: 'manual',
+      createdAt: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
+      lastStatusCheckedAt: new Date().toISOString(),
+      deliveredAt: null,
+      failedAt: finalStatus === 'FAILED' ? new Date().toISOString() : null,
+      retryCount: 0
+    };
+
+    if (isConnected()) {
+      const docRef = await db.collection('smsNotifications').add(logRecord);
+      return res.status(201).json({ success: true, id: docRef.id, ...logRecord });
+    }
+
+    const id = `comm_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+    const saved = { id, ...logRecord };
+    res.status(201).json({ success: true, id, ...saved });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Alias endpoint for action logging
+app.post('/api/sms/log-action', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const {
+      customerId, recipientName, recipientPhone, notificationType,
+      medicineId, batchId, reason, communicationPreference,
+      selectedChannel, message, language, pharmacistId, status
+    } = req.body;
+
+    const channel = (selectedChannel || 'SMS').toUpperCase();
+    const finalStatus = status || (channel === 'WHATSAPP' ? 'WHATSAPP_OPENED' : 'SMS_COMPOSER_OPENED');
+
+    const logRecord = {
+      pharmacyId,
+      customerId: customerId || null,
+      recipientName: recipientName || 'Patient',
+      recipientPhone: recipientPhone || '',
+      notificationType: notificationType || 'SAFETY_COMMUNICATION',
+      medicineId: medicineId || null,
+      batchId: batchId || null,
+      reason: reason || 'Pharmacy Safety Notification',
+      communicationPreference: communicationPreference || 'SMS',
+      selectedChannel: channel,
+      message: message || '',
+      language: language || 'English',
+      pharmacistId: pharmacistId || 'Pharmacist',
+      provider: channel === 'WHATSAPP' ? 'Pharmacist Direct WhatsApp' : 'Pharmacist Device SMS Composer',
+      providerMessageId: `COMM-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      status: finalStatus,
+      isSandbox: false,
+      notificationSource: 'manual',
+      createdAt: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
+      lastStatusCheckedAt: new Date().toISOString(),
+      deliveredAt: null,
+      failedAt: finalStatus === 'FAILED' ? new Date().toISOString() : null,
+      retryCount: 0
+    };
+
+    if (isConnected()) {
+      const docRef = await db.collection('smsNotifications').add(logRecord);
+      return res.status(201).json({ success: true, id: docRef.id, ...logRecord });
+    }
+
+    const id = `comm_${Date.now()}`;
+    res.status(201).json({ success: true, id, ...logRecord });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/sms/send-manual', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);

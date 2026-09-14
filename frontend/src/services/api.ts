@@ -44,6 +44,7 @@ export interface CustomerItem {
   allergies?: string;
   alerts: boolean;
   preferredLang?: string;
+  communicationPreference?: 'WHATSAPP' | 'SMS';
 }
 
 export interface SupplierItem {
@@ -522,6 +523,30 @@ export const api = {
 
   async sendControlledTestSms(data: { phone: string; testType?: string; customMessage?: string }) {
     const res = await fetch(`${API_BASE_URL}/sms/controlled-test`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  },
+
+  async logSafetyCommunication(data: {
+    pharmacyId?: string;
+    customerId?: string | number;
+    recipientName: string;
+    recipientPhone: string;
+    notificationType: string;
+    medicineId?: string;
+    batchId?: string;
+    reason?: string;
+    communicationPreference?: 'WHATSAPP' | 'SMS';
+    selectedChannel: 'WHATSAPP' | 'SMS';
+    message: string;
+    language?: string;
+    pharmacistId?: string;
+    status: 'WHATSAPP_OPENED' | 'SMS_COMPOSER_OPENED' | 'COMMUNICATION_INITIATED' | 'CANCELLED' | 'FAILED';
+  }) {
+    const res = await fetch(`${API_BASE_URL}/communications/log`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data),

@@ -474,19 +474,35 @@ export default function CustomerSmsDetailsModal({
                 <div style={{ marginTop: 3 }}>
                   <span
                     className={`chip ${
-                      smsLog?.status === 'delivered'
+                      smsLog?.status?.toLowerCase() === 'delivered' || smsLog?.status === 'WHATSAPP_OPENED'
                         ? 'badge-green'
-                        : smsLog?.status === 'submitted' || smsLog?.status === 'sent'
+                        : smsLog?.status === 'SMS_COMPOSER_OPENED' || smsLog?.status === 'submitted' || smsLog?.status === 'sent'
                         ? 'badge-blue'
-                        : smsLog?.status === 'pending'
+                        : smsLog?.status === 'pending' || smsLog?.status === 'COMMUNICATION_INITIATED'
                         ? 'badge-amber'
-                        : smsLog?.status === 'expired'
+                        : smsLog?.status === 'expired' || smsLog?.status === 'CANCELLED'
                         ? 'badge-slate'
                         : 'badge-red'
                     }`}
                     style={{ fontSize: 11 }}
                   >
-                    {smsLog?.status === 'delivered' ? (
+                    {smsLog?.status === 'WHATSAPP_OPENED' ? (
+                      <>
+                        <CheckCircle2 size={12} /> WhatsApp Web/App Opened
+                      </>
+                    ) : smsLog?.status === 'SMS_COMPOSER_OPENED' ? (
+                      <>
+                        <CheckCircle2 size={12} /> SMS Composer Launched
+                      </>
+                    ) : smsLog?.status === 'COMMUNICATION_INITIATED' ? (
+                      <>
+                        <Clock size={12} /> Communication Initiated
+                      </>
+                    ) : smsLog?.status === 'CANCELLED' ? (
+                      <>
+                        <XCircle size={12} /> Cancelled by Pharmacist
+                      </>
+                    ) : smsLog?.status === 'delivered' ? (
                       <>
                         <CheckCircle2 size={12} /> Delivered
                       </>

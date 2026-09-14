@@ -35,6 +35,7 @@ const {
 const { runNotificationCycle } = require('../services/schedulerService');
 
 async function runAllTests() {
+  process.env.SMS_PROVIDER = 'MOCK_TEST_PROVIDER';
   console.log('\n🧪 Starting PharmaFlow Automated Integration Tests...\n');
   let passedCount = 0;
   let totalCount = 0;

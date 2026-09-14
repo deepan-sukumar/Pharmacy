@@ -672,17 +672,35 @@ export default function SmsReportsView({
                         ) : (
                           <span
                             className={`chip ${
-                              log.status === 'delivered'
+                              log.status === 'delivered' || (log.status as any) === 'WHATSAPP_OPENED'
                                 ? 'badge-green'
-                                : log.status === 'submitted' || log.status === 'sent'
+                                : (log.status as any) === 'SMS_COMPOSER_OPENED' || log.status === 'submitted' || log.status === 'sent'
                                 ? 'badge-blue'
-                                : log.status === 'pending'
+                                : log.status === 'pending' || (log.status as any) === 'COMMUNICATION_INITIATED'
                                 ? 'badge-amber'
+                                : (log.status as any) === 'CANCELLED'
+                                ? 'badge-slate'
                                 : 'badge-red'
                             }`}
                             style={{ fontSize: 11 }}
                           >
-                            {log.status === 'delivered' ? (
+                            {(log.status as any) === 'WHATSAPP_OPENED' ? (
+                              <>
+                                <CheckCircle2 size={12} /> WhatsApp Opened
+                              </>
+                            ) : (log.status as any) === 'SMS_COMPOSER_OPENED' ? (
+                              <>
+                                <CheckCircle2 size={12} /> SMS Composer
+                              </>
+                            ) : (log.status as any) === 'COMMUNICATION_INITIATED' ? (
+                              <>
+                                <Clock size={12} /> Initiated
+                              </>
+                            ) : (log.status as any) === 'CANCELLED' ? (
+                              <>
+                                <XCircle size={12} /> Cancelled
+                              </>
+                            ) : log.status === 'delivered' ? (
                               <>
                                 <CheckCircle2 size={12} /> Delivered
                               </>
