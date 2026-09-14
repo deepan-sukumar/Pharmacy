@@ -30,7 +30,7 @@ interface CustomerSmsDetailsModalProps {
     medicineId?: string;
     batchId?: string;
   } | null;
-  customer?: CustomerItem | null;
+  customer?: any;
   onRefreshSms?: () => void;
   showToast?: (msg: string) => void;
 }

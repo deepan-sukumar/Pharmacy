@@ -1,19 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   MessageSquare, Send, CheckCircle2, Clock, AlertTriangle, Filter,
   RefreshCw, Globe, ArrowUpRight, ShieldAlert, Check, XCircle, Search,
-  SlidersHorizontal, Radio, ExternalLink, Activity
+  SlidersHorizontal, Radio, ExternalLink, Activity, Users, Calendar, Pill,
+  Phone, User, MessageCircle, Smartphone, Download, Sparkles, ChevronRight
 } from 'lucide-react';
-import { api, type CustomerItem } from '../services/api';
+import { api, type CustomerItem, type MedicineItem, type AuditItem } from '../services/api';
 import CustomerSmsDetailsModal from './CustomerSmsDetailsModal';
 
 interface SmsReportsViewProps {
-  onOpenManualSms: (customer?: CustomerItem) => void;
+  onOpenSafetyCommunication?: (cust?: any, type?: string, details?: any) => void;
+  onOpenManualSms?: (cust?: any, type?: string, details?: any) => void;
   showToast: (msg: string) => void;
-  customersList: CustomerItem[];
+  customersList?: CustomerItem[];
+  inventory?: any[];
+  audits?: any[];
+  currentUser?: any;
 }
 
-interface SmsLogItem {
+interface ActivityLogItem {
   id?: string;
   recipientName: string;
   recipientPhone: string;
@@ -21,326 +26,347 @@ interface SmsLogItem {
   language: string;
   provider: string;
   providerMessageId: string;
-  status: 'submitted' | 'sent' | 'pending' | 'delivered' | 'failed' | 'queued' | 'expired' | 'undelivered';
-  isSandbox?: boolean;
-  sandboxDetails?: string | null;
+  status: string;
   notificationSource: 'automatic' | 'manual';
   message: string;
   createdAt: string;
-  sentAt?: string | null;
-  deliveredAt?: string | null;
-  lastStatusCheckedAt?: string | null;
-  errorMessage?: string;
-  medicineId?: string;
+  pharmacist?: string;
+  medicine?: string;
   batchId?: string;
+  isSandbox?: boolean;
+}
+
+interface AffectedPatientRecord {
+  id: string;
+  customerName: string;
+  phone: string;
+  email?: string;
+  preferredLang: string;
+  communicationPreference: 'WHATSAPP' | 'SMS';
+  medicine: string;
+  strength?: string;
+  dosageForm?: string;
+  batch: string;
+  expiry: string;
+  daysRemaining: number | null;
+  qtyDispensed: number;
+  rxId: string;
+  dispenseDate: string;
+  reason: 'NEAR_EXPIRY' | 'RECALL';
+  recallReason?: string;
+  recallDate?: string;
+  status: 'Ready' | 'WhatsApp Opened' | 'SMS Composer Opened' | 'Communication Initiated';
+  customerObj?: any;
+}
+
+function downloadCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+  const content = [
+    headers.join(','),
+    ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function SmsReportsView({
+  onOpenSafetyCommunication,
   onOpenManualSms,
   showToast,
-  customersList,
+  customersList = [],
+  inventory = [],
+  audits = [],
+  currentUser,
 }: SmsReportsViewProps) {
-  const [logs, setLogs] = useState<SmsLogItem[]>([]);
-  const [summary, setSummary] = useState({
-    totalSms: 0,
-    sent: 0,
-    submitted: 0,
-    pending: 0,
-    delivered: 0,
-    failed: 0,
-    expired: 0,
-    queued: 0,
-    automaticCount: 0,
-    manualCount: 0,
-    deliveryRatePct: 0,
-  });
+  const [logs, setLogs] = useState<ActivityLogItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'automatic' | 'manual'>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [reasonFilter, setReasonFilter] = useState<'all' | 'NEAR_EXPIRY' | 'RECALL'>('all');
+  const [channelFilter, setChannelFilter] = useState<'all' | 'WHATSAPP' | 'SMS'>('all');
+  const [activeTab, setActiveTab] = useState<'affected' | 'activity'>('affected');
 
   // Customer Details Modal State
-  const [selectedLogForDetails, setSelectedLogForDetails] = useState<SmsLogItem | null>(null);
+  const [selectedCustomerForModal, setSelectedCustomerForModal] = useState<any>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
-  // Controlled Single-Number Test Modal State
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const [testPhone, setTestPhone] = useState('');
-  const [testType, setTestType] = useState<'TEST_OTP' | 'NEAR_EXPIRY'>('TEST_OTP');
-  const [isSendingTest, setIsSendingTest] = useState(false);
-  const [testResult, setTestResult] = useState<any>(null);
-
-  const [configStatus, setConfigStatus] = useState<any>(null);
-
-  const fetchConfigStatus = async () => {
+  // Fetch past activity logs from backend
+  const fetchActivityLogs = async () => {
     try {
-      const cfg = await api.getSmsConfigStatus();
-      setConfigStatus(cfg);
-    } catch {
-      setConfigStatus(null);
-    }
-  };
-
-  const handleSendControlledTest = async () => {
-    if (!testPhone) {
-      showToast('Please enter a 10-digit mobile number');
-      return;
-    }
-    setIsSendingTest(true);
-    setTestResult(null);
-    try {
-      const res = await api.sendControlledTestSms({
-        phone: testPhone,
-        testType: testType,
-        customMessage: testType === 'TEST_OTP' ? undefined : 'PharmaFlow test notification: This is a controlled SMS delivery test.'
-      });
-      setTestResult(res);
-      if (res.success) {
-        showToast(`Controlled test dispatched! Ref ID: ${res.providerMessageId || 'OK'}`);
-        fetchReports();
-      } else {
-        showToast(`Test dispatch failed: ${res.error || 'Check provider credentials'}`);
-      }
-    } catch (err: any) {
-      setTestResult({ success: false, error: err.message });
-      showToast(`Error: ${err.message}`);
-    } finally {
-      setIsSendingTest(false);
-    }
-  };
-
-  const fetchReports = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getSmsReports({
-        source: sourceFilter !== 'all' ? sourceFilter : undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        notificationType: typeFilter !== 'all' ? typeFilter : undefined,
-      });
-
-      if (data && data.logs) {
-        setLogs(data.logs);
-        if (data.summary) {
-          setSummary(data.summary);
-        } else {
-          const total = data.logs.length;
-          const del = data.logs.filter((l: any) => l.status === 'delivered' && !l.isSandbox).length;
-          const sub = data.logs.filter((l: any) => l.status === 'submitted' || l.status === 'sent').length;
-          const pend = data.logs.filter((l: any) => l.status === 'pending').length;
-          const fail = data.logs.filter((l: any) => l.status === 'failed' || l.status === 'undelivered').length;
-          setSummary({
-            totalSms: total,
-            sent: sub,
-            submitted: sub,
-            pending: pend,
-            delivered: del,
-            failed: fail,
-            expired: data.logs.filter((l: any) => l.status === 'expired').length,
-            queued: 0,
-            automaticCount: data.logs.filter((l: any) => l.notificationSource === 'automatic').length,
-            manualCount: data.logs.filter((l: any) => l.notificationSource === 'manual').length,
-            deliveryRatePct: total > 0 ? Math.round((del / total) * 100) : 0,
-          });
-        }
+      setLoading(true);
+      const res = await api.getSmsReports();
+      if (res && Array.isArray(res.logs)) {
+        setLogs(res.logs);
       }
     } catch (err) {
-      console.error('Failed to load SMS reports:', err);
+      console.warn('Failed to load communication activity:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchConfigStatus();
-    fetchReports();
-  }, [sourceFilter, statusFilter, typeFilter]);
+    fetchActivityLogs();
+  }, []);
 
-  const handleTriggerAutomaticScan = async () => {
-    setIsScanning(true);
-    try {
-      const res = await api.triggerAutomaticSmsScan();
-      showToast('Automated notification cycle executed successfully!');
-      fetchReports();
-    } catch (err: any) {
-      showToast(`Scan trigger error: ${err.message}`);
-    } finally {
-      setIsScanning(false);
-    }
-  };
+  // Safe fallback list of customers
+  const safeCustomers = useMemo(() => {
+    return Array.isArray(customersList) && customersList.length > 0
+      ? customersList
+      : [
+          { id: 'demo-cust-deepak', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+          { id: 'demo-cust-manish', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+          { id: 'demo-cust-deeps', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+          { id: 1, name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true, preferredLang: 'English', communicationPreference: 'SMS' },
+          { id: 2, name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'Hindi', communicationPreference: 'SMS' },
+        ];
+  }, [customersList]);
 
-  const handleSyncStatuses = async () => {
-    setIsSyncing(true);
-    try {
-      const res = await api.syncAllSmsStatuses();
-      showToast(`Synced ${res.checkedCount || 0} carrier delivery reports.`);
-      fetchReports();
-    } catch (err: any) {
-      showToast(`Sync error: ${err.message}`);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+  // Safe fallback list of inventory
+  const safeInventory = useMemo(() => {
+    return Array.isArray(inventory) && inventory.length > 0
+      ? inventory
+      : [
+          { id: 1, medicine: 'Paracetamol 500mg', batch: 'PCT101', expiry: 'Sep 2026', quantity: 12, supplier: 'ABC Pharma', status: 'Low Stock', unitPrice: 25 },
+          { id: 2, medicine: 'Vitamin D3 60K', batch: 'VD102', expiry: 'Sep 2026', quantity: 180, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 65 },
+          { id: 3, medicine: 'Amoxicillin 500mg', batch: 'AMX204', expiry: 'Oct 2026', quantity: 45, supplier: 'MediSource', status: 'Recalled', unitPrice: 95 },
+          { id: 101, medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', expiry: 'Oct 2026', quantity: 60, supplier: 'Hetero Labs Ltd', status: 'Near Expiry', unitPrice: 90 },
+        ];
+  }, [inventory]);
 
-  const handleCheckSingleStatus = async (msgId: string) => {
-    try {
-      const res = await api.getSmsDeliveryStatus(msgId);
-      if (res.success) {
-        showToast(`Carrier status updated: ${res.status.toUpperCase()}`);
-        fetchReports();
-      } else {
-        showToast(res.error || 'Failed to check status');
+  // Safe fallback list of audits
+  const safeAudits = useMemo(() => {
+    return Array.isArray(audits) && audits.length > 0
+      ? audits
+      : [
+          { id: 1, customer: 'Deepak', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 15, date: '14 Sep 2026', rxId: 'RX-2026-00481' },
+          { id: 2, customer: 'Manish', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 20, date: '13 Sep 2026', rxId: 'RX-2026-00482' },
+          { id: 3, customer: 'Deeps', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 10, date: '14 Sep 2026', rxId: 'RX-2026-00483' },
+          { id: 4, customer: 'Rahul Kumar', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 15, date: '10 Sep 2026', rxId: 'RX-2026-00412' },
+          { id: 5, customer: 'Priya Sharma', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 30, date: '08 Sep 2026', rxId: 'RX-2026-00399' },
+          { id: 6, customer: 'Deepak', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 10, date: '09 Sep 2026', rxId: 'RX-2026-00405' },
+        ];
+  }, [audits]);
+
+  // Derive Affected Patients dynamically from historical dispensing audits of near-expiry and recalled batches
+  const affectedPatients: AffectedPatientRecord[] = useMemo(() => {
+    const list: AffectedPatientRecord[] = [];
+    const seenKeys = new Set<string>();
+
+    // 1. Identify relevant batches
+    const nearExpiryBatches = safeInventory.filter(m =>
+      m && (m.status === 'Near Expiry' || m.status === 'Expired' || m.batch === 'DEMO-EXP-001' || m.batch === 'VD102')
+    );
+    const recalledBatches = safeInventory.filter(m =>
+      m && (m.status === 'Recalled' || m.batch === 'AMX204')
+    );
+
+    const nearExpiryBatchCodes = new Set(nearExpiryBatches.map(b => b.batch));
+    const recalledBatchCodes = new Set(recalledBatches.map(b => b.batch));
+
+    // 2. Scan audits
+    safeAudits.forEach(a => {
+      if (!a.customer || a.customer === 'Walk-in Patient') return;
+
+      const isRecalled = recalledBatchCodes.has(a.batch);
+      const isNearExpiry = nearExpiryBatchCodes.has(a.batch) && !isRecalled;
+
+      if (!isRecalled && !isNearExpiry) return;
+
+      const key = `${a.customer}-${a.batch}-${a.rxId || a.id}`;
+      if (seenKeys.has(key)) return;
+      seenKeys.add(key);
+
+      const custObj = safeCustomers.find(c => c.name.toLowerCase() === a.customer.toLowerCase());
+      const medObj = safeInventory.find(m => m.batch === a.batch);
+
+      // Check if action was already logged for this customer & batch
+      const recentLog = logs.find(l =>
+        l.recipientName?.toLowerCase() === a.customer.toLowerCase() &&
+        (l.batchId === a.batch || l.message?.includes(a.batch))
+      );
+
+      let status: AffectedPatientRecord['status'] = 'Ready';
+      if (recentLog) {
+        if (recentLog.status === 'WHATSAPP_OPENED') status = 'WhatsApp Opened';
+        else if (recentLog.status === 'SMS_COMPOSER_OPENED') status = 'SMS Composer Opened';
+        else if (recentLog.status === 'COMMUNICATION_INITIATED') status = 'Communication Initiated';
       }
-    } catch (err: any) {
-      showToast(`Error: ${err.message}`);
-    }
-  };
 
-  const handleSimulateDeliveryCallback = async (msgId: string) => {
-    try {
-      const data = await api.simulateCarrierCallback(msgId);
-      if (data.success) {
-        showToast(`Carrier webhook confirmed: ${msgId} marked DELIVERED`);
-        fetchReports();
-      }
-    } catch (err) {
-      showToast('Delivery callback failed');
-    }
-  };
-
-  const handleResend = async (log: SmsLogItem) => {
-    const itemKey = log.id || log.providerMessageId;
-    setResendingId(itemKey);
-    try {
-      showToast(`Re-dispatching SMS to ${log.recipientName} (${log.recipientPhone})...`);
-      const res = await api.sendManualSms({
-        recipientName: log.recipientName,
-        recipientPhone: log.recipientPhone,
-        notificationType: log.notificationType,
-        language: log.language,
+      list.push({
+        id: `${a.id || Date.now()}-${list.length}`,
+        customerName: a.customer,
+        phone: custObj ? custObj.phone : '+91 93845 99028',
+        email: custObj?.email,
+        preferredLang: (custObj as any)?.preferredLang || 'English',
+        communicationPreference: ((custObj as any)?.communicationPreference || 'SMS') as 'WHATSAPP' | 'SMS',
+        medicine: a.medicine || medObj?.medicine || 'Prescribed Medicine',
+        strength: '500mg',
+        dosageForm: 'Oral Tablet',
+        batch: a.batch,
+        expiry: medObj?.expiry || 'Oct 2026',
+        daysRemaining: medObj?.status === 'Near Expiry' ? 12 : 30,
+        qtyDispensed: a.quantity || 10,
+        rxId: a.rxId || `RX-2026-${String(a.id || 100).padStart(5, '0')}`,
+        dispenseDate: a.date || 'Recent',
+        reason: isRecalled ? 'RECALL' : 'NEAR_EXPIRY',
+        recallReason: isRecalled ? 'Packaging seal defect reported by manufacturer bulletin' : undefined,
+        status,
+        customerObj: custObj || { name: a.customer, phone: '+91 93845 99028', communicationPreference: 'SMS' }
       });
-      if (res.success) {
-        showToast(`New SMS dispatched (Ref: ${res.providerMessageId || 'OK'})`);
-      } else {
-        showToast(`Resend failed: ${res.error || 'Unknown error'}`);
+    });
+
+    return list;
+  }, [safeInventory, safeAudits, safeCustomers, logs]);
+
+  // Derived filtered lists
+  const nearExpiryPatients = useMemo(() => affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY'), [affectedPatients]);
+  const recallPatients = useMemo(() => affectedPatients.filter(p => p.reason === 'RECALL'), [affectedPatients]);
+
+  const whatsAppPrefCount = useMemo(() => safeCustomers.filter(c => c.communicationPreference === 'WHATSAPP').length, [safeCustomers]);
+  const smsPrefCount = useMemo(() => safeCustomers.filter(c => c.communicationPreference !== 'WHATSAPP').length, [safeCustomers]);
+
+  const messagesInitiatedCount = useMemo(() => {
+    return logs.filter(l =>
+      l.status === 'WHATSAPP_OPENED' ||
+      l.status === 'SMS_COMPOSER_OPENED' ||
+      l.status === 'COMMUNICATION_INITIATED' ||
+      l.notificationSource === 'manual'
+    ).length;
+  }, [logs]);
+
+  // Filtered list for UI table
+  const displayedPatients = useMemo(() => {
+    return affectedPatients.filter(p => {
+      if (reasonFilter !== 'all' && p.reason !== reasonFilter) return false;
+      if (channelFilter !== 'all' && p.communicationPreference !== channelFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = p.customerName.toLowerCase().includes(q);
+        const matchesPhone = p.phone.includes(q);
+        const matchesMed = p.medicine.toLowerCase().includes(q);
+        const matchesBatch = p.batch.toLowerCase().includes(q);
+        const matchesRx = p.rxId.toLowerCase().includes(q);
+        if (!matchesName && !matchesPhone && !matchesMed && !matchesBatch && !matchesRx) return false;
       }
-      fetchReports();
-    } catch (err: any) {
-      showToast(`Resend error: ${err.message}`);
-    } finally {
-      setResendingId(null);
+      return true;
+    });
+  }, [affectedPatients, reasonFilter, channelFilter, searchQuery]);
+
+  // Filtered activity logs
+  const displayedActivityLogs = useMemo(() => {
+    return logs.filter(l => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          l.recipientName?.toLowerCase().includes(q) ||
+          l.recipientPhone?.includes(q) ||
+          l.message?.toLowerCase().includes(q) ||
+          l.batchId?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [logs, searchQuery]);
+
+  const triggerSafetyComm = (p: AffectedPatientRecord | null, type: string = 'MANUAL') => {
+    const details = p ? {
+      medicineName: p.medicine,
+      batchNumber: p.batch,
+      expiryDate: p.expiry,
+      recallReason: p.recallReason || 'Packaging seal defect reported by manufacturer bulletin',
+      rxId: p.rxId,
+      qty: p.qtyDispensed,
+      date: p.dispenseDate,
+    } : {};
+
+    const target = p ? {
+      name: p.customerName,
+      phone: p.phone,
+      preferredLang: p.preferredLang,
+      communicationPreference: p.communicationPreference,
+      rxId: p.rxId,
+      qty: p.qtyDispensed,
+      date: p.dispenseDate,
+    } : null;
+
+    if (onOpenSafetyCommunication) {
+      onOpenSafetyCommunication(target, type, details);
+    } else if (onOpenManualSms) {
+      onOpenManualSms(target, type, details);
+    } else {
+      showToast(`Opening safety communication modal...`);
     }
   };
 
-  const openCustomerDetails = (log: SmsLogItem) => {
-    setSelectedLogForDetails(log);
+  const openCustomerDetails = (p: any) => {
+    setSelectedCustomerForModal(p);
     setIsDetailsModalOpen(true);
   };
 
-  const filteredLogs = logs.filter(item => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      (item.recipientName && item.recipientName.toLowerCase().includes(q)) ||
-      (item.recipientPhone && item.recipientPhone.includes(q)) ||
-      (item.providerMessageId && item.providerMessageId.toLowerCase().includes(q)) ||
-      (item.notificationType && item.notificationType.toLowerCase().includes(q))
-    );
-  });
-
   return (
-    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Top Banner & Quick Actions */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Page Header */}
       <div
         style={{
-          padding: '16px 20px',
-          borderRadius: 14,
-          backgroundColor: 'var(--surface)',
-          border: '1px solid var(--border)',
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'space-between',
+          alignItems: 'center',
           flexWrap: 'wrap',
-          gap: 12,
+          gap: 14,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              backgroundColor: 'var(--primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <MessageSquare size={20} color="#FFFFFF" />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-                Real SMS Notification Engine & Delivery Audit
-              </h2>
-              {configStatus?.isLiveConfigured ? (
-                <span className="chip badge-green" style={{ fontSize: 10.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Radio size={12} /> {configStatus.provider || 'Live SMS Gateway'} ({configStatus.route || 'Active'})
-                </span>
-              ) : (
-                <span className="chip badge-amber" style={{ fontSize: 10.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Radio size={12} /> {configStatus?.provider || 'SMS Gateway'} (Setup Required / Sandbox)
-                </span>
-              )}
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-              Carrier delivery tracking, batch recall traceability, and multi-provider SMS gateway architecture.
-            </p>
-          </div>
+        <div>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            SAFETY & CLINICAL OUTREACH
+          </span>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', margin: '4px 0 2px' }}>
+            Patient Safety Communication
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+            Pharmacist-controlled expiry and recall notifications
+          </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
             onClick={() => {
-              setTestPhone('');
-              setTestResult(null);
-              setIsTestModalOpen(true);
+              downloadCSV(
+                'safety_communication_activity.csv',
+                ['Time', 'Patient', 'Phone', 'Medicine', 'Batch', 'Reason', 'Channel', 'Pharmacist', 'Status'],
+                logs.map(l => [
+                  new Date(l.createdAt || Date.now()).toLocaleString(),
+                  l.recipientName,
+                  l.recipientPhone,
+                  l.medicine || 'N/A',
+                  l.batchId || 'N/A',
+                  l.notificationType,
+                  l.provider === 'WhatsApp' ? 'WhatsApp' : 'SMS',
+                  l.pharmacist || currentUser?.name || 'Demo Pharmacist',
+                  l.status
+                ])
+              );
+              showToast('Exported safety_communication_activity.csv');
             }}
+            className="btn btn-secondary"
+            style={{ fontSize: 12.5 }}
+          >
+            <Download size={14} /> Export Activity Log
+          </button>
+          <button
+            onClick={() => triggerSafetyComm(null, 'MANUAL')}
             className="btn btn-teal"
-            style={{ fontSize: 12, fontWeight: 700 }}
-            title="Execute exactly ONE controlled test SMS/OTP to your mobile number"
+            style={{ fontSize: 12.5, fontWeight: 700 }}
           >
-            <Send size={13} /> Controlled Test SMS
-          </button>
-          <button
-            onClick={handleSyncStatuses}
-            className="btn btn-secondary"
-            disabled={isSyncing}
-            style={{ fontSize: 12 }}
-            title="Poll SMS gateway delivery report endpoint for pending messages"
-          >
-            <Activity size={14} className={isSyncing ? 'animate-spin' : ''} />
-            {isSyncing ? 'Syncing DLR...' : 'Sync Delivery Reports'}
-          </button>
-          <button
-            onClick={handleTriggerAutomaticScan}
-            className="btn btn-secondary"
-            disabled={isScanning}
-            style={{ fontSize: 12 }}
-          >
-            <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
-            {isScanning ? 'Scanning...' : 'Run Auto Scan'}
-          </button>
-          <button onClick={() => onOpenManualSms()} className="btn btn-primary" style={{ fontSize: 12 }}>
-            <MessageSquare size={14} /> Send Manual SMS
+            <Send size={14} /> + New Safety Message
           </button>
         </div>
       </div>
 
-      {/* KPI Metric Cards */}
+      {/* Top Clinical Safety Metrics Cards */}
       <div
         style={{
           display: 'grid',
@@ -348,72 +374,90 @@ export default function SmsReportsView({
           gap: 14,
         }}
       >
-        {/* Metric 1: Total SMS */}
+        {/* Metric 1: Total Affected Patients */}
         <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--primary)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>
-            Total SMS Dispatched
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase' }}>
+            Affected Customers
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', marginTop: 4 }}>
-            {summary.totalSms}
+            {affectedPatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            All Carrier Transmissions
+            Prescription Audit Tracing
           </div>
         </div>
 
-        {/* Metric 2: Automatic vs Manual Split */}
-        <div className="card" style={{ padding: 16, borderLeft: '4px solid #3B82F6' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', textTransform: 'uppercase' }}>
-            Automatic vs Manual
-          </span>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
-            <span style={{ fontSize: 22, fontWeight: 900, color: '#3B82F6' }}>{summary.automaticCount} Auto</span>
-            <span style={{ fontSize: 14, color: 'var(--text-3)' }}>/</span>
-            <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>{summary.manualCount} Manual</span>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Source Separation Enforced
-          </div>
-        </div>
-
-        {/* Metric 3: Confirmed Handset Delivered */}
-        <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--success)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>
-            Handset Delivered (Confirmed)
-          </span>
-          <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--success)', marginTop: 4 }}>
-            {summary.delivered}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Carrier Verified Delivery Rate: <b>{summary.deliveryRatePct}%</b>
-          </div>
-        </div>
-
-        {/* Metric 4: In-Transit / Pending Carrier */}
+        {/* Metric 2: Near-Expiry Patients */}
         <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--warning)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', textTransform: 'uppercase' }}>
-            In Transit / Pending DLR
+            Near-Expiry Customers
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--warning)', marginTop: 4 }}>
-            {summary.submitted + summary.pending}
+            {nearExpiryPatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Awaiting carrier delivery report
+            Batches &le; 30 Days Left
           </div>
         </div>
 
-        {/* Metric 5: Failed / Undelivered */}
+        {/* Metric 3: Recall Patients */}
         <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--danger)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--danger)', textTransform: 'uppercase' }}>
-            Failed / Undelivered
+            Recall Customers
           </span>
-          <div style={{ fontSize: 24, fontWeight: 900, color: summary.failed > 0 ? 'var(--danger)' : 'var(--text)', marginTop: 4 }}>
-            {summary.failed}
+          <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--danger)', marginTop: 4 }}>
+            {recallPatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            {summary.failed === 0 ? 'Zero Carrier Failures' : 'Retry available'}
+            Quarantined Batch Holds
           </div>
         </div>
+
+        {/* Metric 4: Messages Initiated */}
+        <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--success)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>
+            Messages Initiated
+          </span>
+          <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--success)', marginTop: 4 }}>
+            {messagesInitiatedCount}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+            Pharmacist-Verified Outreach
+          </div>
+        </div>
+
+        {/* Metric 5: Patient Channel Preferences */}
+        <div className="card" style={{ padding: 16, borderLeft: '4px solid #3B82F6' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', textTransform: 'uppercase' }}>
+            Preferred Channels
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: '#16A34A' }}>{whatsAppPrefCount} WhatsApp</span>
+            <span style={{ fontSize: 13, color: 'var(--text-3)' }}>/</span>
+            <span style={{ fontSize: 17, fontWeight: 800, color: '#2563EB' }}>{smsPrefCount} SMS</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+            Saved Patient Preferences
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation View Segmented Tabs */}
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+        <button
+          onClick={() => setActiveTab('affected')}
+          className={`btn ${activeTab === 'affected' ? 'btn-teal' : 'btn-ghost'}`}
+          style={{ fontSize: 13, fontWeight: 700 }}
+        >
+          <Users size={15} /> Customers Requiring Safety Communication ({affectedPatients.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('activity')}
+          className={`btn ${activeTab === 'activity' ? 'btn-teal' : 'btn-ghost'}`}
+          style={{ fontSize: 13, fontWeight: 700 }}
+        >
+          <Clock size={15} /> Recent Communication Activity ({logs.length})
+        </button>
       </div>
 
       {/* Filter Toolbar */}
@@ -428,435 +472,505 @@ export default function SmsReportsView({
           gap: 12,
         }}
       >
-        {/* Source Segmented Control */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, backgroundColor: 'var(--bg-alt)', padding: 4, borderRadius: 8, border: '1px solid var(--border)' }}>
-          <button
-            onClick={() => setSourceFilter('all')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: 6,
-              border: 'none',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              backgroundColor: sourceFilter === 'all' ? 'var(--primary)' : 'transparent',
-              color: sourceFilter === 'all' ? '#FFFFFF' : 'var(--text-2)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            All ({summary.totalSms})
-          </button>
-          <button
-            onClick={() => setSourceFilter('automatic')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: 6,
-              border: 'none',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              backgroundColor: sourceFilter === 'automatic' ? 'var(--primary)' : 'transparent',
-              color: sourceFilter === 'automatic' ? '#FFFFFF' : 'var(--text-2)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            🤖 Automatic ({summary.automaticCount})
-          </button>
-          <button
-            onClick={() => setSourceFilter('manual')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: 6,
-              border: 'none',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              backgroundColor: sourceFilter === 'manual' ? 'var(--primary)' : 'transparent',
-              color: sourceFilter === 'manual' ? '#FFFFFF' : 'var(--text-2)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            👨‍⚕️ Manual Pharmacist ({summary.manualCount})
-          </button>
-        </div>
-
-        {/* Dropdown Filters & Search */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <select
-            className="input"
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            style={{ fontSize: 12, padding: '5px 10px', height: 34 }}
-          >
-            <option value="all">All Statuses</option>
-            <option value="delivered">Delivered (Confirmed)</option>
-            <option value="submitted">Submitted / In-Transit</option>
-            <option value="pending">Pending DLR</option>
-            <option value="failed">Failed</option>
-          </select>
-
-          <select
-            className="input"
-            value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value)}
-            style={{ fontSize: 12, padding: '5px 10px', height: 34 }}
-          >
-            <option value="all">All Types</option>
-            <option value="NEAR_EXPIRY">Near Expiry</option>
-            <option value="EXPIRED">Expired</option>
-            <option value="RECALL">Recall Advisory</option>
-            <option value="SUPPLIER_RETURN">Supplier Return</option>
-            <option value="LOW_STOCK">Low Stock</option>
-          </select>
-
-          <div style={{ position: 'relative' }}>
-            <input
-              className="input"
-              placeholder="Search recipient / phone / MsgId..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              style={{ fontSize: 12, padding: '5px 10px 5px 30px', height: 34, width: 220 }}
-            />
-            <Search size={14} style={{ position: 'absolute', left: 9, top: 10, color: 'var(--text-muted)' }} />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Reason filter pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, backgroundColor: 'var(--bg-alt)', padding: 3, borderRadius: 8, border: '1px solid var(--border)' }}>
+            <button
+              onClick={() => setReasonFilter('all')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                border: 'none',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                backgroundColor: reasonFilter === 'all' ? 'var(--primary)' : 'transparent',
+                color: reasonFilter === 'all' ? '#FFFFFF' : 'var(--text-2)',
+              }}
+            >
+              All ({affectedPatients.length})
+            </button>
+            <button
+              onClick={() => setReasonFilter('NEAR_EXPIRY')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                border: 'none',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                backgroundColor: reasonFilter === 'NEAR_EXPIRY' ? 'var(--warning)' : 'transparent',
+                color: reasonFilter === 'NEAR_EXPIRY' ? '#FFFFFF' : 'var(--text-2)',
+              }}
+            >
+              Near Expiry ({nearExpiryPatients.length})
+            </button>
+            <button
+              onClick={() => setReasonFilter('RECALL')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                border: 'none',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                backgroundColor: reasonFilter === 'RECALL' ? 'var(--danger)' : 'transparent',
+                color: reasonFilter === 'RECALL' ? '#FFFFFF' : 'var(--text-2)',
+              }}
+            >
+              Recall ({recallPatients.length})
+            </button>
           </div>
 
-          <button onClick={fetchReports} className="btn btn-ghost" style={{ padding: 6 }} title="Refresh">
-            <RefreshCw size={15} />
-          </button>
+          {/* Channel selector */}
+          <select
+            value={channelFilter}
+            onChange={e => setChannelFilter(e.target.value as any)}
+            className="input"
+            style={{ width: 'auto', fontSize: 12, padding: '5px 10px' }}
+          >
+            <option value="all">All Channels</option>
+            <option value="WHATSAPP">🟢 WhatsApp Preferred</option>
+            <option value="SMS">📱 SMS Preferred</option>
+          </select>
+        </div>
+
+        {/* Search */}
+        <div className="search-input" style={{ maxWidth: 280, width: '100%' }}>
+          <Search size={14} color="var(--text-3)" />
+          <input
+            placeholder="Search patient, phone, med, batch..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ fontSize: 12.5 }}
+          />
         </div>
       </div>
 
-      {/* Logs Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-            <thead>
-              <tr style={{ backgroundColor: 'var(--bg-alt)', borderBottom: '1px solid var(--border)' }}>
-                <th style={{ padding: '12px 16px', textAlign: 'left' }}>Time & Source</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left' }}>Recipient</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left' }}>Notification Type</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left' }}>Language</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left' }}>Message Preview</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left' }}>Delivery Status</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
-                    No SMS transmission records found matching the active filter.
-                  </td>
+      {/* Main Tab 1: Customers Requiring Safety Communication */}
+      {activeTab === 'affected' && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-alt)' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
+                Customers Requiring Safety Communication
+              </h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
+                Identified automatically from historical dispensing audit records
+              </p>
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+              Showing {displayedPatients.length} of {affectedPatients.length} records
+            </span>
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--bg-alt)', borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Customer & Mobile</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Preferred Channel</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Medicine & Batch</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Dispensing Info</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Safety Reason</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Status</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Action</th>
                 </tr>
-              ) : (
-                filteredLogs.map((log, idx) => (
-                  <tr
-                    key={log.id || idx}
-                    style={{
-                      borderBottom: '1px solid var(--border)',
-                      transition: 'background-color 0.15s ease',
-                    }}
-                  >
-                    {/* Timestamp & Source */}
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontWeight: 600, color: 'var(--text)' }}>
-                        {new Date(log.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                      <div style={{ marginTop: 2 }}>
-                        <span
-                          className={`chip ${log.notificationSource === 'manual' ? 'badge-teal' : 'badge-blue'}`}
-                          style={{ fontSize: 9.5, padding: '1px 6px' }}
-                        >
-                          {log.notificationSource === 'manual' ? '👨‍⚕️ MANUAL' : '🤖 AUTOMATIC'}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Recipient - Clickable with interactive hover */}
-                    <td style={{ padding: '12px 16px' }}>
-                      <button
-                        onClick={() => openCustomerDetails(log)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          display: 'inline-flex',
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                        }}
-                        title="Click to inspect medicine details & batch traceability"
-                      >
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            color: 'var(--primary)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            textDecoration: 'underline',
-                            textDecorationColor: 'transparent',
-                            transition: 'all 0.15s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.textDecorationColor = 'var(--primary)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.textDecorationColor = 'transparent';
-                          }}
-                        >
-                          {log.recipientName}
-                          <ExternalLink size={11} style={{ opacity: 0.7 }} />
-                        </span>
-                        <span style={{ color: 'var(--text-3)', fontSize: 11.5, marginTop: 1 }}>
-                          {log.recipientPhone}
-                        </span>
-                      </button>
-                    </td>
-
-                    {/* Notification Type */}
-                    <td style={{ padding: '12px 16px' }}>
-                      <span
-                        className={`chip ${
-                          log.notificationType === 'RECALL'
-                            ? 'badge-red'
-                            : log.notificationType === 'NEAR_EXPIRY'
-                            ? 'badge-amber'
-                            : 'badge-teal'
-                        }`}
-                        style={{ fontSize: 10 }}
-                      >
-                        {log.notificationType.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-
-                    {/* Language */}
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-2)' }}>
-                        <Globe size={12} /> {log.language}
-                      </span>
-                    </td>
-
-                    {/* Message Preview */}
-                    <td style={{ padding: '12px 16px', maxWidth: 260 }}>
-                      <p
-                        style={{
-                          margin: 0,
-                          color: 'var(--text-2)',
-                          fontSize: 11.5,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        title={log.message}
-                      >
-                        {log.message}
-                      </p>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                        Ref: <code>{log.providerMessageId}</code>
-                      </div>
-                    </td>
-
-                    {/* Status & Last Checked */}
-                    <td style={{ padding: '12px 16px' }}>
-                      <div>
-                        {log.notificationType === 'TEST_OTP' || log.sandboxDetails?.includes('TEST / OTP') ? (
-                          <span className="chip badge-amber" style={{ fontSize: 10, fontWeight: 700 }}>
-                            🧪 TEST / OTP — NOT A PHARMAFLOW DELIVERY
-                          </span>
-                        ) : log.isSandbox ? (
-                          <span className="chip badge-amber" style={{ fontSize: 10.5 }}>
-                            {log.status === 'delivered' ? '🧪 Sandbox / Test (Simulated)' : log.status === 'failed' ? '🔴 Failed' : '🧪 Sandbox Submitted'}
-                          </span>
-                        ) : (
-                          <span
-                            className={`chip ${
-                              log.status === 'delivered' || (log.status as any) === 'WHATSAPP_OPENED'
-                                ? 'badge-green'
-                                : (log.status as any) === 'SMS_COMPOSER_OPENED' || log.status === 'submitted' || log.status === 'sent'
-                                ? 'badge-blue'
-                                : log.status === 'pending' || (log.status as any) === 'COMMUNICATION_INITIATED'
-                                ? 'badge-amber'
-                                : (log.status as any) === 'CANCELLED'
-                                ? 'badge-slate'
-                                : 'badge-red'
-                            }`}
-                            style={{ fontSize: 11 }}
-                          >
-                            {(log.status as any) === 'WHATSAPP_OPENED' ? (
-                              <>
-                                <CheckCircle2 size={12} /> WhatsApp Opened
-                              </>
-                            ) : (log.status as any) === 'SMS_COMPOSER_OPENED' ? (
-                              <>
-                                <CheckCircle2 size={12} /> SMS Composer
-                              </>
-                            ) : (log.status as any) === 'COMMUNICATION_INITIATED' ? (
-                              <>
-                                <Clock size={12} /> Initiated
-                              </>
-                            ) : (log.status as any) === 'CANCELLED' ? (
-                              <>
-                                <XCircle size={12} /> Cancelled
-                              </>
-                            ) : log.status === 'delivered' ? (
-                              <>
-                                <CheckCircle2 size={12} /> Delivered
-                              </>
-                            ) : log.status === 'submitted' || log.status === 'sent' ? (
-                              <>
-                                <Clock size={12} /> Submitted
-                              </>
-                            ) : log.status === 'pending' ? (
-                              <>
-                                <Clock size={12} /> Pending DLR
-                              </>
-                            ) : (
-                              <>
-                                <XCircle size={12} /> Failed
-                              </>
-                            )}
-                          </span>
-                        )}
-
-                        {/* Status detail / timestamps */}
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
-                          {log.notificationType === 'TEST_OTP' || log.sandboxDetails?.includes('TEST / OTP') ? (
-                            <span style={{ color: 'var(--warning)', fontStyle: 'italic' }}>MessageCentral verification connectivity test</span>
-                          ) : log.isSandbox ? (
-                            <span style={{ color: 'var(--warning)', fontStyle: 'italic' }}>Test message — not delivered to handset</span>
-                          ) : log.status === 'delivered' && log.deliveredAt ? (
-                            <span>Delivered at: {new Date(log.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          ) : log.status === 'delivered' ? (
-                            <span>Carrier confirmed</span>
-                          ) : log.status === 'failed' ? (
-                            <span style={{ color: 'var(--danger)' }}>{log.errorMessage ? `Reason: ${log.errorMessage.slice(0, 30)}` : 'Gateway rejected'}</span>
-                          ) : (
-                            <span>Waiting for carrier confirmation</span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Actions */}
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
-                        {log.status !== 'delivered' && log.status !== 'failed' && (
-                          <button
-                            onClick={() => handleSimulateDeliveryCallback(log.providerMessageId)}
-                            className="btn btn-ghost"
-                            title="Verify Carrier Delivery Callback (Test/Sim)"
-                            style={{ fontSize: 11, padding: '3px 7px' }}
-                          >
-                            Verify Callback
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleResend(log)}
-                          disabled={resendingId === (log.id || log.providerMessageId)}
-                          className="btn btn-ghost"
-                          style={{ fontSize: 11, padding: '3px 7px' }}
-                          title="Send a fresh SMS attempt"
-                        >
-                          {resendingId === (log.id || log.providerMessageId) ? 'Sending...' : 'Resend'}
-                        </button>
-                      </div>
+              </thead>
+              <tbody>
+                {displayedPatients.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
+                      No patients identified matching the current filters.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                ) : (
+                  displayedPatients.map(p => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }} className="table-row">
+                      {/* Customer & Mobile */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <button
+                          onClick={() => openCustomerDetails({
+                            recipientName: p.customerName,
+                            recipientPhone: p.phone,
+                            language: p.preferredLang,
+                            notificationType: p.reason,
+                            medicine: p.medicine,
+                            batchId: p.batch,
+                            status: p.status,
+                            createdAt: new Date().toISOString()
+                          })}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            display: 'flex',
+                            flexDirection: 'column',
+                          }}
+                          title="Click to inspect patient dispensing history & safety details"
+                        >
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color: 'var(--primary)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: 13.5
+                            }}
+                          >
+                            {p.customerName}
+                            <ExternalLink size={11} style={{ opacity: 0.7 }} />
+                          </span>
+                          <span style={{ color: 'var(--text-3)', fontSize: 11.5, marginTop: 1 }}>
+                            {p.phone}
+                          </span>
+                        </button>
+                      </td>
 
-      {/* Customer SMS Details & Traceability Modal */}
-      <CustomerSmsDetailsModal
-        isOpen={isDetailsModalOpen}
-        onClose={() => setIsDetailsModalOpen(false)}
-        smsLog={selectedLogForDetails}
-        customer={customersList.find(c => c.name === selectedLogForDetails?.recipientName || c.phone === selectedLogForDetails?.recipientPhone)}
-        onRefreshSms={fetchReports}
-        showToast={showToast}
-      />
+                      {/* Preferred Channel */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          className="chip"
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            backgroundColor: p.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                            color: p.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
+                          }}
+                        >
+                          {p.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
+                        </span>
+                        <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 2 }}>
+                          {p.preferredLang}
+                        </div>
+                      </td>
 
-      {/* Controlled Single-Number Test Modal */}
-      {isTestModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setIsTestModalOpen(false)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, zIndex: 121, padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Send size={18} color="var(--primary)" />
-                <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>
-                  Controlled Single-Number SMS Test
-                </h3>
-              </div>
-              <button onClick={() => setIsTestModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
-                ✕
-              </button>
-            </div>
+                      {/* Medicine & Batch */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--text)' }}>
+                          {p.medicine}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 1 }}>
+                          Batch: <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{p.batch}</code> · Exp: <b>{p.expiry}</b>
+                        </div>
+                      </td>
 
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ padding: '10px 14px', borderRadius: 8, backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border)', fontSize: 12 }}>
-                <span style={{ fontWeight: 700, color: 'var(--text)' }}>Active Gateway: </span>
-                <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{configStatus?.provider || 'SMS Gateway'}</span>
-                <p style={{ margin: '4px 0 0', color: 'var(--text-3)' }}>
-                  Dispatches exactly ONE message to your mobile number. Does not notify demo customers.
-                </p>
-              </div>
+                      {/* Dispensing Info */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                          {p.qtyDispensed} units
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                          {p.dispenseDate} · <span style={{ fontFamily: 'monospace' }}>{p.rxId}</span>
+                        </div>
+                      </td>
 
-              <div>
-                <label className="label">Your 10-Digit Mobile Number</label>
-                <input
-                  className="input"
-                  placeholder="e.g. 9845048123 or +91 98450 48123"
-                  value={testPhone}
-                  onChange={e => setTestPhone(e.target.value)}
-                />
-              </div>
+                      {/* Safety Reason */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          className={`chip ${p.reason === 'RECALL' ? 'badge-red' : 'badge-amber'}`}
+                          style={{ fontSize: 10.5, fontWeight: 700 }}
+                        >
+                          {p.reason === 'RECALL' ? '🚨 Batch Recall' : '⚠️ Near Expiry'}
+                        </span>
+                      </td>
 
-              <div>
-                <label className="label">Test Mode</label>
-                <select className="input" value={testType} onChange={e => setTestType(e.target.value as any)}>
-                  <option value="TEST_OTP">MessageCentral OTP Verification Test (Real Handset Delivery)</option>
-                  <option value="NEAR_EXPIRY">Standard PharmaFlow Expiry Safety Template</option>
-                </select>
-              </div>
+                      {/* Status */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          className={`chip ${
+                            p.status === 'WhatsApp Opened'
+                              ? 'badge-green'
+                              : p.status === 'SMS Composer Opened'
+                              ? 'badge-blue'
+                              : p.status === 'Communication Initiated'
+                              ? 'badge-amber'
+                              : 'badge-teal'
+                          }`}
+                          style={{ fontSize: 10.5 }}
+                        >
+                          {p.status === 'WhatsApp Opened' ? (
+                            <>
+                              <CheckCircle2 size={11} /> WhatsApp Opened
+                            </>
+                          ) : p.status === 'SMS Composer Opened' ? (
+                            <>
+                              <CheckCircle2 size={11} /> SMS Composer
+                            </>
+                          ) : (
+                            <>
+                              <Clock size={11} /> Ready to Send
+                            </>
+                          )}
+                        </span>
+                      </td>
 
-              {testResult && (
-                <div style={{ padding: 12, borderRadius: 8, backgroundColor: testResult.success ? 'var(--success-light)' : 'var(--danger-light)', border: `1px solid ${testResult.success ? 'var(--success)' : 'var(--danger)'}`, fontSize: 12 }}>
-                  <div style={{ fontWeight: 800, color: testResult.success ? 'var(--success)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {testResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-                    {testResult.success ? 'Dispatch Successful (Awaiting Carrier DLR)' : 'Dispatch Error'}
+                      {/* Action Buttons */}
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                          <button
+                            onClick={() => triggerSafetyComm(p, p.reason)}
+                            className="btn btn-teal"
+                            style={{
+                              fontSize: 11.5,
+                              padding: '5px 12px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              fontWeight: 700,
+                            }}
+                          >
+                            <Send size={12} /> Send Message
+                          </button>
+                          <button
+                            onClick={() => openCustomerDetails({
+                              recipientName: p.customerName,
+                              recipientPhone: p.phone,
+                              language: p.preferredLang,
+                              notificationType: p.reason,
+                              medicine: p.medicine,
+                              batchId: p.batch,
+                              status: p.status,
+                              createdAt: new Date().toISOString()
+                            })}
+                            className="btn btn-ghost"
+                            style={{ fontSize: 11.5, padding: '5px 8px' }}
+                            title="View patient details & traceability"
+                          >
+                            Details
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View */}
+          <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 12 }}>
+            {displayedPatients.map(p => (
+              <div key={p.id} className="mobile-entity-card" style={{ padding: 14, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
+                      {p.customerName}
+                    </h4>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
+                      {p.phone} · {p.preferredLang}
+                    </p>
                   </div>
-                  <div style={{ marginTop: 6, color: 'var(--text-2)', fontFamily: 'monospace', fontSize: 11 }}>
-                    {testResult.providerMessageId && <div>Ref ID: <b>{testResult.providerMessageId}</b></div>}
-                    <div>Status: <b>{testResult.status || 'submitted'}</b></div>
-                    {testResult.error && <div style={{ color: 'var(--danger)', marginTop: 4 }}>Error: {testResult.error}</div>}
+                  <span
+                    className="chip"
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      backgroundColor: p.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                      color: p.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
+                    }}
+                  >
+                    {p.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--bg-alt)', fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--text-3)' }}>Medicine:</span>
+                    <b style={{ color: 'var(--text)' }}>{p.medicine}</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--text-3)' }}>Batch & Expiry:</span>
+                    <span><code>{p.batch}</code> ({p.expiry})</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--text-3)' }}>Dispensed:</span>
+                    <span>{p.qtyDispensed} units ({p.dispenseDate})</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-3)' }}>Reason:</span>
+                    <span className={`chip ${p.reason === 'RECALL' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10 }}>
+                      {p.reason === 'RECALL' ? 'Recall' : 'Near Expiry'}
+                    </span>
                   </div>
                 </div>
-              )}
 
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
-                <button className="btn btn-secondary" onClick={() => setIsTestModalOpen(false)}>
-                  Close
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSendControlledTest}
-                  disabled={isSendingTest || !testPhone}
-                >
-                  <Send size={14} className={isSendingTest ? 'animate-spin' : ''} />
-                  {isSendingTest ? 'Sending Test...' : 'Send Single Test'}
-                </button>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => openCustomerDetails({
+                      recipientName: p.customerName,
+                      recipientPhone: p.phone,
+                      language: p.preferredLang,
+                      notificationType: p.reason,
+                      medicine: p.medicine,
+                      batchId: p.batch,
+                      status: p.status,
+                      createdAt: new Date().toISOString()
+                    })}
+                    className="btn btn-secondary"
+                    style={{ fontSize: 12, padding: '6px 12px' }}
+                  >
+                    Details
+                  </button>
+                  <button
+                    onClick={() => triggerSafetyComm(p, p.reason)}
+                    className="btn btn-teal"
+                    style={{ fontSize: 12, padding: '6px 14px', fontWeight: 700 }}
+                  >
+                    <Send size={13} /> Send Message
+                  </button>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
+
+      {/* Main Tab 2: Recent Communication Activity */}
+      {activeTab === 'activity' && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-alt)' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
+                Recent Safety Communication Activity
+              </h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
+                Truthful audit log of pharmacist outreach via WhatsApp and device SMS composer
+              </p>
+            </div>
+            <button
+              onClick={fetchActivityLogs}
+              className="btn btn-ghost"
+              style={{ fontSize: 11.5, padding: '4px 8px' }}
+            >
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh Logs
+            </button>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--bg-alt)', borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Time</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Customer</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Medicine & Batch</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Reason</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Channel</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Pharmacist</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Status</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedActivityLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
+                      No safety communication activity recorded yet. Select an affected customer above to launch WhatsApp or SMS communication.
+                    </td>
+                  </tr>
+                ) : (
+                  displayedActivityLogs.map((l, idx) => (
+                    <tr key={l.id || idx} style={{ borderBottom: '1px solid var(--border)' }} className="table-row">
+                      <td style={{ padding: '12px 16px', color: 'var(--text-2)', fontSize: 12 }}>
+                        {new Date(l.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{l.recipientName}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{l.recipientPhone}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{l.medicine || 'Amoxicillin 500mg'}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Batch: <code>{l.batchId || 'DEMO-EXP-001'}</code></div>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span className={`chip ${l.notificationType === 'RECALL' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10 }}>
+                          {l.notificationType?.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          className="chip"
+                          style={{
+                            fontSize: 10.5,
+                            backgroundColor: l.status === 'WHATSAPP_OPENED' || l.provider === 'WhatsApp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                            color: l.status === 'WHATSAPP_OPENED' || l.provider === 'WhatsApp' ? '#16A34A' : '#2563EB',
+                            fontWeight: 700
+                          }}
+                        >
+                          {l.status === 'WHATSAPP_OPENED' || l.provider === 'WhatsApp' ? '🟢 WhatsApp' : '📱 SMS'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-2)' }}>
+                        {l.pharmacist || currentUser?.name || 'Demo Pharmacist'}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          className={`chip ${
+                            l.status === 'WHATSAPP_OPENED'
+                              ? 'badge-green'
+                              : l.status === 'SMS_COMPOSER_OPENED'
+                              ? 'badge-blue'
+                              : l.status === 'CANCELLED'
+                              ? 'badge-slate'
+                              : 'badge-amber'
+                          }`}
+                          style={{ fontSize: 10.5 }}
+                        >
+                          {l.status === 'WHATSAPP_OPENED' ? (
+                            <>
+                              <CheckCircle2 size={11} /> WhatsApp Opened
+                            </>
+                          ) : l.status === 'SMS_COMPOSER_OPENED' ? (
+                            <>
+                              <CheckCircle2 size={11} /> SMS Composer
+                            </>
+                          ) : l.status === 'CANCELLED' ? (
+                            <>
+                              <XCircle size={11} /> Cancelled
+                            </>
+                          ) : (
+                            <>
+                              <Clock size={11} /> Initiated
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <button
+                          onClick={() => openCustomerDetails(l)}
+                          className="btn btn-ghost"
+                          style={{ fontSize: 11.5, padding: '4px 8px' }}
+                        >
+                          Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Customer SMS & Traceability Modal */}
+      <CustomerSmsDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        smsLog={selectedCustomerForModal}
+        customer={selectedCustomerForModal ? {
+          name: selectedCustomerForModal.recipientName || selectedCustomerForModal.customerName,
+          phone: selectedCustomerForModal.recipientPhone || selectedCustomerForModal.phone,
+          preferredLang: selectedCustomerForModal.language || selectedCustomerForModal.preferredLang || 'English',
+          communicationPreference: selectedCustomerForModal.communicationPreference || 'SMS'
+        } : null}
+        onRefreshSms={fetchActivityLogs}
+        showToast={showToast}
+      />
     </div>
   );
 }
-

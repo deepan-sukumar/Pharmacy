@@ -44,7 +44,7 @@ const navItems: NavItem[] = [
   { id: 'alerts', label: 'Alerts', icon: Bell, count: 3 },
   { id: 'suppliers', label: 'Supplier Returns', icon: Truck },
   { id: 'recall', label: 'Batch Recall', icon: ShieldAlert },
-  { id: 'sms-reports', label: 'SMS & Notifications', icon: MessageSquare },
+  { id: 'sms-reports', label: 'Patient Safety Communication', icon: MessageSquare },
   { id: 'ai', label: 'AI Assistant', icon: BrainCircuit },
   { id: 'simulator', label: 'What-If Simulator', icon: SlidersHorizontal },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
@@ -99,7 +99,7 @@ function Topbar({
     simulator: 'What-If Expiry Risk Simulator',
     reports: 'Compliance Reports & Analytics',
     settings: 'Pharmacy & System Settings',
-    'sms-reports': 'SMS & Patient Notifications Hub',
+    'sms-reports': 'Patient Safety Communication',
   };
 
   const label = labelMap[page] || 'Dashboard';
@@ -1739,19 +1739,28 @@ function Expiry({
         title="Batch & Expiry Tracking"
         description="Stay ahead of expiry risk with real-time FEFO batch visibility."
         action={
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              downloadCSV(
-                'expiry_risk_report.csv',
-                ['Medicine', 'Batch', 'Expiry Date', 'Available Quantity', 'Risk Level', 'Supplier'],
-                inventory.map(m => [m.medicine, m.batch, m.expiry, m.quantity, m.status, m.supplier])
-              );
-              showToast('Downloaded expiry_risk_report.csv');
-            }}
-          >
-            <Download size={14}/> Export report
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-teal"
+              onClick={() => onNavigate?.('sms-reports')}
+              style={{ fontSize: 13, fontWeight: 700 }}
+            >
+              <Users size={14}/> View Affected Customers
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                downloadCSV(
+                  'expiry_risk_report.csv',
+                  ['Medicine', 'Batch', 'Expiry Date', 'Available Quantity', 'Risk Level', 'Supplier'],
+                  inventory.map(m => [m.medicine, m.batch, m.expiry, m.quantity, m.status, m.supplier])
+                );
+                showToast('Downloaded expiry_risk_report.csv');
+              }}
+            >
+              <Download size={14}/> Export report
+            </button>
+          </div>
         }
       />
       <div className="responsive-stats-grid">
@@ -1838,9 +1847,12 @@ function Expiry({
                 <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{m.expiry}</td>
                 <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{[12, 42, 68, 103, 150][i] || 90}</td>
                 <td style={{ padding: '14px 20px' }}><Badge status={m.status}/></td>
-                <td style={{ padding: '14px 20px' }}>
+                <td style={{ padding: '14px 20px', display: 'flex', gap: 10, alignItems: 'center' }}>
                   <button onClick={() => onNavigate?.('dispensing')} style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
                     Dispense batch →
+                  </button>
+                  <button onClick={() => onNavigate?.('sms-reports')} style={{ fontSize: 11.5, color: 'var(--warning-dark, #d97706)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
+                    Safety Notify →
                   </button>
                 </td>
               </tr>
@@ -4428,7 +4440,7 @@ export default function PharmacistPortal({
   const safetyTabs: TabItem[] = [
     { id: 'alerts', label: 'Safety & System Alerts', badge: 3, badgeVariant: 'danger' },
     { id: 'recall', label: 'Batch Recall & Quarantine', badge: inventory.filter(m => m.status === 'Recalled').length || 1, badgeVariant: 'danger' },
-    { id: 'sms-reports', label: 'SMS & Notifications' },
+    { id: 'sms-reports', label: 'Patient Safety Communication' },
   ];
 
   const aiTabs: TabItem[] = [
@@ -4577,9 +4589,13 @@ export default function PharmacistPortal({
           )}
           {page === 'sms-reports' && (
             <SmsReportsView
+              onOpenSafetyCommunication={handleOpenSafetyCommunication}
               onOpenManualSms={(c?: CustomerItem) => handleOpenSafetyCommunication(c, 'MANUAL')}
               showToast={showToast}
               customersList={customersList}
+              inventory={inventory}
+              audits={audits}
+              currentUser={currentUser}
             />
           )}
           {page === 'ai' && (

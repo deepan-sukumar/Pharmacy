@@ -54,7 +54,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'alerts', label: 'Alerts', icon: Bell, count: 3, countTone: 'amber' },
       { id: 'recall', label: 'Batch Recall', icon: ShieldAlert, count: 1, countTone: 'red' },
-      { id: 'sms-reports', label: 'SMS Notifications', icon: MessageSquare },
+      { id: 'sms-reports', label: 'Patient Safety Communication', icon: MessageSquare },
     ],
   },
   {
