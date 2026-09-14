@@ -78,6 +78,21 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   inventoryCount?: number;
   criticalAlertCount?: number;
+  currentUser?: {
+    fullName?: string;
+    role?: string;
+    pharmacyName?: string;
+    pharmacyId?: string;
+  };
+}
+
+function getInitials(name?: string) {
+  if (!name) return 'PH';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
 }
 
 export default function Sidebar({
@@ -86,6 +101,7 @@ export default function Sidebar({
   onLogout,
   collapsed,
   onToggleCollapse,
+  currentUser,
 }: SidebarProps) {
   // Determine which group contains the current active page
   const activeGroupId = navGroups.find(g =>
@@ -541,13 +557,15 @@ export default function Sidebar({
                   flexShrink: 0,
                 }}
               >
-                AR
+                {getInitials(currentUser?.fullName)}
               </div>
               <div style={{ minWidth: 0 }}>
                 <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  Dr. Anita Rao
+                  {currentUser?.fullName || 'Pharmacist'}
                 </p>
-                <p style={{ fontSize: 11, color: 'var(--text-4)' }}>Pharmacist-in-Charge</p>
+                <p style={{ fontSize: 11, color: 'var(--text-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {currentUser?.pharmacyName || 'Pharmacist-in-Charge'}
+                </p>
               </div>
             </div>
             <button
@@ -719,12 +737,19 @@ export function MobileSidebarDrawer({
   page,
   onNavigate,
   onLogout,
+  currentUser,
 }: {
   open: boolean;
   onClose: () => void;
   page: Page;
   onNavigate: (p: Page) => void;
   onLogout: () => void;
+  currentUser?: {
+    fullName?: string;
+    role?: string;
+    pharmacyName?: string;
+    pharmacyId?: string;
+  };
 }) {
   if (!open) return null;
 
@@ -951,13 +976,15 @@ export function MobileSidebarDrawer({
                 flexShrink: 0,
               }}
             >
-              AR
+              {getInitials(currentUser?.fullName)}
             </div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                Dr. Anita Rao
+                {currentUser?.fullName || 'Pharmacist'}
               </p>
-              <p style={{ fontSize: 10.5, color: 'var(--text-4)' }}>Pharmacist-in-Charge</p>
+              <p style={{ fontSize: 10.5, color: 'var(--text-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {currentUser?.pharmacyName || 'Pharmacist-in-Charge'}
+              </p>
             </div>
           </div>
           <button

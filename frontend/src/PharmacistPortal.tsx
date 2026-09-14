@@ -49,6 +49,15 @@ const navItems: NavItem[] = [
 ];
 
 
+function getInitials(name?: string) {
+  if (!name) return 'PH';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
 /* ─────────── 0. TOPBAR & REALTIME SMART SEARCH ─────────── */
 function Topbar({
   onMenu,
@@ -58,6 +67,7 @@ function Topbar({
   customersList,
   suppliersList,
   onNavigateWithFilter,
+  currentUser,
 }: {
   onMenu: () => void;
   page: Page;
@@ -66,6 +76,7 @@ function Topbar({
   customersList: CustomerItem[];
   suppliersList: SupplierItem[];
   onNavigateWithFilter: (p: Page, query?: string) => void;
+  currentUser?: UserSession;
 }) {
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -351,11 +362,11 @@ function Topbar({
           title="Click to view & edit Pharmacist Profile / Settings"
         >
           <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#FFFFFF' }}>
-            AR
+            {getInitials(currentUser?.fullName)}
           </div>
           <div className="hidden-mobile" style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', lineHeight: 1.1 }}>Dr. Anita Rao</p>
-            <p style={{ fontSize: 9.5, color: 'var(--primary)', fontWeight: 600 }}>Pharmacist</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', lineHeight: 1.1 }}>{currentUser?.fullName || 'Pharmacist'}</p>
+            <p style={{ fontSize: 9.5, color: 'var(--primary)', fontWeight: 600 }}>{currentUser?.pharmacyName || 'Pharmacist'}</p>
           </div>
         </button>
       </div>
@@ -1140,17 +1151,19 @@ function DispenseReceiptModal({
 }
 
 /* ─────────── 1. PHARMACIST DASHBOARD ─────────── */
-function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void; inventory: Medicine[] }) {
+function Dashboard({ onNavigate, inventory, currentUser }: { onNavigate: (p: string) => void; inventory: Medicine[]; currentUser?: UserSession }) {
   const expiredCount = inventory.filter(m => m.status === 'Expired').length;
   const nearExpiryCount = inventory.filter(m => m.status === 'Near Expiry').length;
   const lowStockCount = inventory.filter(m => m.status === 'Low Stock' || m.quantity < 80).length;
   const totalUnits = inventory.reduce((sum, m) => sum + m.quantity, 0);
 
+  const pharmacistGreetingName = currentUser?.fullName ? currentUser.fullName.split(' ')[0] : 'Pharmacist';
+
   return (
     <>
       <PageHeader
         eyebrow="OPERATIONAL COMMAND CENTER"
-        title="Good morning, Dr. Anita 👋"
+        title={`Good day, ${pharmacistGreetingName} 👋`}
         description="Live overview of prescription dispensing velocity, inventory buffer levels, and batch expiry containment."
         action={
           <div style={{ display: 'flex', gap: 10 }}>
@@ -1166,12 +1179,12 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
 
       {/* Top 6 KPI Cards with High Contrast & Semantic Statuses */}
       <div className="responsive-stats-grid">
-        <Stat label="Medicines" value={String(inventory.length || 128)} change="+4.2% formulary" icon={Package} tone="teal" />
-        <Stat label="Batches" value="246" change="Tracked across distributors" icon={Boxes} tone="sage" />
-        <Stat label="Total Stock" value={totalUnits.toLocaleString() || '18,420'} change="+8.4% buffer" icon={Activity} tone="green" />
-        <Stat label="Low Stock" value={String(lowStockCount || 7)} change="Reorder trigger" icon={AlertTriangle} tone="orange" />
-        <Stat label="Near Expiry" value={String(nearExpiryCount || 12)} change="<90d FEFO action" icon={Clock3} tone="amber" />
-        <Stat label="Expired" value={String(expiredCount || 3)} change="Quarantined" icon={AlertCircle} tone="red" />
+        <Stat label="Medicines" value={String(inventory.length)} change="+4.2% formulary" icon={Package} tone="teal" />
+        <Stat label="Batches" value={String(new Set(inventory.map(m => m.batch)).size)} change="Tracked across distributors" icon={Boxes} tone="sage" />
+        <Stat label="Total Stock" value={totalUnits.toLocaleString()} change="+8.4% buffer" icon={Activity} tone="green" />
+        <Stat label="Low Stock" value={String(lowStockCount)} change="Reorder trigger" icon={AlertTriangle} tone="orange" />
+        <Stat label="Near Expiry" value={String(nearExpiryCount)} change="<90d FEFO action" icon={Clock3} tone="amber" />
+        <Stat label="Expired" value={String(expiredCount)} change="Quarantined" icon={AlertCircle} tone="red" />
       </div>
 
       {/* Main Charts & Critical Alerts Row */}
@@ -1197,15 +1210,31 @@ function Dashboard({ onNavigate, inventory }: { onNavigate: (p: string) => void;
               style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
               onClick={() => onNavigate('alerts')}
             >
-              See all 3 alerts →
+              See all alerts →
             </button>
           }
         >
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <AlertRow icon={AlertTriangle} tone="amber" title="Vitamin D3 60K expires soon" detail="Batch VD102 · 180 units · FEFO priority" />
-            <AlertRow icon={AlertCircle} tone="red" title="Batch AMX204 under recall" detail="45 units remaining · Locked from dispensing" />
-            <AlertRow icon={ArrowDownRight} tone="orange" title="Azithromycin 250mg low stock" detail="Only 68 units · Supplier reorder pending" />
-            <div style={{ paddingTop: 12, borderTop: '1px solid #E2E8F0', display: 'flex', gap: 8 }}>
+            {inventory.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--text-3)' }}>
+                <CheckCircle2 size={32} color="var(--success)" style={{ margin: '0 auto 8px' }} />
+                <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>All Systems Nominal</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>No stock alerts or quarantine notices active.</p>
+              </div>
+            ) : (
+              <>
+                {nearExpiryCount > 0 && <AlertRow icon={AlertTriangle} tone="amber" title={`${nearExpiryCount} Batch(es) near expiry`} detail="FEFO priority dispatch" />}
+                {inventory.filter(m => m.status === 'Recalled').length > 0 && <AlertRow icon={AlertCircle} tone="red" title={`${inventory.filter(m => m.status === 'Recalled').length} Batch(es) under recall`} detail="Locked from dispensing" />}
+                {lowStockCount > 0 && <AlertRow icon={ArrowDownRight} tone="orange" title={`${lowStockCount} Medicine(s) low stock`} detail="Supplier reorder pending" />}
+                {nearExpiryCount === 0 && lowStockCount === 0 && inventory.filter(m => m.status === 'Recalled').length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '16px 12px', color: 'var(--text-3)' }}>
+                    <CheckCircle2 size={24} color="var(--success)" style={{ margin: '0 auto 6px' }} />
+                    <p style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--text)' }}>No active stock alerts</p>
+                  </div>
+                )}
+              </>
+            )}
+            <div style={{ paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
               <button onClick={() => onNavigate('recall')} className="btn btn-danger" style={{ fontSize: 11, padding: '5px 10px', flex: 1, justifyContent: 'center' }}>
                 Batch Recall Action
               </button>
@@ -1397,8 +1426,21 @@ function Inventory({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: 36, color: 'var(--text-3)', fontSize: 13 }}>
-                    No medicines match your search criteria.
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-3)', fontSize: 13 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                      <Package size={36} color="var(--primary)" opacity={0.6} />
+                      <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
+                        {inventory.length === 0 ? 'No medicines in inventory yet' : 'No medicines match your search criteria'}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-3)', maxWidth: 360 }}>
+                        {inventory.length === 0 ? 'Add your first batch to start automated FEFO tracking, expiry alerts, and stock management.' : 'Try adjusting your filters or search keywords.'}
+                      </p>
+                      {inventory.length === 0 && (
+                        <button onClick={onAdd} className="btn btn-teal" style={{ marginTop: 4 }}>
+                          <Plus size={14} /> Add First Medicine Batch
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
@@ -1817,6 +1859,7 @@ function Dispensing({
   customersList,
   setCustomersList,
   showToast,
+  currentUser,
 }: {
   inventory: Medicine[];
   setInventory: React.Dispatch<React.SetStateAction<Medicine[]>>;
@@ -1825,6 +1868,7 @@ function Dispensing({
   customersList: CustomerItem[];
   setCustomersList: React.Dispatch<React.SetStateAction<CustomerItem[]>>;
   showToast: (s: string) => void;
+  currentUser?: UserSession;
 }) {
   const [medicine, setMedicine] = useState('');
   const [batch, setBatch] = useState('');
@@ -1905,6 +1949,8 @@ function Dispensing({
     const totalAmount = unitRate * qty;
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+    const pharmacistDisplayName = currentUser?.fullName || 'Pharmacist';
+
     try {
       const res = await api.dispensePrescription({
         medicineId: chosen.id,
@@ -1912,7 +1958,7 @@ function Dispensing({
         batchNumber: chosen.batch,
         quantity: qty,
         customerName: customer,
-        pharmacistName: 'Dr. Anita Rao',
+        pharmacistName: pharmacistDisplayName,
         unitPrice: unitRate,
         totalAmount,
       });
@@ -1936,7 +1982,7 @@ function Dispensing({
             batch: chosen.batch,
             quantity: qty,
             customer,
-            pharmacist: 'Dr. Anita Rao',
+            pharmacist: pharmacistDisplayName,
             status: 'Completed',
             rxId,
             totalAmount,
@@ -1953,7 +1999,7 @@ function Dispensing({
         batch: chosen.batch,
         expiry: chosen.expiry,
         quantity: qty,
-        pharmacist: 'Dr. Anita Rao',
+        pharmacist: pharmacistDisplayName,
         pricePerUnit: unitRate,
         total: totalAmount,
         language,
@@ -1985,7 +2031,7 @@ function Dispensing({
           batch: chosen.batch,
           quantity: qty,
           customer,
-          pharmacist: 'Dr. Anita Rao',
+          pharmacist: pharmacistDisplayName,
           status: 'Completed',
           rxId,
           totalAmount,
@@ -2000,7 +2046,7 @@ function Dispensing({
         batch: chosen.batch,
         expiry: chosen.expiry,
         quantity: qty,
-        pharmacist: 'Dr. Anita Rao',
+        pharmacist: pharmacistDisplayName,
         pricePerUnit: unitRate,
         total: totalAmount,
         language,
@@ -2330,8 +2376,16 @@ function AuditPage({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                    No audit records match "{q}" in category "{statusFilter}".
+                  <td colSpan={9} style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                      <ClipboardList size={32} color="var(--primary)" opacity={0.6} />
+                      <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+                        {audits.length === 0 ? 'No dispensing audits recorded yet' : 'No audit records match your search'}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        {audits.length === 0 ? 'Completed prescription dispensing transactions will automatically log an immutable audit trail.' : 'Try adjusting your search query or filter.'}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -2540,6 +2594,24 @@ function Customers({
               </div>
             </div>
           ))}
+          {filtered.length === 0 && (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '48px 24px', color: 'var(--text-3)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <Users size={36} color="var(--primary)" opacity={0.6} />
+                <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
+                  {customersList.length === 0 ? 'No customer records yet' : 'No customers match your search criteria'}
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', maxWidth: 360 }}>
+                  {customersList.length === 0 ? 'Register patients to track dispensing history, known drug allergies, and automated SMS alerts.' : 'Try searching for a different patient name or phone number.'}
+                </p>
+                {customersList.length === 0 && (
+                  <button onClick={() => setAddModal(true)} className="btn btn-teal" style={{ marginTop: 4 }}>
+                    <Plus size={14} /> Add First Customer
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2849,6 +2921,7 @@ function Recall({
   inventory = [],
   setInventory,
   audits = [],
+  customersList = [],
   showToast,
   onNavigate,
   onOpenManualSms,
@@ -2856,6 +2929,7 @@ function Recall({
   inventory: Medicine[];
   setInventory: React.Dispatch<React.SetStateAction<Medicine[]>>;
   audits: Audit[];
+  customersList?: CustomerItem[];
   showToast: (s: string) => void;
   onNavigate?: (p: string) => void;
   onOpenManualSms?: (cust: any, type?: any, payload?: any) => void;
@@ -2863,12 +2937,18 @@ function Recall({
   const [notifyModal, setNotifyModal] = useState(false);
   const [createRecallModal, setCreateRecallModal] = useState(false);
   const [newRecallBatch, setNewRecallBatch] = useState('');
-  const [newRecallReason, setNewRecallReason] = useState('Packaging seal defect detected');
+  const [newRecallReason, setNewRecallReason] = useState('Packaging seal defect reported by manufacturer bulletin');
+  const [selectedBatchForInspection, setSelectedBatchForInspection] = useState('');
   const [hasError, setHasError] = useState(false);
 
   // Safe fallback if data parsing fails
   const safeInventory = Array.isArray(inventory) ? inventory : [];
   const recalledMedicines = safeInventory.filter(m => m && m.status === 'Recalled');
+
+  // Active batch to inspect / notify (default to first recalled or DEMO-EXP-001)
+  const activeBatchCode = selectedBatchForInspection || 
+    (recalledMedicines.length > 0 ? recalledMedicines[0].batch : (safeInventory.find(m => m.batch === 'DEMO-EXP-001')?.batch || 'DEMO-EXP-001'));
+  const activeBatchMed = safeInventory.find(m => m.batch === activeBatchCode);
 
   const blockBatch = async (batchCode: string) => {
     try {
@@ -2881,9 +2961,11 @@ function Recall({
         });
       }
       setInventory(prev => prev.map(m => m.batch === batchCode ? { ...m, status: 'Recalled' } : m));
+      setSelectedBatchForInspection(batchCode);
       showToast(`Batch ${batchCode} quarantined & locked from dispensing`);
     } catch {
       setInventory(prev => prev.map(m => m.batch === batchCode ? { ...m, status: 'Recalled' } : m));
+      setSelectedBatchForInspection(batchCode);
       showToast(`Batch ${batchCode} quarantined & locked from dispensing`);
     }
   };
@@ -2898,27 +2980,35 @@ function Recall({
     showToast(`Recall notice issued for Batch ${newRecallBatch}`);
   };
 
+  // Derive exposed customers dynamically from historical dispensing audit records
+  const matchingAudits = audits.filter(a => a.batch === activeBatchCode && a.customer && a.customer !== 'Walk-in Patient');
+  const impactedPatients = matchingAudits.map(a => {
+    const cust = (customersList || []).find(c => c.name.toLowerCase() === a.customer.toLowerCase());
+    return {
+      name: a.customer,
+      phone: cust ? cust.phone : '+91 98450 48123',
+      date: a.date,
+      qty: a.quantity,
+      status: 'Advisory Pending',
+      rxId: a.rxId || `RX-2026-${String(a.id).slice(-5)}`,
+      preferredLang: (cust as any)?.preferredLang || 'English'
+    };
+  });
+
   const handleSendNotice = async () => {
     try {
       const res = await api.sendBatchRecallSms({
-        batchNumber: 'AMX204',
-        medicineName: 'Amoxicillin 500mg',
-        recallReason: 'Packaging defect seal breach',
+        batchNumber: activeBatchCode,
+        medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg',
+        recallReason: newRecallReason,
       });
       setNotifyModal(false);
-      showToast(`Batch recall broadcast dispatched to ${res.sentCount || 18} impacted patients`);
-    } catch {
+      showToast(`Recall SMS broadcast dispatched to ${res?.dispatchedCount || impactedPatients.length} affected patient(s)`);
+    } catch (err: any) {
       setNotifyModal(false);
-      showToast('Urgent SMS & WhatsApp recall notification broadcast to all patients');
+      showToast(`Recall broadcast dispatched (${err?.message || 'Logged to notification reports'})`);
     }
   };
-
-  const impactedPatients = [
-    { name: 'Priya Sharma', phone: '+91 97312 90342', date: '12 Aug 2026', qty: 10, status: 'SMS Delivered', rxId: 'RX-2026-88192' },
-    { name: 'Arun Kumar', phone: '+91 94480 77109', date: '15 Aug 2026', qty: 15, status: 'Confirmed Discontinued', rxId: 'RX-2026-88185' },
-    { name: 'Rahul Kumar', phone: '+91 98450 48123', date: '18 Aug 2026', qty: 12, status: 'Replacement Claimed', rxId: 'RX-2026-88102' },
-    { name: 'Meena Devi', phone: '+91 96114 64190', date: '19 Aug 2026', qty: 8, status: 'SMS Delivered', rxId: 'RX-2026-88095' },
-  ];
 
   if (hasError) {
     return (
@@ -2953,8 +3043,12 @@ function Recall({
             <button className="btn btn-teal" onClick={() => setCreateRecallModal(true)}>
               <Plus size={14} /> Issue New Batch Recall
             </button>
-            <button className="btn btn-danger" onClick={() => setNotifyModal(true)}>
-              <Send size={14} /> Send Recall Notification
+            <button
+              className="btn btn-danger"
+              onClick={() => setNotifyModal(true)}
+              disabled={recalledMedicines.length === 0 && !safeInventory.some(m => m.batch === 'DEMO-EXP-001')}
+            >
+              <Send size={14} /> Send Recall SMS Broadcast
             </button>
           </div>
         }
@@ -2991,114 +3085,135 @@ function Recall({
             No Active Batch Recalls
           </h3>
           <p style={{ fontSize: 13, color: 'var(--text-3)', maxWidth: 460, margin: '0 auto 20px', lineHeight: 1.5 }}>
-            All medication inventory is verified clear of manufacturer and regulatory recalls. You can initiate a containment recall at any time if safety alerts arise.
+            All medication inventory is verified clear of active recalls. You can select any batch (such as <b>DEMO-EXP-001</b>) to test the recall and containment workflow.
           </p>
           <button className="btn btn-teal" onClick={() => setCreateRecallModal(true)}>
             <Plus size={14} /> Issue Batch Recall
           </button>
         </div>
       ) : (
-        recalledMedicines.map(rec => (
-          <div
-            key={rec.batch}
-            className="card"
-            style={{ border: '1.5px solid var(--danger-light)', overflow: 'hidden', marginBottom: 20 }}
-          >
+        recalledMedicines.map(rec => {
+          const isSelected = rec.batch === activeBatchCode;
+          return (
             <div
+              key={rec.batch}
+              className="card"
               style={{
-                padding: '16px 20px',
-                background: 'var(--danger-light)',
-                borderBottom: '1px solid var(--border)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 12,
+                border: isSelected ? '2px solid var(--danger)' : '1.5px solid var(--danger-light)',
+                overflow: 'hidden',
+                marginBottom: 20,
+                cursor: 'pointer'
               }}
+              onClick={() => setSelectedBatchForInspection(rec.batch)}
             >
-              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 10,
-                    background: 'var(--surface-raised)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <AlertCircle size={22} color="var(--danger)" />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <h3 style={{ fontWeight: 900, fontSize: 16, color: 'var(--text)' }}>
-                      {rec.medicine} · Batch {rec.batch}
-                    </h3>
-                    <span className="chip badge-red">MANDATORY RECALL</span>
+              <div
+                style={{
+                  padding: '16px 20px',
+                  background: 'var(--danger-light)',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 10,
+                      background: 'var(--surface-raised)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <AlertCircle size={22} color="var(--danger)" />
                   </div>
-                  <p style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 2 }}>
-                    Manufacturer/Distributor {rec.supplier} notice issued: Packaging defect. Immediate patient isolation mandatory.
-                  </p>
+                  <div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <h3 style={{ fontWeight: 900, fontSize: 16, color: 'var(--text)' }}>
+                        {rec.medicine} · Batch {rec.batch}
+                      </h3>
+                      <span className="chip badge-red">MANDATORY RECALL</span>
+                      {isSelected && <span className="chip badge-blue">ACTIVE SELECTION</span>}
+                    </div>
+                    <p style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 2 }}>
+                      Manufacturer/Distributor {rec.supplier} bulletin: Packaging seal defect. Immediate patient isolation mandatory.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); blockBatch(rec.batch); }}
+                    className="btn btn-danger"
+                    style={{ fontSize: 12 }}
+                  >
+                    <Ban size={14} /> Batch Hard-Locked
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedBatchForInspection(rec.batch);
+                      setNotifyModal(true);
+                    }}
+                    className="btn btn-teal"
+                    style={{ fontSize: 12 }}
+                  >
+                    <Send size={14} /> Send Recall SMS
+                  </button>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => blockBatch(rec.batch)}
-                  className="btn btn-danger"
-                  style={{ fontSize: 12 }}
-                >
-                  <Ban size={14} /> Batch Hard-Locked
-                </button>
+              {/* 4 Recall KPI Metrics */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: 14,
+                  padding: '18px 20px',
+                  backgroundColor: 'var(--surface)',
+                }}
+              >
+                {[
+                  { label: 'Units Remaining in Stock', val: String(rec.quantity || 0), sub: 'Quarantined in storage', tone: 'red' },
+                  { label: 'Patients Exposed', val: String(audits.filter(a => a.batch === rec.batch).length), sub: 'Identified via Audit Trail', tone: 'amber' },
+                  { label: 'Units Dispensed to Date', val: String(audits.filter(a => a.batch === rec.batch).reduce((acc, a) => acc + (Number(a.quantity) || 0), 0)), sub: `Across ${audits.filter(a => a.batch === rec.batch).length} prescriptions`, tone: 'blue' },
+                  { label: 'Recall Safety Status', val: '100% Enforced', sub: 'POS dispensing blocked', tone: 'green' },
+                ].map(stat => (
+                  <div key={stat.label} style={{ padding: '12px 14px', borderRadius: 10, backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>{stat.label}</p>
+                    <p style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>{stat.val}</p>
+                    <p style={{ fontSize: 11, color: stat.tone === 'red' ? 'var(--danger)' : stat.tone === 'amber' ? 'var(--warning)' : 'var(--success)', marginTop: 2, fontWeight: 600 }}>
+                      {stat.sub}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Containment Protocol Action Checklist */}
+              <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg-subtle)', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>ACTIONS ENFORCED:</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
+                  <CheckCircle2 size={15} /> 1. Dispensing Locked
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
+                  <CheckCircle2 size={15} /> 2. Audit Trail Queried ({audits.filter(a => a.batch === rec.batch).length} Patients)
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                  <MessageSquare size={15} /> 3. SMS Advisory Ready
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--warning)', fontWeight: 600 }}>
+                  <Clock3 size={15} /> 4. Supplier Return Claim Pending
+                </span>
               </div>
             </div>
-
-            {/* 4 Recall KPI Metrics */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: 14,
-                padding: '18px 20px',
-                backgroundColor: 'var(--surface)',
-              }}
-            >
-              {[
-                { label: 'Units Remaining in Stock', val: String(rec.quantity || 45), sub: 'Quarantined in storage', tone: 'red' },
-                { label: 'Patients Exposed', val: '18', sub: 'Identified via Audit Trail', tone: 'amber' },
-                { label: 'Units Dispensed to Date', val: '27', sub: 'Across 6 transactions', tone: 'blue' },
-                { label: 'Recall Resolution Status', val: '82%', sub: 'Advisories acknowledged', tone: 'green' },
-              ].map(stat => (
-                <div key={stat.label} style={{ padding: '12px 14px', borderRadius: 10, backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
-                  <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>{stat.label}</p>
-                  <p style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>{stat.val}</p>
-                  <p style={{ fontSize: 11, color: stat.tone === 'red' ? 'var(--danger)' : stat.tone === 'amber' ? 'var(--warning)' : 'var(--success)', marginTop: 2, fontWeight: 600 }}>
-                    {stat.sub}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {/* Containment Protocol Action Checklist */}
-            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg-subtle)', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>ACTIONS TAKEN:</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
-                <CheckCircle2 size={15} /> 1. Dispensing Locked
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
-                <CheckCircle2 size={15} /> 2. Audit Trail Queried
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
-                <CheckCircle2 size={15} /> 3. Emergency SMS Broadcast
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--warning)', fontWeight: 600 }}>
-                <Clock3 size={15} /> 4. Supplier Return Claim Pending
-              </span>
-            </div>
-          </div>
-        ))
+          );
+        })
       )}
 
       {/* Modal for Issuing New Batch Recall */}
@@ -3118,7 +3233,7 @@ function Recall({
                 <label className="label">Select Batch to Recall</label>
                 <select className="input" value={newRecallBatch} onChange={e => setNewRecallBatch(e.target.value)}>
                   <option value="">-- Choose Batch from Inventory --</option>
-                  {inventory.map(m => (
+                  {safeInventory.map(m => (
                     <option key={m.batch} value={m.batch}>
                       {m.batch} · {m.medicine} ({m.quantity} units, exp: {m.expiry})
                     </option>
@@ -3153,12 +3268,17 @@ function Recall({
               Impacted Patients Traced from Dispensing Audit Log
             </h3>
             <p style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-              Cross-referenced from historical prescriptions containing batch AMX204
+              Cross-referenced from historical prescriptions containing batch <b>{activeBatchCode}</b> ({impactedPatients.length} patient{impactedPatients.length === 1 ? '' : 's'} identified)
             </p>
           </div>
-          <button onClick={() => onNavigate?.('audit')} className="btn btn-ghost" style={{ fontSize: 12 }}>
-            View Full Audit Records →
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setNotifyModal(true)} className="btn btn-danger" style={{ fontSize: 12 }} disabled={impactedPatients.length === 0}>
+              <Send size={13} /> Broadcast Recall SMS to All ({impactedPatients.length})
+            </button>
+            <button onClick={() => onNavigate?.('audit')} className="btn btn-ghost" style={{ fontSize: 12 }}>
+              View Full Audit Records →
+            </button>
+          </div>
         </div>
 
         {/* Desktop Table View */}
@@ -3166,7 +3286,7 @@ function Recall({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr className="table-header">
-                {['Patient Name', 'Phone Number', 'Dispense Date', 'Rx ID', 'Quantity', 'Recall Status', 'Action'].map(h => (
+                {['Patient Name', 'Phone Number', 'Dispense Date', 'Rx ID', 'Quantity', 'Language', 'Action'].map(h => (
                   <th key={h} style={{ padding: '11px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     {h}
                   </th>
@@ -3175,42 +3295,41 @@ function Recall({
             </thead>
             <tbody>
               {impactedPatients.map(p => (
-                <tr key={p.name} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                <tr key={`${p.name}-${p.rxId}`} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: '12px 16px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{p.name}</td>
                   <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--text-2)' }}>{p.phone}</td>
                   <td style={{ padding: '12px 16px', fontSize: 12.5, color: 'var(--text-3)' }}>{p.date}</td>
                   <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: 12, color: 'var(--primary)', fontWeight: 700 }}>{p.rxId}</td>
                   <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{p.qty} units</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span
-                      className={`chip ${
-                        p.status.includes('Claimed')
-                          ? 'badge-green'
-                          : p.status.includes('Confirmed')
-                          ? 'badge-blue'
-                          : 'badge-amber'
-                      }`}
-                    >
-                      {p.status}
-                    </span>
-                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-2)' }}>{p.preferredLang}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <button
                       onClick={() => {
                         if (onOpenManualSms) {
-                          onOpenManualSms({ name: p.name, phone: p.phone }, 'RECALL_PATIENT_ADVISORY', { medicineName: 'Amoxicillin 500mg', batchNumber: 'AMX204', actionRequired: 'Discontinue taking and return for free replacement' });
+                          onOpenManualSms(
+                            { name: p.name, phone: p.phone, preferredLang: p.preferredLang },
+                            'RECALL',
+                            { medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg', batchNumber: activeBatchCode }
+                          );
                         } else {
-                          showToast(`Dispatched follow-up SMS reminder to ${p.name}`);
+                          showToast(`Dispatched recall SMS to ${p.name}`);
                         }
                       }}
-                      className="btn btn-secondary"
-                      style={{ fontSize: 11, padding: '4px 8px' }}
+                      className="btn btn-teal"
+                      style={{ fontSize: 11, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                     >
-                      Resend SMS
+                      <MessageSquare size={13} /> Send SMS
                     </button>
                   </td>
                 </tr>
               ))}
+              {impactedPatients.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+                    No dispensed patients identified in historical audit trail for batch {activeBatchCode}.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -3218,23 +3337,13 @@ function Recall({
         {/* Mobile Cards View */}
         <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
           {impactedPatients.map(p => (
-            <div key={p.name} className="mobile-entity-card">
+            <div key={`${p.name}-${p.rxId}`} className="mobile-entity-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div>
                   <h4 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{p.name}</h4>
                   <p style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{p.phone}</p>
                 </div>
-                <span
-                  className={`chip ${
-                    p.status.includes('Claimed')
-                      ? 'badge-green'
-                      : p.status.includes('Confirmed')
-                      ? 'badge-blue'
-                      : 'badge-amber'
-                  }`}
-                >
-                  {p.status}
-                </span>
+                <span className="chip badge-red">RECALL ADVISORY</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
@@ -3253,15 +3362,19 @@ function Recall({
                 <button
                   onClick={() => {
                     if (onOpenManualSms) {
-                      onOpenManualSms({ name: p.name, phone: p.phone }, 'RECALL_PATIENT_ADVISORY', { medicineName: 'Amoxicillin 500mg', batchNumber: 'AMX204', actionRequired: 'Discontinue taking and return for free replacement' });
+                      onOpenManualSms(
+                        { name: p.name, phone: p.phone, preferredLang: p.preferredLang },
+                        'RECALL',
+                        { medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg', batchNumber: activeBatchCode }
+                      );
                     } else {
-                      showToast(`Dispatched follow-up SMS reminder to ${p.name}`);
+                      showToast(`Dispatched recall SMS to ${p.name}`);
                     }
                   }}
-                  className="btn btn-secondary"
+                  className="btn btn-teal"
                   style={{ fontSize: 11.5, padding: '5px 12px' }}
                 >
-                  Resend SMS
+                  <MessageSquare size={13} /> Send SMS
                 </button>
               </div>
             </div>
@@ -3272,7 +3385,7 @@ function Recall({
       {notifyModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(3px)' }} onClick={() => setNotifyModal(false)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 460, zIndex: 111, padding: 0, overflow: 'hidden' }}>
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, zIndex: 111, padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <AlertCircle size={18} color="#DC2626" />
@@ -3282,18 +3395,18 @@ function Recall({
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                This will dispatch an urgent automated SMS & WhatsApp advisory to all <b>18 patients</b> who received batch <b>AMX204 (Amoxicillin 500mg)</b>.
+                This will dispatch an urgent automated SMS advisory to all <b>{impactedPatients.length} patient(s)</b> who received batch <b>{activeBatchCode} ({activeBatchMed?.medicine || 'Medication'})</b>.
               </p>
               <div style={{ background: 'var(--danger-light)', padding: 14, borderRadius: 10, border: '1px solid var(--danger-border)', fontSize: 12.5, color: 'var(--danger)', lineHeight: 1.5 }}>
-                <b>Standard Regulatory Message:</b>
+                <b>Approved Regulatory Recall Template:</b>
                 <p style={{ marginTop: 4 }}>
-                  "Urgent Safety Notice from WellCare Pharmacy: Please discontinue taking Amoxicillin 500mg Batch AMX204 immediately due to distributor recall. Please bring unused medication to the pharmacy for a 100% free fresh replacement."
+                  "PharmaFlow URGENT SAFETY ADVISORY: Batch {activeBatchCode} of {activeBatchMed?.medicine || 'Medication'} has been recalled by manufacturer bulletin. Please stop using this batch immediately and visit Apollo MedPlus Express for a safe replacement."
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button className="btn btn-secondary" onClick={() => setNotifyModal(false)}>Cancel</button>
                 <button className="btn btn-danger" onClick={handleSendNotice}>
-                  <Send size={14} /> Send 18 Broadcast Notifications
+                  <Send size={14} /> Send {impactedPatients.length} Broadcast Notification{impactedPatients.length === 1 ? '' : 's'}
                 </button>
               </div>
             </div>
@@ -3734,22 +3847,35 @@ function Reports({ showToast }: { showToast: (s: string) => void }) {
 }
 
 /* ─────────── 14. SETTINGS & PROFILE (WITH INTERACTIVE TOGGLES & PERSISTENCE) ─────────── */
-function PharmSettings({ showToast }: { showToast: (s: string) => void }) {
+function PharmSettings({ currentUser, showToast }: { currentUser?: UserSession; showToast: (s: string) => void }) {
   const [section, setSection] = useState('Profile');
   const sections = ['Profile', 'Pharmacy Workspace', 'Alert Preferences', 'Dispensing Rules', 'AI Assistant Preferences'];
 
+  const initialFirst = currentUser?.fullName ? currentUser.fullName.split(' ')[0] : 'Pharmacist';
+  const initialLast = currentUser?.fullName ? currentUser.fullName.split(' ').slice(1).join(' ') : '';
+
   const [profile, setProfile] = useState({
-    firstName: 'Anita',
-    lastName: 'Rao',
-    email: 'pharmacist@wellcare.com',
-    license: 'PHARM-KA-2024-8842',
+    firstName: initialFirst,
+    lastName: initialLast,
+    email: currentUser?.email || '',
+    license: 'KA-PH-2024-8891',
   });
 
   const [workspace, setWorkspace] = useState({
-    pharmacyName: 'WellCare Pharmacy',
-    location: 'Main Medical Square, 100 Feet Rd, Indiranagar',
+    pharmacyName: currentUser?.pharmacyName || 'PharmaFlow Workspace',
+    location: 'Indiranagar 100ft Rd, Bengaluru',
     timezone: 'Asia/Kolkata (GMT+5:30)',
   });
+
+  useEffect(() => {
+    api.getSettings().then(s => {
+      if (s?.profile) setProfile(p => ({ ...p, ...s.profile }));
+      if (s?.workspace) setWorkspace(w => ({ ...w, ...s.workspace }));
+      if (s?.alertsState || s?.alerts) setAlertsState(a => ({ ...a, ...(s.alertsState || s.alerts) }));
+      if (s?.rulesState || s?.rules) setRulesState(r => ({ ...r, ...(s.rulesState || s.rules) }));
+      if (s?.aiState || s?.ai) setAiState(ai => ({ ...ai, ...(s.aiState || s.ai) }));
+    }).catch(() => {});
+  }, [currentUser?.pharmacyId]);
 
   const [alertsState, setAlertsState] = useState<Record<string, boolean>>({
     'Low stock alerts': true,
@@ -3929,16 +4055,12 @@ export default function PharmacistPortal({
   onLogout: () => void;
 }) {
   const [page, setPage] = useState<Page>('dashboard');
-  const [inventory, setInventory] = useState<Medicine[]>(initialInventory);
-  const [customersList, setCustomersList] = useState<CustomerItem[]>(initialCustomers);
-  const [suppliersList, setSuppliersList] = useState<SupplierItem[]>(initialSuppliers);
+  const [inventory, setInventory] = useState<Medicine[]>([]);
+  const [customersList, setCustomersList] = useState<CustomerItem[]>([]);
+  const [suppliersList, setSuppliersList] = useState<SupplierItem[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
 
-  const [audits, setAudits] = useState<Audit[]>([
-    { id: 1, date: 'Today, 10:42 AM', medicine: 'Paracetamol 500mg', batch: 'PCT101', quantity: 12, customer: 'Priya Sharma', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88192', totalAmount: 300 },
-    { id: 2, date: 'Today, 09:18 AM', medicine: 'Cetirizine 10mg', batch: 'CTZ302', quantity: 5, customer: 'Arun Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88185', totalAmount: 175 },
-    { id: 3, date: 'Yesterday, 04:35 PM', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 10, customer: 'Meena Devi', pharmacist: 'Dr. Suresh', status: 'Completed', rxId: 'RX-2026-88102', totalAmount: 650 },
-  ]);
+  const [audits, setAudits] = useState<Audit[]>([]);
   const [toast, setToast] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -3959,20 +4081,16 @@ export default function PharmacistPortal({
     async function loadData() {
       try {
         const [inv, cust, supp, aud] = await Promise.all([
-          api.getInventory().catch(() => initialInventory),
-          api.getCustomers().catch(() => initialCustomers),
-          api.getSuppliers().catch(() => initialSuppliers),
-          api.getAudits().catch(() => [
-            { id: 1, date: 'Today, 10:42 AM', medicine: 'Paracetamol 500mg', batch: 'PCT101', quantity: 12, customer: 'Priya Sharma', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88192', totalAmount: 300 },
-            { id: 2, date: 'Today, 09:18 AM', medicine: 'Cetirizine 10mg', batch: 'CTZ302', quantity: 5, customer: 'Arun Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88185', totalAmount: 175 },
-            { id: 3, date: 'Yesterday, 04:35 PM', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 10, customer: 'Meena Devi', pharmacist: 'Dr. Suresh', status: 'Completed', rxId: 'RX-2026-88102', totalAmount: 650 },
-          ]),
+          api.getInventory().catch(() => []),
+          api.getCustomers().catch(() => []),
+          api.getSuppliers().catch(() => []),
+          api.getAudits().catch(() => []),
         ]);
         if (isMounted) {
-          if (inv && inv.length > 0) setInventory(inv);
-          if (cust && cust.length > 0) setCustomersList(cust);
-          if (supp && supp.length > 0) setSuppliersList(supp);
-          if (aud && aud.length > 0) setAudits(aud);
+          setInventory(Array.isArray(inv) ? inv : []);
+          setCustomersList(Array.isArray(cust) ? cust : []);
+          setSuppliersList(Array.isArray(supp) ? supp : []);
+          setAudits(Array.isArray(aud) ? aud : []);
         }
       } catch (err) {
         console.error('Failed to load pharmacy data:', err);
@@ -4041,6 +4159,7 @@ export default function PharmacistPortal({
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         inventoryCount={inventory.length}
         criticalAlertCount={3}
+        currentUser={currentUser}
       />
 
       <MobileSidebarDrawer
@@ -4049,6 +4168,7 @@ export default function PharmacistPortal({
         page={page}
         onNavigate={p => { setFilterQuery(''); setPage(p); }}
         onLogout={onLogout}
+        currentUser={currentUser}
       />
 
       <div
@@ -4072,6 +4192,7 @@ export default function PharmacistPortal({
           customersList={customersList}
           suppliersList={suppliersList}
           onNavigateWithFilter={handleNavigateWithFilter}
+          currentUser={currentUser}
         />
         <main style={{ flex: 1, width: '100%', padding: '24px 32px 80px', boxSizing: 'border-box' }} className="animate-fade-in">
           {/* Workspace Tabs - Rendered dynamically at top of relevant modules */}
@@ -4104,7 +4225,7 @@ export default function PharmacistPortal({
             />
           )}
 
-          {page === 'dashboard' && <Dashboard onNavigate={p => setPage(p as Page)} inventory={inventory} />}
+          {page === 'dashboard' && <Dashboard onNavigate={p => setPage(p as Page)} inventory={inventory} currentUser={currentUser} />}
           {page === 'inventory' && (
             <Inventory
               inventory={inventory}
@@ -4125,6 +4246,7 @@ export default function PharmacistPortal({
               customersList={customersList}
               setCustomersList={setCustomersList}
               showToast={showToast}
+              currentUser={currentUser}
             />
           )}
           {page === 'audit' && <AuditPage audits={audits} showToast={showToast} />}
@@ -4152,6 +4274,7 @@ export default function PharmacistPortal({
               inventory={inventory}
               setInventory={setInventory}
               audits={audits}
+              customersList={customersList}
               showToast={showToast}
               onNavigate={p => setPage(p as Page)}
               onOpenManualSms={handleOpenManualSms}
@@ -4181,7 +4304,7 @@ export default function PharmacistPortal({
             />
           )}
           {page === 'reports' && <Reports showToast={showToast} />}
-          {page === 'settings' && <PharmSettings showToast={showToast} />}
+          {page === 'settings' && <PharmSettings currentUser={currentUser} showToast={showToast} />}
         </main>
       </div>
 

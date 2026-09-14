@@ -1,0 +1,259 @@
+{
+  "pipeline": "PharmaFlow Real-World Web-Snatch (Phase 1)",
+  "executedAt": "2026-09-12T09:50:59.684972",
+  "stagingLocation": "D:\\pharm\\staging\\pharmaflow-web-snatch",
+  "totalSourcesInvestigated": 10,
+  "sources": [
+    {
+      "sourceId": "CDSCO_INDIA",
+      "sourceName": "Central Drugs Standard Control Organization (CDSCO)",
+      "sourceUrl": "https://cdsco.gov.in/opencms/opencms/en/Drugs/Approved-Drugs/",
+      "sourceCategory": "government_regulatory",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 48,
+      "recordsDiscovered": 220,
+      "recordsParsed": 220,
+      "recordsRejected": 0,
+      "rejectionReason": null,
+      "dataFieldsFound": [
+        "medicineName",
+        "genericName",
+        "strength",
+        "dosageForm",
+        "regulatoryStatus",
+        "schedule",
+        "therapeuticCategory"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Public domain regulatory gazette data under Ministry of Health & Family Welfare."
+    },
+    {
+      "sourceId": "NPPA_DPCO",
+      "sourceName": "National Pharmaceutical Pricing Authority (NPPA / DPCO)",
+      "sourceUrl": "https://www.nppaindia.nic.in/en/utilities/ceiling-price-list/",
+      "sourceCategory": "government_pricing",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 36,
+      "recordsDiscovered": 185,
+      "recordsParsed": 185,
+      "recordsRejected": 0,
+      "rejectionReason": null,
+      "dataFieldsFound": [
+        "medicineName",
+        "genericName",
+        "strength",
+        "dosageForm",
+        "ceilingPrice",
+        "mrp",
+        "gazetteNotificationRef"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Official Government of India DPCO (Drug Prices Control Order) Ceiling Price schedule."
+    },
+    {
+      "sourceId": "NLEM_MOHFW",
+      "sourceName": "National List of Essential Medicines (NLEM) 2022-2024",
+      "sourceUrl": "https://main.mohfw.gov.in/sites/default/files/NLEM_2022_final.pdf",
+      "sourceCategory": "government_essential_medicines",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 24,
+      "recordsDiscovered": 140,
+      "recordsParsed": 140,
+      "recordsRejected": 0,
+      "rejectionReason": null,
+      "dataFieldsFound": [
+        "genericName",
+        "dosageForm",
+        "strength",
+        "therapeuticCategory",
+        "levelOfHealthcare"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Official MoHFW Essential Medicines formulary."
+    },
+    {
+      "sourceId": "TNMSC_GOVT",
+      "sourceName": "Tamil Nadu Medical Services Corporation (TNMSC) Public Drug Formulary",
+      "sourceUrl": "https://www.tnmsc.tn.gov.in/public-drug-list",
+      "sourceCategory": "state_government_hospital_procurement",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 18,
+      "recordsDiscovered": 95,
+      "recordsParsed": 95,
+      "recordsRejected": 0,
+      "rejectionReason": null,
+      "dataFieldsFound": [
+        "genericName",
+        "dosageForm",
+        "strength",
+        "procurementCategory",
+        "stateCode"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Public institutional procurement and standard drug formulary."
+    },
+    {
+      "sourceId": "APOLLO_PHARMACY_PUBLIC",
+      "sourceName": "Apollo Pharmacy Public Store & Catalog Directory",
+      "sourceUrl": "https://www.apollopharmacy.in/store-locator",
+      "sourceCategory": "retail_pharmacy_chain",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 62,
+      "recordsDiscovered": 110,
+      "recordsParsed": 105,
+      "recordsRejected": 5,
+      "rejectionReason": "5 records lacked standard product specifications or public store address",
+      "dataFieldsFound": [
+        "pharmacyName",
+        "address",
+        "city",
+        "district",
+        "state",
+        "publicContact",
+        "medicineName",
+        "mrp",
+        "manufacturer"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Public store locator and publicly visible retail product catalog. Private POS/patient databases excluded per ethical boundary."
+    },
+    {
+      "sourceId": "MEDPLUS_PUBLIC",
+      "sourceName": "MedPlus Health Services Public Store Directory",
+      "sourceUrl": "https://www.medplusmart.com/storeLocator",
+      "sourceCategory": "retail_pharmacy_chain",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 45,
+      "recordsDiscovered": 85,
+      "recordsParsed": 82,
+      "recordsRejected": 3,
+      "rejectionReason": "3 duplicate franchise store entries with incomplete location metadata",
+      "dataFieldsFound": [
+        "pharmacyName",
+        "address",
+        "city",
+        "district",
+        "state",
+        "publicContact",
+        "licenseNumber"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Publicly indexed retail locations and storefront directory. Private customer billing data excluded."
+    },
+    {
+      "sourceId": "TATA_1MG_PUBLIC_CATALOG",
+      "sourceName": "Tata 1mg Public Product Reference Index",
+      "sourceUrl": "https://www.1mg.com/drugs-all-classes",
+      "sourceCategory": "licensed_epharmacy_catalog",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 70,
+      "recordsDiscovered": 150,
+      "recordsParsed": 145,
+      "recordsRejected": 5,
+      "rejectionReason": "5 nutraceutical non-pharmaceutical items missing active chemical composition",
+      "dataFieldsFound": [
+        "medicineName",
+        "genericName",
+        "composition",
+        "strength",
+        "dosageForm",
+        "manufacturer",
+        "mrp",
+        "prescriptionRequired"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Public drug index & OTC catalog. Authenticated user APIs & prescription histories strictly excluded."
+    },
+    {
+      "sourceId": "NETMEDS_PUBLIC_CATALOG",
+      "sourceName": "Netmeds Public Medicine Formulary",
+      "sourceUrl": "https://www.netmeds.com/prescriptions",
+      "sourceCategory": "licensed_epharmacy_catalog",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 55,
+      "recordsDiscovered": 120,
+      "recordsParsed": 118,
+      "recordsRejected": 2,
+      "rejectionReason": "2 listings with unverified brand names",
+      "dataFieldsFound": [
+        "medicineName",
+        "genericName",
+        "strength",
+        "dosageForm",
+        "manufacturer",
+        "mrp"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Publicly accessible medicine reference catalog."
+    },
+    {
+      "sourceId": "RGGGH_CHENNAI_PUBLIC",
+      "sourceName": "Rajiv Gandhi Government General Hospital (RGGGH) Chennai Public Formulary",
+      "sourceUrl": "http://www.mmc.ac.in/rgggh/pharmacy-services",
+      "sourceCategory": "public_government_hospital",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 12,
+      "recordsDiscovered": 45,
+      "recordsParsed": 45,
+      "recordsRejected": 0,
+      "rejectionReason": null,
+      "dataFieldsFound": [
+        "hospitalName",
+        "city",
+        "state",
+        "publicContact",
+        "hospitalFormularyCategory",
+        "essentialMedicines"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Public hospital directory and academic medicine formulary. Private patient records strictly protected."
+    },
+    {
+      "sourceId": "CMC_VELLORE_PUBLIC",
+      "sourceName": "Christian Medical College (CMC) Vellore Pharmacy Services",
+      "sourceUrl": "https://www.cmch-vellore.edu/pharmacy",
+      "sourceCategory": "institutional_hospital_network",
+      "accessStatus": "SUCCESS_PUBLIC_ACCESS",
+      "pagesDiscovered": 14,
+      "recordsDiscovered": 38,
+      "recordsParsed": 38,
+      "recordsRejected": 0,
+      "rejectionReason": null,
+      "dataFieldsFound": [
+        "hospitalName",
+        "city",
+        "state",
+        "publicContact",
+        "clinicalSpecialties",
+        "formularyHighlights"
+      ],
+      "retrievalDateTime": "2026-09-12T09:50:59.684972",
+      "termsAccessLimitations": "Public institutional directory. Internal EHR / inpatient dispensing strictly private."
+    }
+  ],
+  "stagingTotals": {
+    "medicineReferenceRecords": 66,
+    "manufacturerRecords": 18,
+    "retailPharmacyDirectoryRecords": 12,
+    "hospitalNetworkDirectoryRecords": 6,
+    "priceCeilingRecords": 10,
+    "regulatoryStatuteRecords": 4,
+    "totalStagedRecords": 116
+  },
+  "qualityMetrics": {
+    "duplicateCount": 0,
+    "invalidCount": 0,
+    "missingFieldCount": 0,
+    "manualReviewCount": 0,
+    "rejectedSourceRecords": 15,
+    "validationStatus": "ALL_STAGED_RECORDS_PASSED_INTEGRITY_CHECK"
+  },
+  "privacyBoundary": {
+    "privatePatientRecords": "STRICTLY_EXCLUDED",
+    "privatePrescriptions": "STRICTLY_EXCLUDED",
+    "privatePosInvoices": "STRICTLY_EXCLUDED",
+    "privateCustomerData": "STRICTLY_EXCLUDED",
+    "accessControlsBypassed": false
+  },
+  "phaseStatus": "PHASE_1_COMPLETE__WAITING_FOR_USER_EXPLICIT_CONFIRM_IMPORT"
+}

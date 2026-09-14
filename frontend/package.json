@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node --max-old-space-size=4096 ../node_modules/vite/bin/vite.js",
+    "build": "node --max-old-space-size=4096 ../node_modules/vite/bin/vite.js build",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "node --max-old-space-size=4096 ../node_modules/vite/bin/vite.js preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {

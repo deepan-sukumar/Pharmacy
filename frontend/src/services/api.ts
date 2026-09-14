@@ -2,10 +2,14 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port !== '5000' ? 'http://localhost:5000/api' : '/api');
 
 
-let activePharmacyId = 'DEMO_PHARMACY';
+let activePharmacyId = '';
 
 export function setApiPharmacyId(id: string) {
-  activePharmacyId = id || 'DEMO_PHARMACY';
+  activePharmacyId = (id || '').trim();
+}
+
+export function getApiPharmacyId(): string {
+  return activePharmacyId;
 }
 
 function getHeaders() {
@@ -190,7 +194,7 @@ export const api = {
       batch: data.batch || data.batchNumber || '',
       quantity: data.quantity,
       customer: data.customer || data.customerName || '',
-      pharmacist: data.pharmacist || data.pharmacistName || 'Dr. Anita Rao',
+      pharmacist: data.pharmacist || data.pharmacistName || 'Pharmacist',
       unitPrice: data.unitPrice,
       totalAmount: data.totalAmount,
       rxId: data.rxId,

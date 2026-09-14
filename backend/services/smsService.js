@@ -66,23 +66,81 @@ function buildIdempotencyKey(pharmacyId, customerId, batchId, notificationType, 
 }
 
 /**
- * Low-level HTTP/REST dispatcher to SMS Gateway Provider
+ * Low-level HTTP/REST dispatcher to SMS Gateway Provider (Supports SMSLocal & generic DLT gateways)
  */
 async function callSmsGatewayProvider(e164Phone, message, notificationType) {
-  const provider = process.env.SMS_PROVIDER || 'MOCK_TEST_PROVIDER';
-  const apiKey = process.env.SMS_API_KEY;
-  const baseUrl = process.env.SMS_BASE_URL;
+  const provider = (process.env.SMS_PROVIDER || 'MOCK_TEST_PROVIDER').toLowerCase();
+  const apiKey = process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
   const senderId = process.env.SMS_SENDER_ID || 'PHFLOW';
+  const baseUrl = process.env.SMSLOCAL_BASE_URL || process.env.SMS_BASE_URL || 'https://api.smslocal.in/v1/send';
 
-  // If real API key is configured, invoke external REST API
-  if (apiKey && apiKey !== 'mock_key' && baseUrl) {
+  const dltTemplateId = process.env[`SMS_DLT_TEMPLATE_ID_${notificationType}`] || 
+    (notificationType === 'RECALL' ? process.env.SMS_DLT_TEMPLATE_ID_RECALL : process.env.SMS_DLT_TEMPLATE_ID_EXPIRY);
+
+  // 1. If SMSLocal provider is explicitly configured
+  if (provider === 'smslocal') {
+    if (!apiKey || apiKey === 'mock_key') {
+      console.warn('⚠️ [SMSLocal] Missing SMSLOCAL_KEY or API credentials. Cannot dispatch live SMS.');
+      return {
+        success: false,
+        error: 'SMS integration configured but credentials/template approval is required.',
+        providerMessageId: null,
+        provider: 'SMSLocal Gateway (Unconfigured)',
+        status: 'failed'
+      };
+    }
+
     try {
-      // Generic JSON REST payload suitable for Indian gateways (Fast2SMS / MSG91 / etc)
+      const payload = JSON.stringify({
+        apiKey: apiKey,
+        senderId: senderId,
+        mobileNumber: e164Phone.replace('+', ''),
+        message: message,
+        dltTemplateId: dltTemplateId || undefined
+      });
+
+      const response = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'apikey': apiKey
+        },
+        body: payload
+      });
+
+      const data = await response.json();
+      if (!response.ok || data.status === 'error' || data.success === false) {
+        throw new Error(data.message || data.error || `SMSLocal returned HTTP ${response.status}`);
+      }
+
+      const msgId = data.messageId || data.message_id || data.msgId || data.data?.messageId || `SMSL-${Date.now()}`;
+      return {
+        success: true,
+        providerMessageId: msgId,
+        provider: 'SMSLocal Gateway',
+        rawResponse: data
+      };
+    } catch (err) {
+      console.error('❌ SMSLocal Gateway Error:', err.message);
+      return {
+        success: false,
+        error: `SMSLocal error: ${err.message}`,
+        providerMessageId: null,
+        provider: 'SMSLocal Gateway',
+        status: 'failed'
+      };
+    }
+  }
+
+  // 2. Generic REST SMS Gateway (Fast2SMS, MSG91, Twilio, etc.)
+  if (apiKey && apiKey !== 'mock_key' && process.env.SMS_BASE_URL) {
+    try {
       const payload = JSON.stringify({
         sender_id: senderId,
         message: message,
         numbers: e164Phone.replace('+', ''),
-        dlt_template_id: process.env[`SMS_DLT_TEMPLATE_ID_${notificationType}`] || process.env.SMS_DLT_TEMPLATE_ID_EXPIRY,
+        dlt_template_id: dltTemplateId,
         entity_id: process.env.SMS_DLT_ENTITY_ID
       });
 
@@ -104,7 +162,7 @@ async function callSmsGatewayProvider(e164Phone, message, notificationType) {
       return {
         success: true,
         providerMessageId: data.message_id || data.request_id || `MSG-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-        provider,
+        provider: 'SMS Gateway',
         rawResponse: data
       };
     } catch (err) {
@@ -113,14 +171,15 @@ async function callSmsGatewayProvider(e164Phone, message, notificationType) {
         success: false,
         error: err.message,
         providerMessageId: null,
-        provider
+        provider: 'SMS Gateway',
+        status: 'failed'
       };
     }
   }
 
-  // Deterministic local mock provider for testing & development
+  // 3. Deterministic local mock provider for testing & development
   const mockMsgId = `PF-SMS-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-  console.log(`📡 [SMS DISPATCH - ${provider}] To: ${e164Phone} | MsgId: ${mockMsgId}\n   Message: "${message.slice(0, 80)}..."`);
+  console.log(`📡 [SMS DISPATCH - ${provider.toUpperCase()}] To: ${e164Phone} | MsgId: ${mockMsgId}\n   Message: "${message.slice(0, 80)}..."`);
 
   return {
     success: true,
@@ -373,7 +432,7 @@ async function getSmsReports(pharmacyId, filters = {}) {
       .get();
     logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else {
-    logs = inMemoryNotifications.filter(n => n.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    logs = inMemoryNotifications.filter(n => n.pharmacyId === pharmacyId);
   }
 
   // Apply filters

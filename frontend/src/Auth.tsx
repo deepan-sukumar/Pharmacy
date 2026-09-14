@@ -135,15 +135,18 @@ export default function Auth({
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    let userData = { fullName: 'Demo Pharmacist', pharmacyId: 'DEMO_PHARMACY', role: 'Pharmacist' };
+    setErrors({});
     try {
       const res = await api.loginUser({ email: loginEmail, password: loginPassword });
-      if (res?.user) userData = res.user;
-    } catch {
-      // Allow demo bypass without error
-    } finally {
+      if (res?.user) {
+        setIsSubmitting(false);
+        onLogin('Pharmacist', res.user);
+        return;
+      }
+      throw new Error(res?.error || 'Invalid login credentials.');
+    } catch (err: any) {
       setIsSubmitting(false);
-      onLogin('Pharmacist', userData);
+      setErrors({ form: err.message || 'Account not found with this email. Please check your credentials or register.' });
     }
   };
 
@@ -175,10 +178,17 @@ export default function Auth({
       });
 
       setIsSubmitting(false);
-      setSuccessMessage('Pharmacy workspace created and saved to Firestore! Launching portal...');
+      setSuccessMessage('Pharmacy workspace created successfully! Launching portal...');
       setTimeout(() => {
-        onLogin('Pharmacist', res?.user || { fullName, pharmacyId: 'DEMO_PHARMACY', role: 'Pharmacist' });
-      }, 1200);
+        const registeredUser = res?.user || {
+          fullName,
+          email,
+          pharmacyId: res?.pharmacyId || res?.id,
+          pharmacyName: pharmacyName || 'PharmaFlow Workspace',
+          role: 'Pharmacist'
+        };
+        onLogin('Pharmacist', registeredUser);
+      }, 800);
     } catch (err: any) {
       setIsSubmitting(false);
       setErrors({ form: err.message || 'Failed to create account. Please try again.' });

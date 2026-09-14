@@ -47,7 +47,7 @@ async function getInventorySummary(pharmacyId) {
     const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   const totalMedicines = inventory.length;
@@ -84,7 +84,7 @@ async function getLowStockMedicines(pharmacyId) {
     const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   const lowStock = inventory.filter(i => i.status === 'Low Stock' || (Number(i.quantity) <= 20 && i.status !== 'Recalled'));
@@ -108,7 +108,7 @@ async function getExpiringMedicines(pharmacyId, days = 30) {
     const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   const expiring = inventory.map(item => {
@@ -138,7 +138,7 @@ async function getExpiredMedicines(pharmacyId) {
     const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   const expired = inventory.filter(i => i.status === 'Expired' || parseExpiryToDays(i.expiry) <= 0);
@@ -163,7 +163,7 @@ async function getMedicineDetails(pharmacyId, medicineIdentifier) {
     const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   const matches = inventory.filter(i => 
@@ -195,8 +195,8 @@ async function getBatchDetails(pharmacyId, batchId) {
       .get();
     audits = audSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => (i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY') && i.batch === batchCode);
-    audits = memoryStoreRef.audits.filter(a => (a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY') && a.batch === batchCode);
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId && i.batch === batchCode);
+    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId && a.batch === batchCode);
   }
 
   if (inventory.length === 0) return null;
@@ -221,7 +221,7 @@ async function getDispensingHistory(pharmacyId, filters = {}) {
     const snap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
     audits = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId);
   }
 
   if (filters.medicine) {
@@ -253,8 +253,8 @@ async function getCustomerDispensingHistory(pharmacyId, customerIdentifier) {
     const aSnap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
     audits = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else if (memoryStoreRef) {
-    customers = memoryStoreRef.customers.filter(c => c.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
-    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    customers = memoryStoreRef.customers.filter(c => c.pharmacyId === pharmacyId);
+    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId);
   }
 
   const matchedCustomer = customers.find(c => 
@@ -283,8 +283,8 @@ async function getSupplierSummary(pharmacyId) {
     const iSnap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else if (memoryStoreRef) {
-    suppliers = memoryStoreRef.suppliers.filter(s => s.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    suppliers = memoryStoreRef.suppliers.filter(s => s.pharmacyId === pharmacyId);
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   const summary = suppliers.map(s => {
@@ -316,7 +316,7 @@ async function getSupplierReturnEligibleBatches(pharmacyId) {
     const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   // Eligible if near expiry (<= 30 days) or recalled
@@ -351,8 +351,8 @@ async function getRecallSummary(pharmacyId) {
     const iSnap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
     inventory = iSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else if (memoryStoreRef) {
-    recalls = memoryStoreRef.recalls.filter(r => r.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    recalls = memoryStoreRef.recalls.filter(r => r.pharmacyId === pharmacyId);
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
   return {
@@ -385,8 +385,8 @@ async function getRecalledBatchCustomers(pharmacyId, batchId) {
     const cSnap = await db.collection('customers').where('pharmacyId', '==', pharmacyId).get();
     customers = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else if (memoryStoreRef) {
-    audits = memoryStoreRef.audits.filter(a => (a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY') && a.batch === batchCode);
-    customers = memoryStoreRef.customers.filter(c => c.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId && a.batch === batchCode);
+    customers = memoryStoreRef.customers.filter(c => c.pharmacyId === pharmacyId);
   }
 
   const patientMap = new Map();
@@ -456,8 +456,8 @@ async function getPharmacyAnalytics(pharmacyId, dateRange = 'month') {
     const aSnap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
     audits = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else if (memoryStoreRef) {
-    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
-    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    inventory = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
+    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId);
   }
 
   const totalDispensed = audits.reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
@@ -492,7 +492,7 @@ async function getUnusualDispensingPatterns(pharmacyId) {
     const aSnap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
     audits = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else if (memoryStoreRef) {
-    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId);
   }
 
   const findings = [];

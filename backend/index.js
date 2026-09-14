@@ -16,7 +16,15 @@ app.use(express.json({ limit: '15mb' }));
 
 // Helper to extract pharmacy / workspace ID
 function getPharmacyId(req) {
-  return req.headers['x-pharmacy-id'] || req.query.pharmacyId || 'DEMO_PHARMACY';
+  return String(req.headers['x-pharmacy-id'] || req.query.pharmacyId || req.body?.pharmacyId || '').trim();
+}
+
+// Helper to generate dynamic expiry string (e.g. 30 days from current execution)
+function getDynamicExpiryDate(days = 30) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 // -------------------------------------------------------------
@@ -30,6 +38,8 @@ let memoryStore = {
     { id: 'demo-med-4', pharmacyId: 'DEMO_PHARMACY', medicine: 'Cetirizine 10mg', genericName: 'Cetirizine Hydrochloride', batch: 'CTZ302', expiry: 'Jan 2027', quantity: 320, supplier: 'Nova Pharma', status: 'Available', unitPrice: 35, barcode: '890103400104' },
     { id: 'demo-med-5', pharmacyId: 'DEMO_PHARMACY', medicine: 'Azithromycin 250mg', genericName: 'Azithromycin Dihydrate', batch: 'AZI109', expiry: 'Nov 2026', quantity: 68, supplier: 'MediSource', status: 'Low Stock', unitPrice: 120, barcode: '890103400105' },
     { id: 'demo-med-6', pharmacyId: 'DEMO_PHARMACY', medicine: 'Metformin 500mg', genericName: 'Metformin Hydrochloride', batch: 'MET501', expiry: 'Mar 2027', quantity: 410, supplier: 'ABC Pharma', status: 'Available', unitPrice: 45, barcode: '890103400106' },
+    // Dedicated Near-Expiry Demo Batch for automated SMS, Manual SMS, and Batch Recall Tracing
+    { id: 'demo-med-exp-001', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'DEMO-EXP-001', expiry: getDynamicExpiryDate(30), quantity: 77, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 85, barcode: '890103400777' },
   ],
   customers: [
     { id: 'demo-cust-1', pharmacyId: 'DEMO_PHARMACY', name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true, preferredLang: 'English' },
@@ -37,6 +47,10 @@ let memoryStore = {
     { id: 'demo-cust-3', pharmacyId: 'DEMO_PHARMACY', name: 'Arun Kumar', phone: '+91 94480 77109', email: 'arun.k@example.com', visits: 6, lastVisit: 'Aug 18', allergies: 'Sulfa drugs', alerts: true, preferredLang: 'Kannada' },
     { id: 'demo-cust-4', pharmacyId: 'DEMO_PHARMACY', name: 'Kavya S', phone: '+91 99001 22584', email: 'kavya.s@example.com', visits: 4, lastVisit: 'Aug 12', allergies: 'None', alerts: false, preferredLang: 'Tamil' },
     { id: 'demo-cust-5', pharmacyId: 'DEMO_PHARMACY', name: 'Meena Devi', phone: '+91 96114 64190', email: 'meena.d@example.com', visits: 3, lastVisit: 'Aug 04', allergies: 'Aspirin', alerts: true, preferredLang: 'Telugu' },
+    // Dedicated Test/Demo Customers for Expiry & Recall SMS workflows
+    { id: 'demo-cust-deepak', pharmacyId: 'DEMO_PHARMACY', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English' },
+    { id: 'demo-cust-manish', pharmacyId: 'DEMO_PHARMACY', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'English' },
+    { id: 'demo-cust-deeps', pharmacyId: 'DEMO_PHARMACY', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English' },
   ],
   suppliers: [
     { id: 'demo-supp-1', pharmacyId: 'DEMO_PHARMACY', name: 'ABC Pharma', email: 'supp@abcpharma.com', batches: 24, purchases: '₹ 2,48,600', rating: 'Excellent', phone: '+91 80 4122 8890' },
@@ -49,6 +63,10 @@ let memoryStore = {
     { id: 'demo-audit-2', pharmacyId: 'DEMO_PHARMACY', date: 'Today, 09:18 AM', medicine: 'Cetirizine 10mg', batch: 'CTZ302', quantity: 5, customer: 'Arun Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88185', totalAmount: 175, timestamp: new Date(Date.now() - 7200000).toISOString() },
     { id: 'demo-audit-3', pharmacyId: 'DEMO_PHARMACY', date: 'Yesterday, 04:35 PM', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 10, customer: 'Meena Devi', pharmacist: 'Dr. Suresh', status: 'Completed', rxId: 'RX-2026-88102', totalAmount: 650, timestamp: new Date(Date.now() - 86400000).toISOString() },
     { id: 'demo-audit-4', pharmacyId: 'DEMO_PHARMACY', date: 'Aug 18, 02:15 PM', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 15, customer: 'Rahul Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88050', totalAmount: 1425, timestamp: new Date(Date.now() - 172800000).toISOString() },
+    // Dispensing records linking batch DEMO-EXP-001 to Deepak, Manish, and Deeps
+    { id: 'demo-audit-exp-1', pharmacyId: 'DEMO_PHARMACY', date: 'Today, 11:15 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 10, customer: 'Deepak', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90001', totalAmount: 850, timestamp: new Date(Date.now() - 7200000).toISOString() },
+    { id: 'demo-audit-exp-2', pharmacyId: 'DEMO_PHARMACY', date: 'Today, 09:30 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 5, customer: 'Manish', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90002', totalAmount: 425, timestamp: new Date(Date.now() - 14400000).toISOString() },
+    { id: 'demo-audit-exp-3', pharmacyId: 'DEMO_PHARMACY', date: 'Yesterday, 03:45 PM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 8, customer: 'Deeps', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90003', totalAmount: 680, timestamp: new Date(Date.now() - 86400000).toISOString() },
   ],
   recalls: [
     { id: 'demo-recall-1', pharmacyId: 'DEMO_PHARMACY', batch: 'AMX204', medicine: 'Amoxicillin 500mg', reason: 'Packaging seal integrity breach reported by manufacturer CDSCO bulletin', status: 'Quarantined', date: 'Today, 08:30 AM', quarantineQty: 45, affectedCustomers: ['Rahul Kumar'] }
@@ -142,8 +160,8 @@ async function seedInitialDataIfEmpty() {
   }
 }
 
-// Auto-run seeder on startup
-setTimeout(seedInitialDataIfEmpty, 1500);
+// Auto-run seeder on startup immediately
+seedInitialDataIfEmpty();
 
 // -------------------------------------------------------------
 // Health Check Endpoint
@@ -179,14 +197,14 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const pharmacyId = `pharm_${Date.now()}`;
+    const pharmacyId = `pharm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     const userData = {
       fullName: fullName.trim(),
       email: normalizedEmail,
       mobile: mobile ? mobile.trim() : '',
       regNumber: regNumber ? regNumber.trim() : '',
-      pharmacyName: pharmacyName ? pharmacyName.trim() : '',
+      pharmacyName: pharmacyName ? pharmacyName.trim() : 'Independent Pharmacy',
       pharmacyType: pharmacyType || 'Independent Pharmacy',
       pharmacyId,
       city: city ? city.trim() : '',
@@ -196,6 +214,23 @@ app.post('/api/auth/register', async (req, res) => {
       enableAlerts: enableAlerts ?? true,
       role: 'Pharmacist',
       createdAt: new Date().toISOString()
+    };
+
+    const initialSettings = {
+      profile: {
+        firstName: fullName.trim().split(' ')[0] || fullName.trim(),
+        lastName: fullName.trim().split(' ').slice(1).join(' ') || '',
+        email: normalizedEmail,
+        license: regNumber ? regNumber.trim() : ''
+      },
+      workspace: {
+        pharmacyName: pharmacyName ? pharmacyName.trim() : 'Independent Pharmacy',
+        location: `${city || ''}, ${stateName || 'Karnataka'}`.trim(),
+        timezone: 'Asia/Kolkata (GMT+5:30)'
+      },
+      alertsState: { 'Near Expiry (30 Days)': true, 'Critical Stock (<20)': true, 'Batch Recalls': true, 'Daily Summary': true, 'SMS Alerts': true },
+      rulesState: { 'FEFO Dispensing Enforcement': true, 'Patient Allergy Cross-Check': true, 'Restricted Drug Second Signoff': false, 'Auto-Quarantine on Recall': true },
+      aiState: { 'Smart Reorder Suggestions': true, 'Dosage Anomaly Detection': true, 'Interaction Warnings': true }
     };
 
     if (isConnected()) {
@@ -209,9 +244,12 @@ app.post('/api/auth/register', async (req, res) => {
         passwordHash: password ? Buffer.from(password).toString('base64') : null,
       });
 
+      // Save initial settings document for new workspace
+      await db.collection('settings').doc(pharmacyId).set(initialSettings, { merge: true });
+
       return res.status(201).json({
         id: docRef.id,
-        user: userData,
+        user: { id: docRef.id, ...userData },
         message: 'Account created and saved to Firestore successfully!'
       });
     }
@@ -225,6 +263,7 @@ app.post('/api/auth/register', async (req, res) => {
     const id = `user-${Date.now()}`;
     const newUser = { id, ...userData };
     memoryStore.users.push(newUser);
+    memoryStore.settings[pharmacyId] = initialSettings;
     res.status(201).json({ id, user: newUser, message: 'Account created successfully!' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -241,11 +280,14 @@ app.post('/api/auth/login', async (req, res) => {
       return res.json({
         isDemo: true,
         user: {
+          id: 'demo-user',
           fullName: 'Demo Pharmacist',
           email: 'pharmacist@demo.com',
           role: 'Pharmacist',
           pharmacyId: 'DEMO_PHARMACY',
-          pharmacyName: 'Apollo MedPlus Express'
+          pharmacyName: 'Apollo MedPlus Central',
+          city: 'Bengaluru',
+          stateName: 'Karnataka'
         }
       });
     }
@@ -263,22 +305,15 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    // 3. Fallback check
+    // 3. Fallback memory check
     const localUser = memoryStore.users.find(u => u.email === normalizedEmail);
     if (localUser) {
       return res.json({ isDemo: false, user: localUser });
     }
 
-    // Still permit demo flow gracefully
-    return res.json({
-      isDemo: true,
-      user: {
-        fullName: 'Pharmacist',
-        email: normalizedEmail,
-        role: 'Pharmacist',
-        pharmacyId: 'DEMO_PHARMACY',
-        pharmacyName: 'Independent Pharmacy'
-      }
+    // Reject unauthenticated login rather than silently leaking demo workspace
+    return res.status(401).json({
+      error: 'Account not found with this email. Please check your credentials or create a new account.'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -308,6 +343,9 @@ app.get('/api/users', async (req, res) => {
 app.get('/api/inventory', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) {
+      return res.json([]);
+    }
     if (isConnected()) {
       const snapshot = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
       // If user is DEMO_PHARMACY and empty, fetch all or seed
@@ -317,7 +355,7 @@ app.get('/api/inventory', async (req, res) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return res.json(items);
     }
-    const filtered = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    const filtered = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId);
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -460,7 +498,7 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
         return res.json({ found: true, medicine: { id: batchQuery.docs[0].id, ...batchQuery.docs[0].data() } });
       }
     } else {
-      const found = memoryStore.inventory.find(i => (i.barcode === searchCode || i.batch === searchCode.toUpperCase()) && (i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY'));
+      const found = memoryStore.inventory.find(i => (i.barcode === searchCode || i.batch === searchCode.toUpperCase()) && i.pharmacyId === pharmacyId);
       if (found) return res.json({ found: true, medicine: found });
     }
 
@@ -583,7 +621,7 @@ app.post('/api/dispensing', async (req, res) => {
     }
 
     // Memory Store fallback
-    const med = memoryStore.inventory.find(i => (i.id === medicineId || i.batch === batch) && (i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY'));
+    const med = memoryStore.inventory.find(i => (i.id === medicineId || i.batch === batch) && i.pharmacyId === pharmacyId);
     if (!med) return res.status(404).json({ error: 'Batch not found in stock.' });
     if (med.status === 'Recalled') return res.status(400).json({ error: 'Batch is RECALLED. Dispensing blocked.' });
     if (med.quantity < dispenseQty) return res.status(400).json({ error: `Insufficient stock (${med.quantity} available).` });
@@ -625,6 +663,9 @@ app.post('/api/dispensing', async (req, res) => {
 app.get('/api/audits', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) {
+      return res.json([]);
+    }
     if (isConnected()) {
       const snapshot = await db.collection('audits')
         .where('pharmacyId', '==', pharmacyId)
@@ -638,7 +679,7 @@ app.get('/api/audits', async (req, res) => {
       items.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
       return res.json(items);
     }
-    const filtered = memoryStore.audits.filter(a => a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    const filtered = memoryStore.audits.filter(a => a.pharmacyId === pharmacyId);
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -674,6 +715,9 @@ app.post('/api/audits', async (req, res) => {
 app.get('/api/customers', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) {
+      return res.json([]);
+    }
     if (isConnected()) {
       const snapshot = await db.collection('customers')
         .where('pharmacyId', '==', pharmacyId)
@@ -686,7 +730,7 @@ app.get('/api/customers', async (req, res) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return res.json(items);
     }
-    const filtered = memoryStore.customers.filter(c => c.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    const filtered = memoryStore.customers.filter(c => c.pharmacyId === pharmacyId);
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -757,6 +801,9 @@ app.put('/api/customers/:id', async (req, res) => {
 app.get('/api/suppliers', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) {
+      return res.json([]);
+    }
     if (isConnected()) {
       const snapshot = await db.collection('suppliers')
         .where('pharmacyId', '==', pharmacyId)
@@ -769,7 +816,7 @@ app.get('/api/suppliers', async (req, res) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return res.json(items);
     }
-    const filtered = memoryStore.suppliers.filter(s => s.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    const filtered = memoryStore.suppliers.filter(s => s.pharmacyId === pharmacyId);
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -798,6 +845,9 @@ app.post('/api/suppliers', async (req, res) => {
 app.get('/api/returns', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) {
+      return res.json([]);
+    }
     if (isConnected()) {
       const snapshot = await db.collection('returns')
         .where('pharmacyId', '==', pharmacyId)
@@ -810,7 +860,7 @@ app.get('/api/returns', async (req, res) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return res.json(items);
     }
-    const filtered = memoryStore.returns.filter(r => r.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    const filtered = memoryStore.returns.filter(r => r.pharmacyId === pharmacyId);
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -848,6 +898,9 @@ app.post('/api/returns', async (req, res) => {
 app.get('/api/recalls', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) {
+      return res.json([]);
+    }
     if (isConnected()) {
       const snapshot = await db.collection('recalls')
         .where('pharmacyId', '==', pharmacyId)
@@ -860,7 +913,7 @@ app.get('/api/recalls', async (req, res) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return res.json(items);
     }
-    const filtered = memoryStore.recalls.filter(r => r.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    const filtered = memoryStore.recalls.filter(r => r.pharmacyId === pharmacyId);
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -928,7 +981,7 @@ app.post('/api/recalls', async (req, res) => {
     }
 
     // Memory store
-    const med = memoryStore.inventory.find(i => i.batch === batchCode);
+    const med = memoryStore.inventory.find(i => i.batch === batchCode && i.pharmacyId === pharmacyId);
     if (med) {
       med.status = 'Recalled';
       medicineName = med.medicine;
@@ -936,7 +989,7 @@ app.post('/api/recalls', async (req, res) => {
     }
 
     const affected = memoryStore.audits
-      .filter(a => a.batch === batchCode && a.customer !== 'Walk-in Patient')
+      .filter(a => a.batch === batchCode && a.pharmacyId === pharmacyId && a.customer !== 'Walk-in Patient')
       .map(a => a.customer);
     affectedCustomers = Array.from(new Set(affected));
 
@@ -960,19 +1013,33 @@ app.post('/api/recalls', async (req, res) => {
   }
 });
 
+app.get('/api/recalls/:batch/affected-customers', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const { batch } = req.params;
+    const result = await pharmacyTools.getRecalledBatchCustomers(pharmacyId, batch);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // -------------------------------------------------------------
 // DYNAMIC ALERTS (Calculated from Live Inventory & Recalls)
 // -------------------------------------------------------------
 app.get('/api/alerts', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) {
+      return res.json([]);
+    }
     let items = [];
 
     if (isConnected()) {
       const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
       items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } else {
-      items = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+      items = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId);
     }
 
     const generatedAlerts = [];
@@ -1085,7 +1152,7 @@ app.post('/api/import/excel', async (req, res) => {
       const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
       snap.docs.forEach(d => existingBatches.add(d.data().batch));
     } else {
-      memoryStore.inventory.forEach(i => existingBatches.add(i.batch));
+      memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId).forEach(i => existingBatches.add(i.batch));
     }
 
     const validatedItems = [];
@@ -1295,14 +1362,16 @@ app.get('/api/reports/analytics', async (req, res) => {
     let inventory = [];
     let audits = [];
 
-    if (isConnected()) {
-      const invSnap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
-      inventory = invSnap.docs.map(d => d.data());
-      const audSnap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
-      audits = audSnap.docs.map(d => d.data());
-    } else {
-      inventory = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
-      audits = memoryStore.audits.filter(a => a.pharmacyId === pharmacyId || pharmacyId === 'DEMO_PHARMACY');
+    if (pharmacyId) {
+      if (isConnected()) {
+        const invSnap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
+        inventory = invSnap.docs.map(d => d.data());
+        const audSnap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
+        audits = audSnap.docs.map(d => d.data());
+      } else {
+        inventory = memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId);
+        audits = memoryStore.audits.filter(a => a.pharmacyId === pharmacyId);
+      }
     }
 
     const totalStock = inventory.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0);
@@ -1339,12 +1408,15 @@ app.get('/api/reports/analytics', async (req, res) => {
 app.get('/api/settings', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
+    if (!pharmacyId) return res.json({});
     if (isConnected()) {
       const doc = await db.collection('settings').doc(pharmacyId).get();
       if (doc.exists) return res.json(doc.data());
     }
-    const defaultSettings = memoryStore.settings[pharmacyId] || memoryStore.settings.DEMO_PHARMACY;
-    res.json(defaultSettings);
+    const tenantSettings = memoryStore.settings[pharmacyId];
+    if (tenantSettings) return res.json(tenantSettings);
+    if (pharmacyId === 'DEMO_PHARMACY') return res.json(memoryStore.settings.DEMO_PHARMACY);
+    res.json({});
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1368,7 +1440,7 @@ app.post('/api/settings', async (req, res) => {
 });
 
 // Start Server
-if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
+if (require.main === module && !process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`🚀 PharmaFlow Express Backend running on http://localhost:${PORT}`);
     console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);

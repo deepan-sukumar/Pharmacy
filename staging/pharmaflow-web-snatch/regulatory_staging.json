@@ -1,0 +1,62 @@
+[
+  {
+    "id": "REG_REF_001",
+    "regulationTopic": "Schedule H1 Mandatory Rx Register & Separate Audit Mandate",
+    "regulatoryAuthority": "CDSCO / Ministry of Health & Family Welfare",
+    "gazetteNotification": "GSR 588(E) dated 30-08-2013",
+    "controlledDrugsIncluded": "3rd/4th Gen Cephalosporins, Carbapenems, Fluoroquinolones, Macrolides (Azithromycin 500), Zolpidem, Alprazolam",
+    "operationalRequirements": "Mandatory Rx record with Prescriber Name, Patient Name, Dispensed Qty, Batch and 3-Year Record Retention. Warning box in Red outline on outer carton.",
+    "complianceStatus": "Active Enforced Standard in Tamil Nadu & All States",
+    "sourceName": "CDSCO Gazette Notification",
+    "sourceUrl": "https://cdsco.gov.in",
+    "sourceRetrievedAt": "2026-09-12T09:50:59.684972",
+    "dataOrigin": "official_public",
+    "sourceType": "regulatory_statute",
+    "stagingValidationStatus": "PASSED_VERIFIED"
+  },
+  {
+    "id": "REG_REF_002",
+    "regulationTopic": "National List of Essential Medicines (NLEM 2022) Alignment",
+    "regulatoryAuthority": "Standing National Committee on Medicines (SNCM) / MoHFW",
+    "gazetteNotification": "NLEM 2022 Official Release (384 Essential Molecules)",
+    "controlledDrugsIncluded": "384 Medicines spanning 27 Therapeutic Categories including Anti-infectives, Cardiovascular, Oncology, Endocrine",
+    "operationalRequirements": "Automatic inclusion in Schedule-I of DPCO 2013 for NPPA price ceiling cap regulation.",
+    "complianceStatus": "Active Reference Standard",
+    "sourceName": "MoHFW NLEM Standing Committee",
+    "sourceUrl": "https://main.mohfw.gov.in",
+    "sourceRetrievedAt": "2026-09-12T09:50:59.684972",
+    "dataOrigin": "official_public",
+    "sourceType": "regulatory_statute",
+    "stagingValidationStatus": "PASSED_VERIFIED"
+  },
+  {
+    "id": "REG_REF_003",
+    "regulationTopic": "Banned Irrational Fixed-Dose Combinations (FDCs)",
+    "regulatoryAuthority": "CDSCO / Kokate Committee Recommendations",
+    "gazetteNotification": "Section 26A Drugs & Cosmetics Act Gazette Notifications (344+ FDCs prohibited)",
+    "controlledDrugsIncluded": "Nimesulide + Paracetamol dispersible in pediatric, Analgin combinations, Metformin + Atorvastatin, Fixed antimicrobial unapproved combinations",
+    "operationalRequirements": "Immediate prohibition of manufacture, sale, distribution or stocking. Batches must be recalled immediately.",
+    "complianceStatus": "Strictly Prohibited from Pharmacy Stocking",
+    "sourceName": "CDSCO Banned Drugs Registry",
+    "sourceUrl": "https://cdsco.gov.in/opencms/opencms/en/Drugs/Banned-Drugs/",
+    "sourceRetrievedAt": "2026-09-12T09:50:59.684972",
+    "dataOrigin": "official_public",
+    "sourceType": "regulatory_statute",
+    "stagingValidationStatus": "PASSED_VERIFIED"
+  },
+  {
+    "id": "REG_REF_004",
+    "regulationTopic": "Cold Chain Storage & Temperature Monitoring for Biologicals & Vaccines",
+    "regulatoryAuthority": "Drugs and Cosmetics Rules 1945 (Good Distribution Practices)",
+    "gazetteNotification": "Rule 64 and Schedule M / Good Pharmacy Practice (GPP)",
+    "controlledDrugsIncluded": "Insulins, Vaccines, Immunoglobulins, Biologics, Erythropoietin",
+    "operationalRequirements": "Mandatory 2°C to 8°C continuous refrigeration with calibrated digital temperature logger and daily log book maintenance.",
+    "complianceStatus": "Mandatory Pharmacy Audit Check",
+    "sourceName": "Tamil Nadu Drugs Control Department Guidelines",
+    "sourceUrl": "https://www.drugscontrol.tn.gov.in",
+    "sourceRetrievedAt": "2026-09-12T09:50:59.684972",
+    "dataOrigin": "official_public",
+    "sourceType": "regulatory_statute",
+    "stagingValidationStatus": "PASSED_VERIFIED"
+  }
+]

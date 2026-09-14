@@ -543,27 +543,63 @@ function buildDeterministicOperationalResponse(query, context, language = 'Engli
   const exec = intel.executiveSummary || {};
   const ops = intel.operationalMetrics || {};
 
+  const medCount = exec.totalMedicines ?? 0;
+  const unitCount = exec.totalUnits ?? 0;
+  const nearExpCount = ops.nearExpiryCount ?? 0;
+  const lowStkCount = ops.lowStockCount ?? 0;
+  const recallCnt = ops.recalledCount ?? 0;
+
+  if (medCount === 0) {
+    return {
+      title: 'PHARMACY OPERATIONS BRIEFING',
+      summary: 'Active Inventory: 0 Medicines (0 Units). Workspace initialized.',
+      priority: 'normal',
+      dataType: 'actual',
+      badge: 'NEW WORKSPACE',
+      items: [
+        {
+          medicine: 'Workspace Catalog',
+          batch: 'Ready for Stock',
+          stock: 0,
+          priority: 'normal',
+          reason: 'No medicines currently in inventory catalog.',
+          action: 'Add new medicine batches via the Add Stock tab.'
+        }
+      ],
+      recommendedActions: [
+        'Add your first medicine batch to begin automated expiry tracking.',
+        'Import supplier invoices or spreadsheets directly via the Add Stock tab.'
+      ],
+      text: `### PHARMACY OPERATIONS BRIEFING\n\n` +
+        `• **Active Catalog**: 0 Medicines (0 Total Units)\n` +
+        `• **Expiry Status**: 0 near-expiry batches\n` +
+        `• **Stock Alerts**: 0 low-stock items\n` +
+        `• **Quarantine**: 0 batches quarantined\n\n` +
+        `**RECOMMENDED ACTION**:\n1. Navigate to **Add Stock** to log your pharmacy's medicine batches.\n2. Once added, PharmaFlow will automatically monitor FEFO dispensing, expiration timelines, and clinical safety alerts.`
+    };
+  }
+
   return {
     title: 'PHARMACY OPERATIONS BRIEFING',
-    summary: `Active Inventory: ${exec.totalMedicines || 6} Medicines (${exec.totalUnits || 1143} Units).`,
-    priority: ops.nearExpiryCount > 0 || ops.lowStockCount > 0 ? 'medium' : 'normal',
+    summary: `Active Inventory: ${medCount} Medicines (${unitCount} Units).`,
+    priority: nearExpCount > 0 || lowStkCount > 0 ? 'medium' : 'normal',
     dataType: 'actual',
     badge: 'OPERATIONAL BRIEFING',
     items: [
       {
         medicine: 'Near-Expiry Status',
         batch: 'Active Catalog',
-        stock: ops.nearExpiryCount || 1,
-        priority: ops.nearExpiryCount > 0 ? 'medium' : 'normal',
-        reason: `${ops.nearExpiryCount || 1} batch(es) near expiry within 30 days.`,
+        stock: nearExpCount,
+        priority: nearExpCount > 0 ? 'medium' : 'normal',
+        reason: `${nearExpCount} batch(es) near expiry within 30 days.`,
         action: 'Check Expiry Timeline tab.'
       },
       {
         medicine: 'Stock Buffer Status',
         batch: 'Active Catalog',
-        stock: ops.lowStockCount || 2,
-        priority: ops.lowStockCount > 0 ? 'high' : 'normal',
-        reason: `${ops.lowStockCount || 2} medicine(s) below safety threshold.`,
+        stock: lowStkCount,
+        priority: lowStkCount > 0 ? 'high' : 'normal',
+        reason: `${lowStkCount} medicine(s) below safety threshold.`,
         action: 'Review for reorder.'
       }
     ],
@@ -572,10 +608,10 @@ function buildDeterministicOperationalResponse(query, context, language = 'Engli
       'Use What-If Simulator to model prospective purchase quantities.'
     ],
     text: `### PHARMACY OPERATIONS BRIEFING\n\n` +
-      `• **Active Catalog**: ${exec.totalMedicines || 6} Medicines (${exec.totalUnits || 1143} Total Units)\n` +
-      `• **Expiry Status**: ${ops.nearExpiryCount || 1} near-expiry batch(es)\n` +
-      `• **Stock Alerts**: ${ops.lowStockCount || 2} low-stock item(s)\n` +
-      `• **Quarantine**: ${ops.recalledCount || 1} batch quarantined\n\n` +
+      `• **Active Catalog**: ${medCount} Medicines (${unitCount} Total Units)\n` +
+      `• **Expiry Status**: ${nearExpCount} near-expiry batch(es)\n` +
+      `• **Stock Alerts**: ${lowStkCount} low-stock item(s)\n` +
+      `• **Quarantine**: ${recallCnt} batch quarantined\n\n` +
       `**RECOMMENDED ACTION**:\n1. Select categorized question chips above for instant operational analysis.\n2. Use What-If Simulator to model stock replenishment.`
   };
 }

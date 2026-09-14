@@ -71,10 +71,19 @@ export default function ManualSmsModal({
   useEffect(() => {
     const cust = initialCustomer || preselectedCustomer;
     if (cust) {
-      if (cust.id) setSelectedCustomerId(cust.id);
-      if (cust.phone) setPhone(cust.phone);
-      if ((cust as any).preferredLang) {
-        setLanguage((cust as any).preferredLang);
+      const match = customersList.find(c => 
+        (cust.id && String(c.id) === String(cust.id)) || 
+        (cust.name && c.name.toLowerCase() === cust.name.toLowerCase()) ||
+        (cust.phone && c.phone.replace(/[\s\-\+]/g, '') === String(cust.phone).replace(/[\s\-\+]/g, ''))
+      );
+      if (match) {
+        setSelectedCustomerId(match.id);
+        setPhone(match.phone);
+        if (match.preferredLang) setLanguage(match.preferredLang);
+      } else {
+        if (cust.id) setSelectedCustomerId(cust.id);
+        if (cust.phone) setPhone(cust.phone);
+        if ((cust as any).preferredLang) setLanguage((cust as any).preferredLang);
       }
     } else if (customersList && customersList.length > 0 && !selectedCustomerId) {
       const first = customersList[0];
