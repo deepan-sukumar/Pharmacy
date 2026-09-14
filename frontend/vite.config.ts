@@ -4,7 +4,14 @@ import { fileURLToPath, URL } from 'node:url';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        babelrc: false,
+        configFile: false,
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -18,8 +25,8 @@ export default defineConfig({
       },
     },
   },
-  optimizeDeps: {
-    include: ['lucide-react'],
+  build: {
+    target: 'esnext',
+    sourcemap: false,
   },
 });
-

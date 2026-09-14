@@ -122,6 +122,20 @@ function Topbar({
 
   const hasResults = matchedMeds.length > 0 || matchedCustomers.length > 0 || matchedSuppliers.length > 0 || matchedPages.length > 0;
 
+  const getGreetingText = () => {
+    const hour = new Date().getHours();
+    let timeGreeting = 'Good morning';
+    if (hour >= 12 && hour < 17) {
+      timeGreeting = 'Good afternoon';
+    } else if (hour >= 17) {
+      timeGreeting = 'Good evening';
+    }
+
+    const rawName = currentUser?.fullName?.trim();
+    if (!rawName) return `${timeGreeting}, Pharmacist 👋`;
+    return `${timeGreeting}, ${rawName} 👋`;
+  };
+
   return (
     <header
       style={{
@@ -167,7 +181,7 @@ function Topbar({
             }}
             title={page === 'dashboard' ? 'View Pharmacist Profile' : undefined}
           >
-            {page === 'dashboard' ? 'Good morning, Dr. Anita 👋' : label}
+            {page === 'dashboard' ? getGreetingText() : label}
           </h1>
           <p style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 1 }}>
             {page === 'dashboard' ? "Here's what's happening across your pharmacy today." : 'Pharmacy Medication Dispensing & Expiry Portal'}
@@ -4094,7 +4108,7 @@ function Assistant({
   onOpenSimulator: () => void;
 }) {
   const [messages, setMessages] = useState<{ from: 'ai' | 'user'; text: string }[]>([
-    { from: 'ai', text: 'Hello, Dr. Anita. I am your PharmaFlow AI Assistant. I have live access to your current medicine inventory, expiry risks, dispensing patterns, and order simulations. How can I help you today?' }
+    { from: 'ai', text: 'Hello! I am your PharmaFlow AI Assistant. I have live access to your current medicine inventory, expiry risks, dispensing patterns, and order simulations. How can I help you today?' }
   ]);
   const [input, setInput] = useState('');
 
