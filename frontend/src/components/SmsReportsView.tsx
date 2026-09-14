@@ -67,6 +67,13 @@ export default function SmsReportsView({
   const [selectedLogForDetails, setSelectedLogForDetails] = useState<SmsLogItem | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
+  // Controlled Single-Number Test Modal State
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [testPhone, setTestPhone] = useState('');
+  const [testType, setTestType] = useState<'TEST_OTP' | 'NEAR_EXPIRY'>('TEST_OTP');
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
+
   const [configStatus, setConfigStatus] = useState<any>(null);
 
   const fetchConfigStatus = async () => {
@@ -75,6 +82,34 @@ export default function SmsReportsView({
       setConfigStatus(cfg);
     } catch {
       setConfigStatus(null);
+    }
+  };
+
+  const handleSendControlledTest = async () => {
+    if (!testPhone) {
+      showToast('Please enter a 10-digit mobile number');
+      return;
+    }
+    setIsSendingTest(true);
+    setTestResult(null);
+    try {
+      const res = await api.sendControlledTestSms({
+        phone: testPhone,
+        testType: testType,
+        customMessage: testType === 'TEST_OTP' ? undefined : 'PharmaFlow test notification: This is a controlled SMS delivery test.'
+      });
+      setTestResult(res);
+      if (res.success) {
+        showToast(`Controlled test dispatched! Ref ID: ${res.providerMessageId || 'OK'}`);
+        fetchReports();
+      } else {
+        showToast(`Test dispatch failed: ${res.error || 'Check provider credentials'}`);
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, error: err.message });
+      showToast(`Error: ${err.message}`);
+    } finally {
+      setIsSendingTest(false);
     }
   };
 
@@ -247,33 +282,45 @@ export default function SmsReportsView({
             <MessageSquare size={20} color="#FFFFFF" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
                 Real SMS Notification Engine & Delivery Audit
               </h2>
               {configStatus?.isLiveConfigured ? (
-                <span className="chip badge-green" style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Radio size={12} /> SMSLocal Live Gateway (Route 1 Transactional)
+                <span className="chip badge-green" style={{ fontSize: 10.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Radio size={12} /> {configStatus.provider || 'Live SMS Gateway'} ({configStatus.route || 'Active'})
                 </span>
               ) : (
-                <span className="chip badge-amber" style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Radio size={12} /> SMSLocal Sandbox / Test Mode (Handset Delivery Disabled)
+                <span className="chip badge-amber" style={{ fontSize: 10.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Radio size={12} /> {configStatus?.provider || 'SMS Gateway'} (Setup Required / Sandbox)
                 </span>
               )}
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-              Handset carrier delivery tracking with dynamic patient batch traceability and DLT compliance.
+              Carrier delivery tracking, batch recall traceability, and multi-provider SMS gateway architecture.
             </p>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
+            onClick={() => {
+              setTestPhone('');
+              setTestResult(null);
+              setIsTestModalOpen(true);
+            }}
+            className="btn btn-teal"
+            style={{ fontSize: 12, fontWeight: 700 }}
+            title="Execute exactly ONE controlled test SMS/OTP to your mobile number"
+          >
+            <Send size={13} /> Controlled Test SMS
+          </button>
+          <button
             onClick={handleSyncStatuses}
             className="btn btn-secondary"
             disabled={isSyncing}
             style={{ fontSize: 12 }}
-            title="Poll SMSLocal delivery report endpoint for pending messages"
+            title="Poll SMS gateway delivery report endpoint for pending messages"
           >
             <Activity size={14} className={isSyncing ? 'animate-spin' : ''} />
             {isSyncing ? 'Syncing DLR...' : 'Sync Delivery Reports'}
@@ -287,8 +334,8 @@ export default function SmsReportsView({
             <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
             {isScanning ? 'Scanning...' : 'Run Auto Scan'}
           </button>
-          <button onClick={() => onOpenManualSms()} className="btn btn-teal" style={{ fontSize: 12 }}>
-            <Send size={14} /> Send Manual SMS
+          <button onClick={() => onOpenManualSms()} className="btn btn-primary" style={{ fontSize: 12 }}>
+            <MessageSquare size={14} /> Send Manual SMS
           </button>
         </div>
       </div>
@@ -614,7 +661,11 @@ export default function SmsReportsView({
                     {/* Status & Last Checked */}
                     <td style={{ padding: '12px 16px' }}>
                       <div>
-                        {log.isSandbox ? (
+                        {log.notificationType === 'TEST_OTP' || log.sandboxDetails?.includes('TEST / OTP') ? (
+                          <span className="chip badge-amber" style={{ fontSize: 10, fontWeight: 700 }}>
+                            🧪 TEST / OTP — NOT A PHARMAFLOW DELIVERY
+                          </span>
+                        ) : log.isSandbox ? (
                           <span className="chip badge-amber" style={{ fontSize: 10.5 }}>
                             {log.status === 'delivered' ? '🧪 Sandbox / Test (Simulated)' : log.status === 'failed' ? '🔴 Failed' : '🧪 Sandbox Submitted'}
                           </span>
@@ -653,7 +704,9 @@ export default function SmsReportsView({
 
                         {/* Status detail / timestamps */}
                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
-                          {log.isSandbox ? (
+                          {log.notificationType === 'TEST_OTP' || log.sandboxDetails?.includes('TEST / OTP') ? (
+                            <span style={{ color: 'var(--warning)', fontStyle: 'italic' }}>MessageCentral verification connectivity test</span>
+                          ) : log.isSandbox ? (
                             <span style={{ color: 'var(--warning)', fontStyle: 'italic' }}>Test message — not delivered to handset</span>
                           ) : log.status === 'delivered' && log.deliveredAt ? (
                             <span>Delivered at: {new Date(log.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -709,6 +762,82 @@ export default function SmsReportsView({
         onRefreshSms={fetchReports}
         showToast={showToast}
       />
+
+      {/* Controlled Single-Number Test Modal */}
+      {isTestModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setIsTestModalOpen(false)} />
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, zIndex: 121, padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Send size={18} color="var(--primary)" />
+                <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>
+                  Controlled Single-Number SMS Test
+                </h3>
+              </div>
+              <button onClick={() => setIsTestModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ padding: '10px 14px', borderRadius: 8, backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border)', fontSize: 12 }}>
+                <span style={{ fontWeight: 700, color: 'var(--text)' }}>Active Gateway: </span>
+                <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{configStatus?.provider || 'SMS Gateway'}</span>
+                <p style={{ margin: '4px 0 0', color: 'var(--text-3)' }}>
+                  Dispatches exactly ONE message to your mobile number. Does not notify demo customers.
+                </p>
+              </div>
+
+              <div>
+                <label className="label">Your 10-Digit Mobile Number</label>
+                <input
+                  className="input"
+                  placeholder="e.g. 9845048123 or +91 98450 48123"
+                  value={testPhone}
+                  onChange={e => setTestPhone(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="label">Test Mode</label>
+                <select className="input" value={testType} onChange={e => setTestType(e.target.value as any)}>
+                  <option value="TEST_OTP">MessageCentral OTP Verification Test (Real Handset Delivery)</option>
+                  <option value="NEAR_EXPIRY">Standard PharmaFlow Expiry Safety Template</option>
+                </select>
+              </div>
+
+              {testResult && (
+                <div style={{ padding: 12, borderRadius: 8, backgroundColor: testResult.success ? 'var(--success-light)' : 'var(--danger-light)', border: `1px solid ${testResult.success ? 'var(--success)' : 'var(--danger)'}`, fontSize: 12 }}>
+                  <div style={{ fontWeight: 800, color: testResult.success ? 'var(--success)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {testResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    {testResult.success ? 'Dispatch Successful (Awaiting Carrier DLR)' : 'Dispatch Error'}
+                  </div>
+                  <div style={{ marginTop: 6, color: 'var(--text-2)', fontFamily: 'monospace', fontSize: 11 }}>
+                    {testResult.providerMessageId && <div>Ref ID: <b>{testResult.providerMessageId}</b></div>}
+                    <div>Status: <b>{testResult.status || 'submitted'}</b></div>
+                    {testResult.error && <div style={{ color: 'var(--danger)', marginTop: 4 }}>Error: {testResult.error}</div>}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+                <button className="btn btn-secondary" onClick={() => setIsTestModalOpen(false)}>
+                  Close
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSendControlledTest}
+                  disabled={isSendingTest || !testPhone}
+                >
+                  <Send size={14} className={isSendingTest ? 'animate-spin' : ''} />
+                  {isSendingTest ? 'Sending Test...' : 'Send Single Test'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

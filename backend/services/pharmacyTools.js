@@ -395,6 +395,9 @@ async function getRecalledBatchCustomers(pharmacyId, batchId) {
       const match = customers.find(c => c.name && c.name.toLowerCase() === aud.customer.toLowerCase());
       if (!patientMap.has(aud.customer)) {
         patientMap.set(aud.customer, {
+          id: match ? match.id : null,
+          name: aud.customer,
+          customer: aud.customer,
           customerName: aud.customer,
           phone: match ? match.phone : '',
           preferredLang: match ? (match.preferredLang || 'English') : 'English',

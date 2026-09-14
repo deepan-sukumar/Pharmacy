@@ -520,6 +520,15 @@ export const api = {
     return await res.json();
   },
 
+  async sendControlledTestSms(data: { phone: string; testType?: string; customMessage?: string }) {
+    const res = await fetch(`${API_BASE_URL}/sms/controlled-test`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  },
+
   async getCustomerDetailsTraceability(identifier: string) {
     const res = await fetch(`${API_BASE_URL}/customers/${encodeURIComponent(identifier)}/details-traceability`, {
       headers: getHeaders(),

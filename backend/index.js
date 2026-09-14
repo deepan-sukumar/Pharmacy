@@ -1341,26 +1341,71 @@ app.get('/api/sms/reports', async (req, res) => {
 // SMS Configuration and Gateway Status endpoint
 app.get('/api/sms/config-status', async (req, res) => {
   try {
-    const apiKey = process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
-    const isSandboxEnv = process.env.SMSLOCAL_SANDBOX === 'true';
-    const isMock = !apiKey || apiKey === 'mock_key' || isSandboxEnv || apiKey.toLowerCase().includes('test') || apiKey.toLowerCase().includes('sandbox');
+    const rawProvider = (process.env.SMS_PROVIDER || 'MOCK_TEST_PROVIDER').toUpperCase();
+    const isMessageCentral = rawProvider === 'MESSAGECENTRAL' || rawProvider === 'MESSAGING_CENTRAL';
+    const isSmsLocal = rawProvider === 'SMSLOCAL';
     
+    let isLiveConfigured = false;
+    let mode = 'sandbox';
+    let providerName = 'PharmaFlow Simulated Sandbox';
+
+    if (isMessageCentral) {
+      const hasKey = Boolean(process.env.MESSAGECENTRAL_CUSTOMER_ID && (process.env.MESSAGECENTRAL_API_KEY || process.env.MESSAGECENTRAL_AUTH_TOKEN || process.env.MESSAGECENTRAL_KEY));
+      isLiveConfigured = hasKey;
+      mode = hasKey ? 'live' : 'unconfigured';
+      providerName = hasKey ? 'MessageCentral OTP & Messaging Gateway' : 'MessageCentral (Unconfigured)';
+    } else if (isSmsLocal) {
+      const apiKey = process.env.SMSLOCAL_API_KEY || process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
+      const smsMode = (process.env.SMSLOCAL_MODE || '').toLowerCase();
+      const isExplicitLive = smsMode === 'live';
+      const isMock = !isExplicitLive && (!apiKey || apiKey === 'mock_key' || apiKey.toLowerCase().includes('test') || apiKey.toLowerCase().includes('sandbox'));
+      isLiveConfigured = !isMock && Boolean(apiKey);
+      mode = isMock ? 'sandbox' : 'live';
+      providerName = isMock ? 'SMSLocal Sandbox (Test Mode)' : 'SMSLocal Live Gateway';
+    }
+
     const creditCheck = await checkSmsLocalCredits();
 
     res.json({
       success: true,
-      isLiveConfigured: !isMock && Boolean(apiKey),
-      mode: isMock ? 'sandbox' : 'live',
-      provider: isMock ? 'SMSLocal Sandbox (Test / Simulation Mode)' : 'SMSLocal Live Gateway',
-      senderId: process.env.SMS_SENDER_ID || 'PHFLOW',
-      route: '1 (Transactional)',
-      dltActive: true,
+      activeProvider: rawProvider,
+      isLiveConfigured,
+      mode,
+      provider: providerName,
+      senderId: process.env.SMSLOCAL_SENDER_ID || process.env.SMS_SENDER_ID || 'PHFLOW',
+      route: isMessageCentral ? 'Verification v3 API / SMS API' : '1 (Transactional)',
+      dltActive: isSmsLocal,
       creditsInfo: creditCheck,
       dltTemplates: {
-        nearExpiry: process.env.SMS_DLT_TEMPLATE_ID_EXPIRY || '110716182910001',
-        recall: process.env.SMS_DLT_TEMPLATE_ID_RECALL || '110716182910002'
+        nearExpiry: process.env.SMSLOCAL_TEMPLATE_ID || process.env.SMS_DLT_TEMPLATE_ID_EXPIRY || '110716182910001',
+        recall: process.env.SMS_DLT_TEMPLATE_ID_RECALL || process.env.SMSLOCAL_TEMPLATE_ID || '110716182910002'
       }
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Single controlled test SMS / OTP endpoint for admin verification
+app.post('/api/sms/controlled-test', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req) || 'DEMO_PHARMACY';
+    const { phone, testType = 'TEST_OTP', customMessage } = req.body;
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'Phone number is required for controlled test' });
+    }
+
+    const result = await sendSms({
+      pharmacyId,
+      recipientName: 'Pharmacist Admin (Controlled Test)',
+      recipientPhone: phone,
+      notificationType: testType,
+      message: customMessage || 'PharmaFlow test notification: This is a controlled SMS delivery test.',
+      notificationSource: 'manual',
+      overrideDuplicateCheck: true
+    });
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

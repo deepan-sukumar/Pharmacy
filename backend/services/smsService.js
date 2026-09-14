@@ -1,12 +1,14 @@
 /**
  * Unified SMS Service for PharmaFlow
  * 
- * Handles BOTH:
- * A. AUTOMATIC SMS (Scheduler / Event-driven)
- * B. MANUAL PHARMACIST SMS (On-demand with confirmation)
+ * Multi-Provider Architecture supporting:
+ * 1. MESSAGECENTRAL / MESSAGING_CENTRAL (Student Project & Direct Verification Route)
+ * 2. SMSLOCAL (Enterprise DLT Gateway with Route 1 Transactional)
+ * 3. FAST2SMS / Generic REST Gateway
+ * 4. Local Simulator (for offline unit testing)
  * 
  * Strict Idempotency, Multilingual Templates, Phone Number Validation,
- * Provider Message ID Tracking, and Verified Delivery Callbacks.
+ * Provider Message ID Tracking, and Verified Handset Delivery Callbacks.
  */
 
 const { db, isConnected } = require('../firebase');
@@ -19,6 +21,12 @@ let inMemoryNotifications = [];
 
 // Track idempotency keys to prevent duplicate dispatches within active windows
 const idempotencyRegistry = new Set();
+
+// Cache MessageCentral Auth Token in memory
+let messageCentralTokenCache = {
+  token: null,
+  expiresAt: 0
+};
 
 /**
  * Sanitizes and validates Indian mobile phone numbers (+91)
@@ -55,7 +63,7 @@ function validateIndianPhoneNumber(phone) {
     formatted: `+91 ${nationalNumber.slice(0, 5)} ${nationalNumber.slice(5)}`,
     e164: `+91${nationalNumber}`,
     national: nationalNumber,
-    apiFormat: `91${nationalNumber}` // Clean format for SMSLocal API without '+' or spaces
+    apiFormat: `91${nationalNumber}`
   };
 }
 
@@ -78,29 +86,238 @@ const SMSLOCAL_ERROR_CODES = {
 };
 
 /**
- * Low-level HTTP/REST dispatcher to SMS Gateway Provider (Supports SMSLocal & generic DLT gateways)
+ * Generates or retrieves cached MessageCentral Authentication Token
+ */
+async function getMessageCentralAuthToken() {
+  if (process.env.MESSAGECENTRAL_AUTH_TOKEN) {
+    return process.env.MESSAGECENTRAL_AUTH_TOKEN;
+  }
+
+  const customerId = process.env.MESSAGECENTRAL_CUSTOMER_ID;
+  const apiKey = process.env.MESSAGECENTRAL_API_KEY || process.env.MESSAGECENTRAL_KEY || process.env.MESSAGECENTRAL_PASSWORD;
+  const baseUrl = process.env.MESSAGECENTRAL_BASE_URL || 'https://cpaas.messagecentral.com';
+
+  if (!customerId && !apiKey) {
+    return null;
+  }
+
+  // If apiKey is already a MessageCentral JWT token
+  if (apiKey && apiKey.startsWith('eyJ')) {
+    return apiKey;
+  }
+
+  const now = Date.now();
+  if (messageCentralTokenCache.token && messageCentralTokenCache.expiresAt > now + 60000) {
+    return messageCentralTokenCache.token;
+  }
+
+  let base64Key = apiKey;
+  try {
+    const decoded = Buffer.from(apiKey, 'base64').toString('utf8');
+    const reEncoded = Buffer.from(decoded, 'utf8').toString('base64');
+    if (reEncoded !== apiKey) {
+      base64Key = Buffer.from(apiKey).toString('base64');
+    }
+  } catch {
+    base64Key = Buffer.from(apiKey).toString('base64');
+  }
+
+  try {
+    const tokenUrl = `${baseUrl}/auth/v1/authentication/token?customerId=${encodeURIComponent(customerId)}&key=${encodeURIComponent(base64Key)}&scope=NEW`;
+    const res = await fetch(tokenUrl, {
+      method: 'GET',
+      headers: { 'Accept': '*/*' }
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`MessageCentral Token Auth HTTP ${res.status}: ${txt}`);
+    }
+
+    const data = await res.json();
+    const token = data.token || data.authToken || data.data?.token;
+    if (!token) {
+      throw new Error(`MessageCentral did not return a valid auth token: ${JSON.stringify(data)}`);
+    }
+
+    messageCentralTokenCache = {
+      token,
+      expiresAt: now + (2 * 60 * 60 * 1000) // Cache 2 hours
+    };
+    return token;
+  } catch (err) {
+    console.error('❌ MessageCentral Auth Token Error:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * MessageCentral Dispatcher (Handles OTP Verification & Custom Messaging)
+ */
+async function callMessageCentralGateway(phoneValidation, message, notificationType) {
+  const customerId = process.env.MESSAGECENTRAL_CUSTOMER_ID;
+  const baseUrl = process.env.MESSAGECENTRAL_BASE_URL || 'https://cpaas.messagecentral.com';
+
+  let token = null;
+  try {
+    token = await getMessageCentralAuthToken();
+  } catch (authErr) {
+    return {
+      success: false,
+      error: `MessageCentral Auth Failed: ${authErr.message}`,
+      providerMessageId: null,
+      provider: 'MessageCentral Gateway (Auth Error)',
+      status: 'failed',
+      isSandbox: false
+    };
+  }
+
+  if (!token || !customerId) {
+    return {
+      success: false,
+      error: 'SMS provider is not configured. Missing MESSAGECENTRAL_CUSTOMER_ID or MESSAGECENTRAL_API_KEY in backend .env',
+      providerMessageId: null,
+      provider: 'MessageCentral (Unconfigured)',
+      status: 'failed',
+      isSandbox: false
+    };
+  }
+
+  const isOtpTest = notificationType === 'TEST_OTP' || notificationType === 'OTP' || notificationType === 'TEST';
+
+  if (isOtpTest) {
+    try {
+      const sendUrl = `${baseUrl}/verification/v3/send?countryCode=91&customerId=${encodeURIComponent(customerId)}&flowType=SMS&mobileNumber=${encodeURIComponent(phoneValidation.national)}`;
+      const response = await fetch(sendUrl, {
+        method: 'POST',
+        headers: {
+          'authToken': token,
+          'Accept': '*/*'
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok || (data.status && data.status !== 200 && data.status !== '200' && data.status !== 'SUCCESS')) {
+        throw new Error(data.message || data.error || `HTTP ${response.status}`);
+      }
+
+      const verificationId = data.data?.verificationId || data.verificationId || `MC-${Date.now()}`;
+      return {
+        success: true,
+        providerMessageId: String(verificationId),
+        provider: 'MessageCentral OTP Gateway',
+        status: 'submitted', // Gateway accepted; awaiting handset receipt
+        isSandbox: false,
+        isOtp: true,
+        note: 'TEST / OTP — NOT A PHARMAFLOW DELIVERY',
+        rawResponse: data
+      };
+    } catch (otpErr) {
+      console.error('❌ MessageCentral OTP Error:', otpErr.message);
+      return {
+        success: false,
+        error: otpErr.message,
+        providerMessageId: null,
+        provider: 'MessageCentral OTP Gateway',
+        status: 'failed',
+        isSandbox: false
+      };
+    }
+  } else {
+    // Attempt general SMS endpoint
+    try {
+      const smsPayload = {
+        customerId,
+        destination: phoneValidation.national,
+        countryCode: '91',
+        message: message,
+        senderId: process.env.MESSAGECENTRAL_SENDER_ID || 'MESSAGEC'
+      };
+
+      const smsUrl = `${baseUrl}/sms/v1/send`;
+      const response = await fetch(smsUrl, {
+        method: 'POST',
+        headers: {
+          'authToken': token,
+          'Content-Type': 'application/json',
+          'Accept': '*/*'
+        },
+        body: JSON.stringify(smsPayload)
+      });
+
+      const resText = await response.text();
+      let data = {};
+      try { data = JSON.parse(resText); } catch { data = { raw: resText }; }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `MessageCentral general SMS API returned HTTP ${response.status}. Account is configured on the OTP Verification route. For clinical text notifications, general SMS route activation is required.`,
+          providerMessageId: null,
+          provider: 'MessageCentral Gateway',
+          status: 'failed',
+          isSandbox: false
+        };
+      }
+
+      const msgId = data.messageId || data.data?.messageId || data.requestId || `MC-SMS-${Date.now()}`;
+      return {
+        success: true,
+        providerMessageId: String(msgId),
+        provider: 'MessageCentral Live Gateway',
+        status: 'submitted',
+        isSandbox: false,
+        rawResponse: data
+      };
+    } catch (smsErr) {
+      console.error('❌ MessageCentral SMS Error:', smsErr.message);
+      return {
+        success: false,
+        error: `MessageCentral general SMS failed: ${smsErr.message}`,
+        providerMessageId: null,
+        provider: 'MessageCentral Gateway',
+        status: 'failed',
+        isSandbox: false
+      };
+    }
+  }
+}
+
+/**
+ * Low-level HTTP/REST dispatcher to SMS Gateway Provider
  * 
  * STRICT RULE: SMS Gateway submission/acceptance is NOT handset delivery.
  * Initial status upon successful gateway accept is 'submitted' or 'pending', NEVER 'delivered'.
  */
 async function callSmsGatewayProvider(phoneValidation, message, notificationType) {
   const provider = (process.env.SMS_PROVIDER || 'MOCK_TEST_PROVIDER').toLowerCase();
-  const apiKey = process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
-  const senderId = process.env.SMS_SENDER_ID || 'PHFLOW';
-  const baseUrl = process.env.SMSLOCAL_BASE_URL || process.env.SMS_BASE_URL || 'https://api.smslocal.in/api/smsapi';
 
-  const isSandbox = (process.env.SMSLOCAL_SANDBOX === 'true') || 
-                    (apiKey && (apiKey.toLowerCase().includes('test') || apiKey.toLowerCase().includes('sandbox'))) ||
-                    (provider === 'mock_test_provider');
+  // 1. MessageCentral Provider
+  if (provider === 'messagecentral' || provider === 'messaging_central') {
+    return await callMessageCentralGateway(phoneValidation, message, notificationType);
+  }
 
-  const dltTemplateId = process.env[`SMS_DLT_TEMPLATE_ID_${notificationType}`] || 
-    (notificationType === 'RECALL' ? process.env.SMS_DLT_TEMPLATE_ID_RECALL : process.env.SMS_DLT_TEMPLATE_ID_EXPIRY) ||
-    '110716182910001';
-
-  // 1. If SMSLocal provider is explicitly configured
+  // 2. SMSLocal Provider
   if (provider === 'smslocal') {
+    const apiKey = process.env.SMSLOCAL_API_KEY || process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
+    const senderId = process.env.SMSLOCAL_SENDER_ID || process.env.SMS_SENDER_ID || 'PHFLOW';
+    const baseUrl = process.env.SMSLOCAL_BASE_URL || process.env.SMS_BASE_URL || 'https://app.smslocal.in/api/smsapi';
+    const mode = (process.env.SMSLOCAL_MODE || '').toLowerCase();
+    const isExplicitLive = mode === 'live';
+    const isSandbox = !isExplicitLive && (
+      (process.env.SMSLOCAL_SANDBOX === 'true') || 
+      (mode === 'sandbox') ||
+      (apiKey && (apiKey.toLowerCase().includes('test') || apiKey.toLowerCase().includes('sandbox'))) ||
+      (!apiKey)
+    );
+
+    const dltTemplateId = process.env[`SMS_DLT_TEMPLATE_ID_${notificationType}`] || 
+      (notificationType === 'RECALL' ? (process.env.SMS_DLT_TEMPLATE_ID_RECALL || process.env.SMSLOCAL_TEMPLATE_ID) : (process.env.SMS_DLT_TEMPLATE_ID_EXPIRY || process.env.SMSLOCAL_TEMPLATE_ID)) ||
+      process.env.SMSLOCAL_TEMPLATE_ID ||
+      '110716182910001';
+
     if (!apiKey || apiKey === 'mock_key') {
-      console.warn('⚠️ [SMSLocal] Missing SMSLOCAL_KEY or API credentials. Cannot dispatch live SMS.');
+      console.warn('⚠️ [SMSLocal] Missing SMSLOCAL_API_KEY or credentials. Cannot dispatch live SMS.');
       return {
         success: false,
         error: 'SMS integration configured but credentials/template approval is required.',
@@ -112,8 +329,6 @@ async function callSmsGatewayProvider(phoneValidation, message, notificationType
     }
 
     try {
-      // SMSLocal official endpoint format: GET /api/smsapi with Route 1 (Transactional)
-      // Parameters: key, route=1, sender, number (10-digit national), sms, templateid
       const queryParams = new URLSearchParams({
         key: apiKey,
         route: '1', // Route 1: Transactional / Service OTP & Safety Alerts
@@ -124,7 +339,6 @@ async function callSmsGatewayProvider(phoneValidation, message, notificationType
       });
 
       const requestUrl = `${baseUrl.includes('?') ? baseUrl + '&' : baseUrl + '?'}${queryParams.toString()}`;
-
       const response = await fetch(requestUrl, {
         method: 'GET',
         headers: {
@@ -137,11 +351,9 @@ async function callSmsGatewayProvider(phoneValidation, message, notificationType
       try {
         data = JSON.parse(responseText);
       } catch {
-        // SMSLocal may return text response like "1987654321" or "108"
         data = { rawText: responseText.trim() };
       }
 
-      // Check for known SMSLocal error response codes
       const rawCode = String(data.code || data.status || data.rawText || '');
       if (SMSLOCAL_ERROR_CODES[rawCode]) {
         throw new Error(`SMSLocal Error ${rawCode}: ${SMSLOCAL_ERROR_CODES[rawCode]}`);
@@ -173,23 +385,24 @@ async function callSmsGatewayProvider(phoneValidation, message, notificationType
     }
   }
 
-  // 2. Generic REST SMS Gateway (Fast2SMS, MSG91, Twilio, etc.)
-  if (apiKey && apiKey !== 'mock_key' && process.env.SMS_BASE_URL) {
+  // 3. Generic REST SMS Gateway (Fast2SMS, MSG91, Twilio, etc.)
+  const genericApiKey = process.env.SMS_API_KEY || process.env.FAST2SMS_API_KEY;
+  if (genericApiKey && genericApiKey !== 'mock_key' && process.env.SMS_BASE_URL) {
     try {
       const payload = JSON.stringify({
-        sender_id: senderId,
+        sender_id: process.env.SMS_SENDER_ID || 'PHFLOW',
         message: message,
         numbers: phoneValidation.national,
-        dlt_template_id: dltTemplateId,
+        dlt_template_id: process.env.SMS_DLT_TEMPLATE_ID || '110716182910001',
         entity_id: process.env.SMS_DLT_ENTITY_ID
       });
 
-      const response = await fetch(baseUrl, {
+      const response = await fetch(process.env.SMS_BASE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'authorization': apiKey,
-          'x-api-key': apiKey
+          'authorization': genericApiKey,
+          'x-api-key': genericApiKey
         },
         body: payload
       });
@@ -202,9 +415,9 @@ async function callSmsGatewayProvider(phoneValidation, message, notificationType
       return {
         success: true,
         providerMessageId: data.message_id || data.request_id || `MSG-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-        provider: isSandbox ? 'SMS Gateway (Sandbox)' : 'SMS Gateway',
+        provider: 'SMS Gateway',
         status: 'submitted',
-        isSandbox,
+        isSandbox: false,
         rawResponse: data
       };
     } catch (err) {
@@ -220,7 +433,7 @@ async function callSmsGatewayProvider(phoneValidation, message, notificationType
     }
   }
 
-  // 3. Deterministic local mock provider for testing & development
+  // 4. Deterministic local mock provider for testing & development
   const mockMsgId = `PF-SMS-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
   console.log(`📡 [SMS DISPATCH - ${provider.toUpperCase()}] To: ${phoneValidation.e164} | MsgId: ${mockMsgId}\n   Message: "${message.slice(0, 80)}..."`);
 
@@ -228,7 +441,7 @@ async function callSmsGatewayProvider(phoneValidation, message, notificationType
     success: true,
     providerMessageId: mockMsgId,
     provider: 'PharmaFlow Simulated Carrier Network (DLT Approved)',
-    status: 'submitted', // Gateway accepted; awaiting carrier delivery confirmation
+    status: 'submitted',
     isSandbox: true,
     isSimulated: true
   };
@@ -275,7 +488,8 @@ async function sendSms({
 
   // 2. Duplicate prevention (Idempotency)
   const windowKey = new Date().toISOString().slice(0, 10); // 1-day deduplication window
-  const idempotencyKey = buildIdempotencyKey(pharmacyId, customerId || recipientName, batchId, notificationType, windowKey);
+  const uniqueRecipientIdentifier = customerId || phoneValidation.national || recipientName;
+  const idempotencyKey = buildIdempotencyKey(pharmacyId, uniqueRecipientIdentifier, batchId, notificationType, windowKey);
 
   if (!overrideDuplicateCheck && notificationSource === 'automatic') {
     if (idempotencyRegistry.has(idempotencyKey)) {
@@ -298,9 +512,7 @@ async function sendSms({
   const gatewayResult = await callSmsGatewayProvider(phoneValidation, rendered.message, notificationType);
 
   const nowIso = new Date().toISOString();
-  const initialStatus = gatewayResult.success 
-    ? (gatewayResult.isSandbox ? 'submitted' : 'submitted') 
-    : 'failed';
+  const initialStatus = gatewayResult.success ? 'submitted' : 'failed';
 
   const notificationRecord = {
     pharmacyId,
@@ -319,7 +531,9 @@ async function sendSms({
     providerMessageId: gatewayResult.providerMessageId || `FAILED-${Date.now()}`,
     status: initialStatus, // 'submitted' | 'pending' | 'delivered' | 'failed' | 'expired'
     isSandbox: Boolean(gatewayResult.isSandbox),
-    sandboxDetails: gatewayResult.isSandbox ? 'Test / Sandbox — not delivered to handset' : null,
+    sandboxDetails: gatewayResult.isSandbox 
+      ? 'Test / Sandbox — not delivered to handset' 
+      : (gatewayResult.isOtp ? 'TEST / OTP — NOT A PHARMAFLOW DELIVERY' : null),
     errorMessage: gatewayResult.error || null,
     notificationSource, // 'automatic' | 'manual'
     createdAt: nowIso,
@@ -391,51 +605,57 @@ async function sendRecallNotificationToAffectedCustomers(pharmacyId, batchId, re
   if (!result.affectedPatients || result.affectedPatients.length === 0) {
     return {
       batch: batchId,
+      medicine: batchInfo?.medicine || 'Unknown',
+      affectedCount: 0,
       dispatchedCount: 0,
-      message: 'No dispensed patients identified in audit trail for this batch.'
+      results: []
     };
   }
 
   const dispatchResults = [];
-  const medicineName = batchInfo ? batchInfo.medicine : 'Medication';
-
   for (const patient of result.affectedPatients) {
-    if (patient.phone) {
-      const res = await sendSms({
-        pharmacyId,
-        recipientName: patient.customerName,
-        recipientPhone: patient.phone,
-        recipientType: 'customer',
-        customerId: patient.customerId || null,
-        notificationType: 'RECALL',
-        batchId,
-        language: patient.preferredLang || 'English',
-        variables: {
-          medicine: medicineName,
-          batch: batchId,
-          pharmacy: 'Apollo MedPlus Express'
-        },
-        notificationSource: 'automatic'
-      });
-      dispatchResults.push({
-        customer: patient.customerName,
-        phone: patient.phone,
-        status: res.status,
-        providerMessageId: res.providerMessageId,
-        isSandbox: res.isSandbox
-      });
-    }
+    if (!patient.phone) continue;
+
+    const dispatch = await sendSms({
+      pharmacyId,
+      customerId: patient.id || patient.customerId || null,
+      recipientName: patient.name,
+      recipientPhone: patient.phone,
+      notificationType: 'RECALL',
+      medicineId: batchInfo?.medicine || 'Prescribed Medication',
+      batchId,
+      language: patient.preferredLang || 'English',
+      notificationSource: 'automatic',
+      variables: {
+        medicine: batchInfo?.medicine || 'Prescribed Medication',
+        batch: batchId,
+        date: patient.date || new Date().toISOString().slice(0, 10),
+        reason: reason || 'Manufacturer recall'
+      }
+    });
+
+    dispatchResults.push({
+      customer: patient.name,
+      patient: patient.name,
+      phone: patient.phone,
+      success: dispatch.success,
+      providerMessageId: dispatch.providerMessageId,
+      status: dispatch.status,
+      isSandbox: dispatch.isSandbox
+    });
   }
 
   return {
     batch: batchId,
-    dispatchedCount: dispatchResults.length,
+    medicine: batchInfo?.medicine || 'Unknown',
+    affectedCount: result.affectedPatients.length,
+    dispatchedCount: dispatchResults.filter(r => r.success).length,
     results: dispatchResults
   };
 }
 
 /**
- * Queries the SMSLocal / Gateway Delivery Report Endpoint for a message ID
+ * Queries the Delivery Report Endpoint for a message ID
  */
 async function checkSmsDeliveryStatus(providerMessageId) {
   if (!providerMessageId) {
@@ -443,61 +663,92 @@ async function checkSmsDeliveryStatus(providerMessageId) {
   }
 
   const provider = (process.env.SMS_PROVIDER || 'MOCK_TEST_PROVIDER').toLowerCase();
-  const apiKey = process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
-  const dlrUrl = process.env.SMSLOCAL_DLR_URL || 'https://api.smslocal.in/api/dlrapi';
-
   let resolvedStatus = null;
   let deliveredAt = null;
   let errorMessage = null;
 
-  // 1. If SMSLocal live gateway is active
-  if (provider === 'smslocal' && apiKey && apiKey !== 'mock_key') {
+  // 1. MessageCentral Status Check
+  if (provider === 'messagecentral' || provider === 'messaging_central') {
     try {
-      // Official SMSLocal DLR format: GET /api/dlrapi?key={apiKey}&msgid={providerMessageId}
-      const queryParams = new URLSearchParams({
-        key: apiKey,
-        msgid: providerMessageId
-      });
-      const url = `${dlrUrl.includes('?') ? dlrUrl + '&' : dlrUrl + '?'}${queryParams.toString()}`;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json, text/plain, */*'
-        }
-      });
-
-      if (response.ok) {
-        const text = await response.text();
-        let data = {};
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { status: text.trim() };
-        }
-
-        const rawStatus = (data.status || data.deliveryStatus || data.data?.status || data.report || text.trim() || '').toUpperCase();
-        if (rawStatus === 'DELIVRD' || rawStatus === 'DELIVERED') {
-          resolvedStatus = 'delivered';
-          deliveredAt = data.deliveredAt || data.datetime || new Date().toISOString();
-        } else if (rawStatus === 'FAILED' || rawStatus === 'UNDELIV' || rawStatus === 'REJECTD') {
-          resolvedStatus = 'failed';
-          errorMessage = data.reason || data.errorMessage || 'Carrier reported delivery failure to handset';
-        } else if (rawStatus === 'EXPIRED') {
-          resolvedStatus = 'expired';
-          errorMessage = 'SMS validity window expired before handset delivery';
-        } else if (rawStatus === 'PENDING' || rawStatus === 'AWAITING' || rawStatus === 'SUBMITTED' || rawStatus === 'ACCEPTD') {
-          resolvedStatus = 'pending';
+      const token = await getMessageCentralAuthToken();
+      if (token) {
+        const baseUrl = process.env.MESSAGECENTRAL_BASE_URL || 'https://cpaas.messagecentral.com';
+        const statusUrl = `${baseUrl}/verification/v3/status?verificationId=${encodeURIComponent(providerMessageId)}`;
+        const res = await fetch(statusUrl, {
+          method: 'GET',
+          headers: {
+            'authToken': token,
+            'Accept': '*/*'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const verificationStatus = (data.verificationStatus || data.data?.verificationStatus || data.status || '').toUpperCase();
+          if (verificationStatus === 'VERIFIED' || verificationStatus === 'DELIVERED') {
+            resolvedStatus = 'delivered';
+            deliveredAt = new Date().toISOString();
+          } else if (verificationStatus === 'EXPIRED' || verificationStatus === 'FAILED') {
+            resolvedStatus = 'failed';
+            errorMessage = 'MessageCentral verification expired or failed';
+          } else if (verificationStatus === 'IN_PROGRESS' || verificationStatus === 'PENDING') {
+            resolvedStatus = 'pending';
+          }
         }
       }
-    } catch (err) {
-      console.warn('⚠️ [SMSLocal DLR Query Error]:', err.message);
+    } catch (mcErr) {
+      console.warn('⚠️ [MessageCentral Status Query Error]:', mcErr.message);
+    }
+  }
+
+  // 2. SMSLocal Status Check
+  if (provider === 'smslocal') {
+    const apiKey = process.env.SMSLOCAL_API_KEY || process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
+    const dlrUrl = process.env.SMSLOCAL_DLR_URL || 'https://app.smslocal.in/api/dlrapi';
+
+    if (apiKey && apiKey !== 'mock_key') {
+      try {
+        const queryParams = new URLSearchParams({
+          key: apiKey,
+          msgid: providerMessageId
+        });
+        const url = `${dlrUrl.includes('?') ? dlrUrl + '&' : dlrUrl + '?'}${queryParams.toString()}`;
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json, text/plain, */*' }
+        });
+
+        if (response.ok) {
+          const text = await response.text();
+          let data = {};
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = { status: text.trim() };
+          }
+
+          const rawStatus = (data.status || data.deliveryStatus || data.data?.status || data.report || text.trim() || '').toUpperCase();
+          if (rawStatus === 'DELIVRD' || rawStatus === 'DELIVERED') {
+            resolvedStatus = 'delivered';
+            deliveredAt = data.deliveredAt || data.datetime || new Date().toISOString();
+          } else if (rawStatus === 'FAILED' || rawStatus === 'UNDELIV' || rawStatus === 'REJECTD') {
+            resolvedStatus = 'failed';
+            errorMessage = data.reason || data.errorMessage || 'Carrier reported delivery failure to handset';
+          } else if (rawStatus === 'EXPIRED') {
+            resolvedStatus = 'expired';
+            errorMessage = 'SMS validity window expired before handset delivery';
+          } else if (rawStatus === 'PENDING' || rawStatus === 'AWAITING' || rawStatus === 'SUBMITTED' || rawStatus === 'ACCEPTD') {
+            resolvedStatus = 'pending';
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ [SMSLocal DLR Query Error]:', err.message);
+      }
     }
   }
 
   const nowIso = new Date().toISOString();
 
-  // If no change or simulation, find existing record
   let existingDoc = null;
   let docRef = null;
 
@@ -515,144 +766,170 @@ async function checkSmsDeliveryStatus(providerMessageId) {
   }
 
   if (!existingDoc) {
-    return { success: false, error: `Message with ID ${providerMessageId} not found` };
+    return {
+      success: true,
+      providerMessageId,
+      status: resolvedStatus || 'submitted',
+      lastStatusCheckedAt: nowIso,
+      updated: false
+    };
   }
 
-  // If resolvedStatus was obtained from SMSLocal, apply it. Otherwise maintain current status with updated timestamp.
-  const finalStatus = resolvedStatus || existingDoc.status;
   const updates = {
-    status: finalStatus,
-    lastStatusCheckedAt: nowIso,
-    ...(deliveredAt ? { deliveredAt } : {}),
-    ...(errorMessage ? { errorMessage } : {})
+    lastStatusCheckedAt: nowIso
   };
+
+  if (resolvedStatus && resolvedStatus !== existingDoc.status) {
+    updates.status = resolvedStatus;
+    if (resolvedStatus === 'delivered') updates.deliveredAt = deliveredAt || nowIso;
+    if (resolvedStatus === 'failed') {
+      updates.failedAt = nowIso;
+      if (errorMessage) updates.errorMessage = errorMessage;
+    }
+  }
 
   if (docRef) {
     await docRef.update(updates);
+  } else if (existingDoc) {
+    Object.assign(existingDoc, updates);
   }
-  Object.assign(existingDoc, updates);
 
   return {
     success: true,
     providerMessageId,
-    status: finalStatus,
+    status: updates.status || existingDoc.status,
+    deliveredAt: updates.deliveredAt || existingDoc.deliveredAt,
     lastStatusCheckedAt: nowIso,
-    deliveredAt: existingDoc.deliveredAt || deliveredAt || null,
-    errorMessage: existingDoc.errorMessage || errorMessage || null,
-    isSandbox: existingDoc.isSandbox || false
+    updated: Boolean(updates.status)
   };
 }
 
 /**
- * Synchronizes delivery status for all pending SMS notifications in a pharmacy
+ * Synchronizes delivery status for all active/pending notifications
  */
-async function syncAllPendingSmsStatuses(pharmacyId) {
-  let pendingLogs = [];
+async function syncAllPendingSmsStatuses(pharmacyId = 'DEMO_PHARMACY') {
+  let pendingList = [];
 
   if (isConnected()) {
     const snap = await db.collection('smsNotifications')
       .where('pharmacyId', '==', pharmacyId)
-      .where('status', 'in', ['submitted', 'sent', 'pending'])
+      .where('status', 'in', ['submitted', 'pending'])
+      .limit(50)
       .get();
-    pendingLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    pendingList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } else {
-    pendingLogs = inMemoryNotifications.filter(
-      n => n.pharmacyId === pharmacyId && ['submitted', 'sent', 'pending'].includes(n.status)
+    pendingList = inMemoryNotifications.filter(
+      n => n.pharmacyId === pharmacyId && (n.status === 'submitted' || n.status === 'pending')
     );
   }
 
   const results = [];
-  for (const log of pendingLogs) {
-    if (log.providerMessageId) {
-      const res = await checkSmsDeliveryStatus(log.providerMessageId);
-      results.push(res);
+  for (const item of pendingList) {
+    if (item.providerMessageId && !item.providerMessageId.startsWith('FAILED-')) {
+      const res = await checkSmsDeliveryStatus(item.providerMessageId);
+      results.push({
+        id: item.id,
+        providerMessageId: item.providerMessageId,
+        previousStatus: item.status,
+        newStatus: res.status
+      });
     }
   }
 
   return {
-    pharmacyId,
-    checkedCount: results.length,
+    checkedCount: pendingList.length,
     results
   };
 }
 
 /**
- * Processes SMS Provider Delivery Status Webhook Callbacks
+ * Webhook receiver for carrier DLR callbacks
  */
-async function processDeliveryStatusCallback(callbackPayload) {
-  const messageId = callbackPayload.messageId || callbackPayload.providerMessageId || callbackPayload.msgId || callbackPayload.id;
-  const rawStatus = (callbackPayload.status || callbackPayload.deliveryStatus || '').toLowerCase(); // 'delivered', 'failed', 'undelivered', 'delivrd'
+async function processDeliveryStatusCallback(payload) {
+  const providerMessageId = payload.providerMessageId || payload.msgid || payload.messageId || payload.message_id || payload.verificationId || payload.id;
+  const rawStatus = (payload.status || payload.deliveryStatus || payload.report || payload.verificationStatus || '').toUpperCase();
 
-  if (!messageId) {
-    return { success: false, error: 'Missing provider messageId in callback.' };
+  if (!providerMessageId) {
+    return { success: false, error: 'Missing providerMessageId in webhook body' };
   }
 
-  let finalStatus = 'pending';
-  let isFailure = false;
-  if (rawStatus.includes('undeliv') || rawStatus.includes('fail') || rawStatus.includes('reject')) {
-    finalStatus = 'failed';
-    isFailure = true;
-  } else if (rawStatus.includes('expir')) {
-    finalStatus = 'expired';
-    isFailure = true;
-  } else if (rawStatus.includes('deliv')) {
-    finalStatus = 'delivered';
-  } else if (rawStatus.includes('subm') || rawStatus.includes('sent') || rawStatus.includes('pend') || rawStatus.includes('accept')) {
-    finalStatus = 'pending';
+  let mappedStatus = 'pending';
+  if (rawStatus === 'DELIVRD' || rawStatus === 'DELIVERED' || rawStatus === 'SUCCESS' || rawStatus === 'VERIFIED') {
+    mappedStatus = 'delivered';
+  } else if (rawStatus === 'FAILED' || rawStatus === 'UNDELIV' || rawStatus === 'REJECTD' || rawStatus === 'EXPIRED') {
+    mappedStatus = 'failed';
   }
 
   const nowIso = new Date().toISOString();
-  const deliveryTime = callbackPayload.deliveredAt || callbackPayload.timestamp || nowIso;
-  const errorMsg = callbackPayload.reason || callbackPayload.errorMessage || callbackPayload.error || null;
+  let updated = false;
 
   if (isConnected()) {
     const snap = await db.collection('smsNotifications')
-      .where('providerMessageId', '==', messageId)
+      .where('providerMessageId', '==', providerMessageId)
       .limit(1)
       .get();
-
+    
     if (!snap.empty) {
-      const doc = snap.docs[0];
+      const docRef = snap.docs[0].ref;
       const updates = {
-        status: finalStatus,
-        lastStatusCheckedAt: nowIso,
-        deliveredAt: finalStatus === 'delivered' ? deliveryTime : null,
-        failedAt: isFailure ? nowIso : null,
-        errorMessage: errorMsg || (isFailure ? 'Handset delivery failed' : null),
-        updatedAt: nowIso
+        status: mappedStatus,
+        lastStatusCheckedAt: nowIso
       };
-      await doc.ref.update(updates);
-      return { success: true, id: doc.id, providerMessageId: messageId, status: finalStatus, deliveredAt: updates.deliveredAt };
+      if (mappedStatus === 'delivered') updates.deliveredAt = nowIso;
+      if (mappedStatus === 'failed') updates.failedAt = nowIso;
+      await docRef.update(updates);
+      updated = true;
+    }
+  } else {
+    const found = inMemoryNotifications.find(n => n.providerMessageId === providerMessageId);
+    if (found) {
+      found.status = mappedStatus;
+      found.lastStatusCheckedAt = nowIso;
+      if (mappedStatus === 'delivered') found.deliveredAt = nowIso;
+      if (mappedStatus === 'failed') found.failedAt = nowIso;
+      updated = true;
     }
   }
 
-  const memMatch = inMemoryNotifications.find(n => n.providerMessageId === messageId);
-  if (memMatch) {
-    memMatch.status = finalStatus;
-    memMatch.lastStatusCheckedAt = nowIso;
-    if (finalStatus === 'delivered') memMatch.deliveredAt = deliveryTime;
-    if (isFailure) {
-      memMatch.failedAt = nowIso;
-      memMatch.errorMessage = errorMsg || 'Handset delivery failed';
-    }
-    return { success: true, id: memMatch.id, providerMessageId: messageId, status: finalStatus, deliveredAt: memMatch.deliveredAt };
-  }
-
-  return { success: false, error: `Notification with providerMessageId ${messageId} not found.` };
+  return {
+    success: true,
+    providerMessageId,
+    status: mappedStatus,
+    mappedStatus,
+    updated
+  };
 }
 
 /**
- * Fetches SMS reports & logs with Automatic vs Manual separation and accurate delivery metrics
+ * Retrieves paginated SMS transmission logs and calculated delivery summary
  */
-async function getSmsReports(pharmacyId, filters = {}) {
+async function getSmsReports(pharmacyId = 'DEMO_PHARMACY', filters = {}) {
   let logs = [];
+
   if (isConnected()) {
-    const snap = await db.collection('smsNotifications')
-      .where('pharmacyId', '==', pharmacyId)
-      .get();
-    logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } else {
+    try {
+      let query = db.collection('smsNotifications')
+        .where('pharmacyId', '==', pharmacyId)
+        .orderBy('createdAt', 'desc')
+        .limit(filters.limit || 150);
+
+      const snap = await query.get();
+      logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (err) {
+      console.warn('⚠️ Firestore SMS query fallback:', err.message);
+      const snap = await db.collection('smsNotifications')
+        .where('pharmacyId', '==', pharmacyId)
+        .limit(100)
+        .get();
+      logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      logs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    }
+  }
+
+  if (logs.length === 0 && inMemoryNotifications.length > 0) {
     logs = inMemoryNotifications.filter(n => n.pharmacyId === pharmacyId);
+    logs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   }
 
   // Apply filters
@@ -662,73 +939,106 @@ async function getSmsReports(pharmacyId, filters = {}) {
   if (filters.status && filters.status !== 'all') {
     logs = logs.filter(l => l.status === filters.status);
   }
-  if (filters.language && filters.language !== 'all') {
-    logs = logs.filter(l => l.language === filters.language);
-  }
   if (filters.notificationType && filters.notificationType !== 'all') {
     logs = logs.filter(l => l.notificationType === filters.notificationType);
   }
 
-  logs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
   const total = logs.length;
-  // STRICT RULE: 'delivered' only counts carrier-confirmed delivered. 'sent' and 'submitted' are in-transit/pending.
-  const delivered = logs.filter(l => l.status === 'delivered').length;
+  const delivered = logs.filter(l => l.status === 'delivered' && !l.isSandbox).length;
   const submitted = logs.filter(l => l.status === 'submitted' || l.status === 'sent').length;
   const pending = logs.filter(l => l.status === 'pending').length;
-  const failed = logs.filter(l => l.status === 'failed' || l.status === 'undelivered').length;
+  const failed = logs.filter(l => l.status === 'failed').length;
   const expired = logs.filter(l => l.status === 'expired').length;
-  const queued = logs.filter(l => l.status === 'queued').length;
   const automaticCount = logs.filter(l => l.notificationSource === 'automatic').length;
   const manualCount = logs.filter(l => l.notificationSource === 'manual').length;
 
-  const deliveryRate = total > 0 ? Math.round((delivered / total) * 100) : 100;
-
   return {
+    pharmacyId,
     summary: {
       totalSms: total,
-      sent: submitted, // In transit / submitted to provider
+      sent: submitted,
       submitted,
       pending,
-      delivered, // Only carrier-confirmed handset delivery
+      delivered,
       failed,
       expired,
-      queued,
+      queued: 0,
       automaticCount,
       manualCount,
-      deliveryRatePct: deliveryRate
+      deliveryRatePct: total > 0 ? Math.round((delivered / total) * 100) : 0
     },
     logs: logs.slice(0, filters.limit || 100)
   };
 }
 
 /**
- * Checks transactional SMS credit balance from SMSLocal Gateway
+ * Checks provider credit balance & status
  */
-async function checkSmsLocalCredits() {
+async function checkSmsCredits() {
   const provider = (process.env.SMS_PROVIDER || 'MOCK_TEST_PROVIDER').toLowerCase();
-  const apiKey = process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
-  const creditUrl = process.env.SMSLOCAL_CREDIT_URL || 'https://api.smslocal.in/api/creditapi';
 
-  if (provider === 'smslocal' && apiKey && apiKey !== 'mock_key') {
-    try {
-      const url = `${creditUrl}?key=${encodeURIComponent(apiKey)}&route=1`;
-      const res = await fetch(url, { method: 'GET' });
-      const text = await res.text();
-      let data = {};
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { credits: parseFloat(text) || 0 };
-      }
-      const credits = Number(data.credits !== undefined ? data.credits : (data.balance || data.count || 0));
+  // 1. MessageCentral Credit / Status Check
+  if (provider === 'messagecentral' || provider === 'messaging_central') {
+    const customerId = process.env.MESSAGECENTRAL_CUSTOMER_ID;
+    const apiKey = process.env.MESSAGECENTRAL_API_KEY || process.env.MESSAGECENTRAL_KEY || process.env.MESSAGECENTRAL_PASSWORD;
+    const authToken = process.env.MESSAGECENTRAL_AUTH_TOKEN;
+
+    if (!customerId || (!apiKey && !authToken)) {
       return {
-        provider: 'SMSLocal',
-        credits,
-        isSufficient: credits > 0
+        provider: 'MessageCentral',
+        isConfigured: false,
+        error: 'Missing MESSAGECENTRAL_CUSTOMER_ID or MESSAGECENTRAL_API_KEY in backend .env',
+        isSufficient: false
+      };
+    }
+
+    try {
+      const token = await getMessageCentralAuthToken();
+      return {
+        provider: 'MessageCentral Gateway',
+        customerId,
+        isConfigured: Boolean(token),
+        isSufficient: Boolean(token),
+        mode: 'OTP / Verification Test Route',
+        route: 'Verification v3 API'
       };
     } catch (err) {
-      return { provider: 'SMSLocal', error: err.message, isSufficient: false };
+      return {
+        provider: 'MessageCentral Gateway',
+        isConfigured: false,
+        error: err.message,
+        isSufficient: false
+      };
+    }
+  }
+
+  // 2. SMSLocal Credit Check
+  if (provider === 'smslocal') {
+    const apiKey = process.env.SMSLOCAL_API_KEY || process.env.SMSLOCAL_KEY || process.env.SMS_API_KEY;
+    const creditUrl = process.env.SMSLOCAL_CREDIT_URL || 'https://app.smslocal.in/api/creditapi';
+
+    if (apiKey && apiKey !== 'mock_key') {
+      try {
+        const url = `${creditUrl}?key=${encodeURIComponent(apiKey)}&route=1`;
+        const res = await fetch(url, { method: 'GET' });
+        const text = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { credits: parseFloat(text) || 0 };
+        }
+        const creditsRaw = data.Credits !== undefined ? data.Credits : (data.credits !== undefined ? data.credits : (data.balance || data.count || text));
+        const credits = Number(parseFloat(creditsRaw) || 0);
+        return {
+          provider: 'SMSLocal Live Gateway',
+          credits,
+          route: data.Route || data.route || 'Transactional',
+          isSufficient: credits > 0
+        };
+      } catch (err) {
+        return { provider: 'SMSLocal', error: err.message, isSufficient: false };
+      }
     }
   }
 
@@ -749,6 +1059,6 @@ module.exports = {
   syncAllPendingSmsStatuses,
   processDeliveryStatusCallback,
   getSmsReports,
-  checkSmsLocalCredits
+  checkSmsCredits,
+  checkSmsLocalCredits: checkSmsCredits // Backwards compatibility alias
 };
-

@@ -1,3 +1,5 @@
+process.env.SMS_PROVIDER = 'MOCK_TEST_PROVIDER';
+process.env.SMSLOCAL_SANDBOX = 'true';
 const assert = require('assert');
 const {
   validateIndianPhoneNumber,
