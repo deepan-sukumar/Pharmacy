@@ -17,36 +17,88 @@ interface SafetyCommunicationModalProps {
     qty?: number;
     rxId?: string;
     date?: string;
+    dispensedDate?: string;
   } | null;
   notificationType?: 'NEAR_EXPIRY' | 'RECALL' | 'MANUAL' | string;
   medicineName?: string;
   batchNumber?: string;
   expiryDate?: string;
+  dispensedDate?: string;
   recallReason?: string;
+  pharmacyName?: string;
   onSuccess?: (result: any) => void;
   showToast?: (msg: string) => void;
 }
 
-const APPROVED_TEMPLATES: Record<string, { expiry: string; recall: string }> = {
+export function formatReadableDate(rawDate?: string | null): string {
+  if (!rawDate) return 'Not available';
+  const str = String(rawDate).trim();
+  if (!str) return 'Not available';
+
+  // If already in '15 Sep 2026' or '15-Sep-2026' format
+  if (/^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$/.test(str)) {
+    return str;
+  }
+  if (/^[A-Za-z]{3}\s+\d{4}$/.test(str)) {
+    return `30 ${str}`;
+  }
+
+  // Parse ISO or YYYY-MM-DD
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const day = parsed.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[parsed.getMonth()];
+    const year = parsed.getFullYear();
+    return `${day} ${month} ${year}`;
+  }
+
+  return str;
+}
+
+interface TemplateParams {
+  patient: string;
+  medicine: string;
+  batch: string;
+  dispensedDate: string;
+  expiryDate: string;
+  pharmacy: string;
+  reason?: string;
+}
+
+const APPROVED_TEMPLATES: Record<string, {
+  expiry: (p: TemplateParams) => string;
+  recall: (p: TemplateParams) => string;
+}> = {
   English: {
-    expiry: 'Your medicine is approaching its expiry date. Please check the expiry date before use and contact your pharmacist if you have any questions.',
-    recall: 'This is a pharmacy safety notification regarding a medicine you previously received. Please contact your pharmacist regarding this batch. Do not use the medicine until you receive appropriate guidance.'
+    expiry: (p) =>
+      `PharmaFlow Safety Advisory: Dear ${p.patient}, your ${p.medicine} is nearing expiry. Dispensed: ${p.dispensedDate}. Expiry: ${p.expiryDate}. Please check before use and contact your pharmacist if needed. Thank you for reading. Take care! – ${p.pharmacy}`,
+    recall: (p) =>
+      `PharmaFlow Safety Advisory: Dear ${p.patient}, this is an urgent pharmacy safety notification regarding ${p.medicine} (Batch: ${p.batch}). Dispensed: ${p.dispensedDate}. Please contact your pharmacist immediately and do not use this medicine until guided. Take care! – ${p.pharmacy}`
   },
   Tamil: {
-    expiry: 'உங்கள் மருந்து காலாவதி தேதியை நெருங்குகிறது. தயவுசெய்து பயன்படுத்துவதற்கு முன் காலாவதி தேதியை சரிபார்த்து, ஏதேனும் சந்தேகங்கள் இருந்தால் உங்கள் மருந்தாளரை தொடர்பு கொள்ளவும்.',
-    recall: 'நீங்கள் முன்பு பெற்ற மருந்து குறித்த அவசர மருந்தக பாதுகாப்பு அறிவிப்பு இது. இந்த தொகுதி குறித்து உங்கள் மருந்தாளரை உடனடியாக தொடர்பு கொள்ளவும். வழிகாட்டுதல் பெறும் வரை மருந்தை உட்கொள்ள வேண்டாம்.'
+    expiry: (p) =>
+      `PharmaFlow பாதுகாப்பு அறிவிப்பு: அன்புள்ள ${p.patient}, உங்கள் ${p.medicine} மருந்து காலாவதியை நெருங்குகிறது. வழங்கிய தேதி: ${p.dispensedDate}. காலாவதி தேதி: ${p.expiryDate}. பயன்படுத்தும் முன் சரிபார்த்து, தேவையெனில் உங்கள் மருந்தாளரை தொடர்பு கொள்ளவும். வாசித்ததற்கு நன்றி. உங்கள் உடல்நலத்தை கவனித்துக் கொள்ளுங்கள்! – ${p.pharmacy}`,
+    recall: (p) =>
+      `PharmaFlow பாதுகாப்பு அறிவிப்பு: அன்புள்ள ${p.patient}, நீங்கள் முன்பு பெற்ற ${p.medicine} (தொகுதி: ${p.batch}) மருந்து குறித்த அவசர பாதுகாப்பு அறிவிப்பு இது. வழங்கிய தேதி: ${p.dispensedDate}. இந்த தொகுதி குறித்து உடனடியாக உங்கள் மருந்தாளரை தொடர்பு கொள்ளவும், வழிகாட்டுதல் பெறும் வரை மருந்தை உட்கொள்ள வேண்டாம். உங்கள் உடல்நலத்தை கவனித்துக் கொள்ளுங்கள்! – ${p.pharmacy}`
   },
   Telugu: {
-    expiry: 'మీ ఔషధం గడువు తేదీకి చేరువలో ఉంది. దయచేసి ఉపయోగించే ముందు గడువు తేదీని తనిఖీ చేయండి మరియు ఏవైనా సందేహాలు ఉంటే మీ ఫార్మసిస్ట్‌ను సంప్రదించండి.',
-    recall: 'మీరు గతంలో పొందిన ఔషధానికి సంబంధించిన అత్యవసర ఫార్మసీ భద్రతా నోటీసు ఇది. ఈ బ్యాచ్ గురించి దయచేసి వెంటనే మీ ఫార్మసిస్ట్‌ను సంప్రదించండి.'
+    expiry: (p) =>
+      `PharmaFlow భద్రతా సలహా: ప్రియమైన ${p.patient}, మీ ${p.medicine} గడువు ముగింపుకు చేరువలో ఉంది. అందించిన తేదీ: ${p.dispensedDate}. గడువు తేదీ: ${p.expiryDate}. ఉపయోగించే ముందు తనిఖీ చేయండి, అవసరమైతే మీ ఫార్మసిస్ట్‌ను సంప్రదించండి. చదివినందుకు ధన్యవాదాలు. జాగ్రత్తగా ఉండండి! – ${p.pharmacy}`,
+    recall: (p) =>
+      `PharmaFlow భద్రతా సలహా: ప్రియమైన ${p.patient}, మీరు పొందిన ${p.medicine} (బ్యాచ్: ${p.batch}) ఔషధానికి సంబంధించిన అత్యవసర భద్రతా నోటీసు ఇది. అందించిన తేదీ: ${p.dispensedDate}. దయచేసి వెంటనే మీ ఫార్మసిస్ట్‌ను సంప్రదించండి మరియు మార్గదర్శకత్వం వచ్చేవరకు ఉపయోగించవద్దు. జాగ్రత్తగా ఉండండి! – ${p.pharmacy}`
   },
   Kannada: {
-    expiry: 'ನಿಮ್ಮ ಔಷಧಿಯ ಅವಧಿ ಮುಗಿಯುವ ದಿನಾಂಕ ಸಮೀಪಿಸುತ್ತಿದೆ. ದಯವಿಟ್ಟು ಬಳಸುವ ಮೊದಲು ಮುಕ್ತಾಯ ದಿನಾಂಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಯಾವುದೇ ಪ್ರಶ್ನೆಗಳಿದ್ದರೆ ನಿಮ್ಮ ಔಷಧಿಕಾರರನ್ನು ಸಂಪರ್ಕಿಸಿ.',
-    recall: 'ನೀವು ಈ ಹಿಂದೆ ಪಡೆದ ಔಷಧಿಯ ಕುರಿತು ಇದು ತುರ್ತು ಔಷಧಾಲಯ ಸುರಕ್ಷತಾ ಸೂಚನೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಈ ಬ್ಯಾಚ್ ಕುರಿತು ನಿಮ್ಮ ಔಷಧಿಕಾರರನ್ನು ಸಂಪರ್ಕಿಸಿ.'
+    expiry: (p) =>
+      `PharmaFlow ಸುರಕ್ಷತಾ ಸಲಹೆ: ಪ್ರಿಯ ${p.patient}, ನಿಮ್ಮ ${p.medicine} ಔಷಧಿಯ ಅವಧಿ ಮುಕ್ತಾಯ ಸಮೀಪಿಸುತ್ತಿದೆ. ನೀಡಿದ ದಿನಾಂಕ: ${p.dispensedDate}. ಮುಕ್ತಾಯ ದಿನಾಂಕ: ${p.expiryDate}. ಬಳಸುವ ಮೊದಲು ಪರಿಶೀಲಿಸಿ, ಅಗತ್ಯವಿದ್ದರೆ ನಿಮ್ಮ ಔಷಧಿಕಾರರನ್ನು ಸಂಪರ್ಕಿಸಿ. ಓದಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಜಾಗರೂಕರಾಗಿರಿ! – ${p.pharmacy}`,
+    recall: (p) =>
+      `PharmaFlow ಸುರಕ್ಷತಾ ಸಲಹೆ: ಪ್ರಿಯ ${p.patient}, ನೀವು ಪಡೆದ ${p.medicine} (ಬ್ಯಾಚ್: ${p.batch}) ಔಷಧಿಯ ಕುರಿತು ಇದು ತುರ್ತು ಸುರಕ್ಷತಾ ಸೂಚನೆಯಾಗಿದೆ. ನೀಡಿದ ದಿನಾಂಕ: ${p.dispensedDate}. ದಯವಿಟ್ಟು ತಕ್ಷಣ ನಿಮ್ಮ ಔಷಧಿಕಾರರನ್ನು ಸಂಪರ್ಕಿಸಿ ಮತ್ತು ಮಾರ್ಗದರ್ಶನ ಸಿಗುವವರೆಗೆ ಔಷಧಿಯನ್ನು ಬಳಸಬೇಡಿ. ಜಾಗರೂಕರಾಗಿರಿ! – ${p.pharmacy}`
   },
   Hindi: {
-    expiry: 'आपकी दवा की समाप्ति तिथि निकट आ रही है। कृपया उपयोग करने से पहले समाप्ति तिथि की जांच करें और यदि आपका कोई प्रश्न है तो अपने फार्मासिस्ट से संपर्क करें।',
-    recall: 'यह आपके द्वारा पहले प्राप्त की गई दवा के संबंध में एक फार्मेसी सुरक्षा सलाह है। कृपया इस बैच के संबंध में अपने फार्मासिस्ट से तुरंत संपर्क करें।'
+    expiry: (p) =>
+      `PharmaFlow सुरक्षा सलाह: प्रिय ${p.patient}, आपकी ${p.medicine} दवा समाप्ति तिथि के निकट आ रही है। वितरण तिथि: ${p.dispensedDate}। समाप्ति तिथि: ${p.expiryDate}। कृपया उपयोग करने से पहले जांच लें और आवश्यकता पड़ने पर अपने फार्मासिस्ट से संपर्क करें। पढ़ने के लिए धन्यवाद। अपना ख्याल रखें! – ${p.pharmacy}`,
+    recall: (p) =>
+      `PharmaFlow सुरक्षा सलाह: प्रिय ${p.patient}, यह आपके द्वारा प्राप्त ${p.medicine} (बैच: ${p.batch}) दवा के संबंध में एक आवश्यक सुरक्षा सूचना है। वितरण तिथि: ${p.dispensedDate}। कृपया तुरंत अपने फार्मासिस्ट से संपर्क करें और मार्गदर्शन मिलने तक दवा का उपयोग न करें। अपना ख्याल रखें! – ${p.pharmacy}`
   }
 };
 
@@ -65,8 +117,10 @@ export default function SafetyCommunicationModal({
   notificationType = 'NEAR_EXPIRY',
   medicineName = 'Amoxicillin 500mg',
   batchNumber = 'DEMO-EXP-001',
-  expiryDate = 'Oct 2026',
+  expiryDate = '30 Oct 2026',
+  dispensedDate,
   recallReason = 'Manufacturer safety bulletin recall',
+  pharmacyName = 'Apollo MedPlus Pharmacy',
   onSuccess,
   showToast = () => {},
 }: SafetyCommunicationModalProps) {
@@ -80,6 +134,11 @@ export default function SafetyCommunicationModal({
   const customerName = targetCustomer?.name || 'Customer';
   const customerPhone = targetCustomer?.phone || '';
   const customerPreference: 'WHATSAPP' | 'SMS' = (targetCustomer?.communicationPreference || 'SMS').toUpperCase() as any;
+
+  // Resolve dates cleanly
+  const resolvedDispensedDate = formatReadableDate(dispensedDate || targetCustomer?.date || targetCustomer?.dispensedDate);
+  const resolvedExpiryDate = formatReadableDate(expiryDate);
+  const resolvedPharmacyName = pharmacyName || 'Apollo MedPlus Pharmacy';
 
   // Initialize recommendation based on customer preference
   useEffect(() => {
@@ -102,11 +161,18 @@ export default function SafetyCommunicationModal({
   if (!isOpen) return null;
 
   const isRecall = notificationType === 'RECALL';
-  const rawTemplate = isRecall
-    ? (APPROVED_TEMPLATES[language]?.recall || APPROVED_TEMPLATES.English.recall)
-    : (APPROVED_TEMPLATES[language]?.expiry || APPROVED_TEMPLATES.English.expiry);
+  const templateObj = APPROVED_TEMPLATES[language] || APPROVED_TEMPLATES.English;
+  const templateFn = isRecall ? templateObj.recall : templateObj.expiry;
 
-  const formattedMessage = `PharmaFlow Safety Advisory: Dear ${customerName}, ${rawTemplate} [Medicine: ${medicineName}, Batch: ${batchNumber}] - Apollo MedPlus Pharmacy`;
+  const formattedMessage = templateFn({
+    patient: customerName,
+    medicine: medicineName,
+    batch: batchNumber,
+    dispensedDate: resolvedDispensedDate,
+    expiryDate: resolvedExpiryDate,
+    pharmacy: resolvedPharmacyName,
+    reason: recallReason
+  });
 
   const cleanDigits = customerPhone.replace(/\D/g, '');
   const nationalDigits = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
@@ -256,7 +322,7 @@ export default function SafetyCommunicationModal({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 10, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 110px), 1fr))', gap: 10, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
               <div>
                 <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600 }}>Medicine</span>
                 <p style={{ margin: '2px 0 0', fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{medicineName}</p>
@@ -266,9 +332,13 @@ export default function SafetyCommunicationModal({
                 <p style={{ margin: '2px 0 0', fontSize: 12.5, fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)' }}>{batchNumber}</p>
               </div>
               <div>
-                <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600 }}>{isRecall ? 'Batch Status' : 'Expiry Date'}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600 }}>Dispensed Date</span>
+                <p style={{ margin: '2px 0 0', fontSize: 12.5, fontWeight: 700, color: 'var(--text-2)' }}>{resolvedDispensedDate}</p>
+              </div>
+              <div>
+                <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600 }}>{isRecall ? 'Batch Status' : 'Exact Expiry'}</span>
                 <p style={{ margin: '2px 0 0', fontSize: 12.5, fontWeight: 700, color: isRecall ? 'var(--danger)' : 'var(--warning)' }}>
-                  {isRecall ? 'QUARANTINED / RECALLED' : expiryDate}
+                  {isRecall ? 'QUARANTINED / RECALLED' : resolvedExpiryDate}
                 </p>
               </div>
             </div>
@@ -316,7 +386,7 @@ export default function SafetyCommunicationModal({
                   )}
                 </div>
                 <p style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.35 }}>
-                  Receive safety notifications through WhatsApp on customer's number.
+                  Open WhatsApp chat with pre-filled approved safety advisory.
                 </p>
               </div>
 
@@ -342,7 +412,7 @@ export default function SafetyCommunicationModal({
                       <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
                         📱 SMS
                       </h4>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Button / Standard Phone</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Standard / Button Phone</p>
                     </div>
                   </div>
                   {customerPreference === 'SMS' && (
@@ -352,7 +422,7 @@ export default function SafetyCommunicationModal({
                   )}
                 </div>
                 <p style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.35 }}>
-                  Receive safety notifications through SMS composer on pharmacist's phone.
+                  Open native SMS composer on phone with pre-filled safety advisory.
                 </p>
               </div>
             </div>

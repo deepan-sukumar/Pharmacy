@@ -4785,6 +4785,7 @@ export default function PharmacistPortal({
     medicineName?: string;
     batchNumber?: string;
     expiryDate?: string;
+    dispensedDate?: string;
     recallReason?: string;
   }>({});
 
@@ -4792,9 +4793,10 @@ export default function PharmacistPortal({
     setSafetyCommData({
       customer: cust || null,
       type,
-      medicineName: details?.medicineName || '',
-      batchNumber: details?.batchNumber || '',
-      expiryDate: details?.expiryDate || '',
+      medicineName: details?.medicineName || cust?.medicine || 'Amoxicillin 500mg',
+      batchNumber: details?.batchNumber || cust?.batch || 'DEMO-EXP-001',
+      expiryDate: details?.expiryDate || cust?.expiry || '30 Oct 2026',
+      dispensedDate: details?.dispensedDate || details?.date || cust?.date || cust?.dispensedDate || '15 Sep 2026',
       recallReason: details?.recallReason || 'Packaging seal defect reported by manufacturer bulletin',
     });
     setSafetyCommOpen(true);
@@ -5061,7 +5063,9 @@ export default function PharmacistPortal({
         medicineName={safetyCommData.medicineName}
         batchNumber={safetyCommData.batchNumber}
         expiryDate={safetyCommData.expiryDate}
+        dispensedDate={safetyCommData.dispensedDate}
         recallReason={safetyCommData.recallReason}
+        pharmacyName={currentUser?.pharmacyName || 'Apollo MedPlus Pharmacy'}
         onSuccess={(result) => {
           showToast(`Safety action recorded: ${result?.status?.replace(/_/g, ' ') || 'Completed'}`);
         }}

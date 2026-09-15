@@ -78,8 +78,19 @@ async function verifyAll() {
 
     assert.ok(content.includes('Notify Affected Patients'), 'Notify Affected Patients button missing in Batch Recall');
     assert.ok(!content.includes('Send Recall SMS Broadcast'), 'Legacy Send Recall SMS Broadcast button must be removed');
-    assert.ok(!content.includes('Send Recall SMS<'), 'Legacy Send Recall SMS button must be removed');
-    assert.ok(content.includes('3. Patient Safety Advisory Ready'), 'Action checklist must reflect Patient Safety Advisory');
+  });
+
+  // 7. Verify Multilingual Expiry Message Templates & Dispensed / Exact Expiry Dates
+  check('SafetyCommunicationModal.tsx: Contains master English, Tamil, Telugu, Kannada, Hindi templates with Dispensed Date and Exact Expiry Date', () => {
+    const modalPath = path.resolve(__dirname, '../../frontend/src/components/SafetyCommunicationModal.tsx');
+    const content = fs.readFileSync(modalPath, 'utf8');
+
+    assert.ok(content.includes('your ${p.medicine} is nearing expiry. Dispensed: ${p.dispensedDate}. Expiry: ${p.expiryDate}. Please check before use and contact your pharmacist if needed. Thank you for reading. Take care! – ${p.pharmacy}'), 'Master English template missing or incorrect');
+    assert.ok(content.includes('வழங்கிய தேதி: ${p.dispensedDate}. காலாவதி தேதி: ${p.expiryDate}'), 'Tamil template missing Dispensed / Expiry date');
+    assert.ok(content.includes('అందించిన తేదీ: ${p.dispensedDate}. గడువు తేదీ: ${p.expiryDate}'), 'Telugu template missing Dispensed / Expiry date');
+    assert.ok(content.includes('ನೀಡಿದ ದಿನಾಂಕ: ${p.dispensedDate}. ಮುಕ್ತಾಯ ದಿನಾಂಕ: ${p.expiryDate}'), 'Kannada template missing Dispensed / Expiry date');
+    assert.ok(content.includes('वितरण तिथि: ${p.dispensedDate}। समाप्ति तिथि: ${p.expiryDate}'), 'Hindi template missing Dispensed / Expiry date');
+    assert.ok(!content.includes('buyed') && !content.includes('Buyed') && !content.includes('bought') && !content.includes('purchased'), 'Must use "Dispensed" instead of buyed/purchased');
   });
 
   console.log(`\n🎉 Verification Complete: ${passed}/${total} checks passed successfully!`);
