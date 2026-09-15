@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const { db, isConnected } = require('./firebase');
+const { db, isConnected, getFirebaseStatus, ensureConnected } = require('./firebase');
 const { handleAIQuery } = require('./services/aiService');
 const { runWhatIfSimulation, calculateScenario, compareOrderScenarios } = require('./services/simulationService');
 const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports, checkSmsDeliveryStatus, syncAllPendingSmsStatuses, checkSmsLocalCredits } = require('./services/smsService');
@@ -260,12 +260,14 @@ seedInitialDataIfEmpty();
 // Health Check Endpoint
 // -------------------------------------------------------------
 app.get('/api/health', (req, res) => {
+  const fbStatus = getFirebaseStatus ? getFirebaseStatus() : { connected: isConnected() };
   res.json({
     ok: true,
     service: 'pharmaflow-api',
-    status: 'ok',
-    firebaseConnected: isConnected(),
-    mode: isConnected() ? 'Firestore (Cloud)' : 'Local Fallback Mode',
+    status: fbStatus.connected ? 'ok' : 'degraded',
+    firebaseConnected: fbStatus.connected,
+    mode: fbStatus.connected ? 'Firestore (Cloud)' : 'Disconnected (Credentials Required)',
+    firestore: fbStatus,
     timestamp: new Date().toISOString()
   });
 });
@@ -334,8 +336,10 @@ app.post('/api/auth/register', async (req, res) => {
     };
 
     if (!isConnected()) {
+      const fbStatus = getFirebaseStatus ? getFirebaseStatus() : {};
       return res.status(503).json({
-        error: 'Database service unavailable: Cloud Firestore is not connected. User registration requires persistent storage.'
+        error: `Database service unavailable: Cloud Firestore is not connected. ${fbStatus.errorReason || 'Please verify FIREBASE_SERVICE_ACCOUNT environment variable on Vercel.'}`,
+        firestore: fbStatus
       });
     }
 
