@@ -17,12 +17,13 @@ function setMemoryStore(store) {
 // Helper to parse expiry strings like "Sep 2026", "2026-09-30", etc.
 function parseExpiryToDays(expiryStr) {
   if (!expiryStr) return 999;
-  
-  // Try standard Date parse
-  let expiryDate = new Date(expiryStr);
+  const str = String(expiryStr).trim();
+  if (!str) return 999;
+
+  let expiryDate = new Date(str);
   if (isNaN(expiryDate.getTime())) {
     // Handle format "Sep 2026" or "Oct 2026"
-    const parts = expiryStr.trim().split(/\s+/);
+    const parts = str.split(/\s+/);
     if (parts.length === 2) {
       const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
       const mIdx = monthNames.indexOf(parts[0].toLowerCase().slice(0, 3));
@@ -35,8 +36,12 @@ function parseExpiryToDays(expiryStr) {
   }
 
   if (isNaN(expiryDate.getTime())) return 999;
-  const now = new Date();
-  const diffTime = expiryDate.getTime() - now.getTime();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  expiryDate.setHours(0, 0, 0, 0);
+
+  const diffTime = expiryDate.getTime() - today.getTime();
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
@@ -53,10 +58,10 @@ async function getInventorySummary(pharmacyId) {
   const totalMedicines = inventory.length;
   const totalUnits = inventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const totalValuation = inventory.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 30)), 0);
-  const lowStockCount = inventory.filter(i => i.status === 'Low Stock' || (Number(i.quantity) <= 20 && i.status !== 'Recalled')).length;
-  const nearExpiryCount = inventory.filter(i => i.status === 'Near Expiry' || parseExpiryToDays(i.expiry) <= 30).length;
+  const lowStockCount = inventory.filter(i => i.status !== 'Recalled' && (Number(i.quantity) <= 20 || i.status === 'Low Stock')).length;
+  const nearExpiryCount = inventory.filter(i => i.status !== 'Recalled' && ((parseExpiryToDays(i.expiry) > 0 && parseExpiryToDays(i.expiry) <= 30) || i.status === 'Near Expiry')).length;
   const recalledCount = inventory.filter(i => i.status === 'Recalled').length;
-  const expiredCount = inventory.filter(i => i.status === 'Expired' || parseExpiryToDays(i.expiry) <= 0).length;
+  const expiredCount = inventory.filter(i => i.status !== 'Recalled' && (parseExpiryToDays(i.expiry) < 0 || i.status === 'Expired')).length;
 
   return {
     pharmacyId,

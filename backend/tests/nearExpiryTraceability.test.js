@@ -44,10 +44,19 @@ async function runNearExpiryTraceabilityTests() {
   // TEST 4: Expired batch -> EXPIRED, NOT Near Expiry
   check('TEST 4: Past expiry batch is classified as Expired, not Near Expiry', () => {
     const days = parseExpiryToDays('01 Jan 2020');
-    const isExpired = days <= 0;
+    const isExpired = days < 0;
     const isNearExpiry = days > 0 && days <= 30;
-    assert.strictEqual(isExpired, true, 'Past date must be Expired');
+    assert.strictEqual(isExpired, true, 'Past date must have daysRemaining < 0');
     assert.strictEqual(isNearExpiry, false, 'Expired date must not be classified as Near Expiry');
+  });
+
+  // TEST 4B: Batch Expiring Today -> daysRemaining === 0
+  check('TEST 4B: Batch expiring today has daysRemaining === 0', () => {
+    const today = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const todayStr = `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()}`;
+    const days = parseExpiryToDays(todayStr);
+    assert.strictEqual(days, 0, 'Today expiry must calculate to daysRemaining === 0');
   });
 
   // TEST 5 & 6: Customer Traceability Logic

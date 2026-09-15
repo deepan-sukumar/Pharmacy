@@ -22,6 +22,7 @@ import ManualSmsModal from './components/ManualSmsModal';
 import SafetyCommunicationModal from './components/SafetyCommunicationModal';
 import SmsReportsView from './components/SmsReportsView';
 import CustomerSmsDetailsModal from './components/CustomerSmsDetailsModal';
+import { parseDaysRemaining } from './components/SmsReportsView';
 import { ThemeToggle } from './components/ThemeContext';
 import { api, type MedicineItem, type CustomerItem as ApiCustomer, type SupplierItem as ApiSupplier, type AuditItem as ApiAudit } from './services/api';
 import type { UserSession } from './App';
@@ -1168,9 +1169,9 @@ function DispenseReceiptModal({
 
 /* ─────────── 1. PHARMACIST DASHBOARD ─────────── */
 function Dashboard({ onNavigate, inventory, currentUser }: { onNavigate: (p: string) => void; inventory: Medicine[]; currentUser?: UserSession }) {
-  const expiredCount = inventory.filter(m => m.status === 'Expired').length;
-  const nearExpiryCount = inventory.filter(m => m.status === 'Near Expiry').length;
-  const lowStockCount = inventory.filter(m => m.status === 'Low Stock' || m.quantity < 80).length;
+  const expiredCount = inventory.filter(m => m.status !== 'Recalled' && (m.status === 'Expired' || parseDaysRemaining(m.expiry) < 0)).length;
+  const nearExpiryCount = inventory.filter(m => m.status !== 'Recalled' && ((parseDaysRemaining(m.expiry) > 0 && parseDaysRemaining(m.expiry) <= 30) || m.status === 'Near Expiry')).length;
+  const lowStockCount = inventory.filter(m => m.status !== 'Recalled' && (m.status === 'Low Stock' || m.quantity < 80)).length;
   const totalUnits = inventory.reduce((sum, m) => sum + m.quantity, 0);
 
   const pharmacistGreetingName = currentUser?.fullName ? currentUser.fullName.split(' ')[0] : 'Pharmacist';
@@ -4850,7 +4851,7 @@ export default function PharmacistPortal({
   const inventoryTabs: TabItem[] = [
     { id: 'inventory', label: 'Medicines & Stock', badge: inventory.length },
     { id: 'add-stock', label: 'Add New Stock' },
-    { id: 'expiry', label: 'Batches & Expiry', badge: inventory.filter(m => m.status === 'Near Expiry' || m.status === 'Expired').length, badgeVariant: 'warning' },
+    { id: 'expiry', label: 'Batches & Expiry', badge: inventory.filter(m => m.status !== 'Recalled' && (m.status === 'Near Expiry' || parseDaysRemaining(m.expiry) <= 30)).length, badgeVariant: 'warning' },
     { id: 'suppliers', label: 'Suppliers & Returns', badge: suppliersList.length },
   ];
 
