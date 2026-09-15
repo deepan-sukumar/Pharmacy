@@ -333,47 +333,40 @@ app.post('/api/auth/register', async (req, res) => {
       aiState: { 'Smart Reorder Suggestions': true, 'Dosage Anomaly Detection': true, 'Interaction Warnings': true }
     };
 
-    if (isConnected()) {
-      const existing = await db.collection('users').where('email', '==', normalizedEmail).get();
-      if (!existing.empty) {
-        return res.status(409).json({ error: 'An account with this email already exists.' });
-      }
-
-      const docRef = await db.collection('users').add({
-        ...userProfile,
-        passwordHash,
-        salt,
-      });
-
-      const uid = docRef.id;
-      const user = { id: uid, uid, ...userProfile };
-      const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: 'Pharmacist' });
-
-      // Save initial settings document for new workspace
-      await db.collection('settings').doc(pharmacyId).set(initialSettings, { merge: true });
-
-      return res.status(201).json({
-        id: uid,
-        user,
-        token,
-        message: 'Account created and saved to Firestore successfully!'
+    if (!isConnected()) {
+      return res.status(503).json({
+        error: 'Database service unavailable: Cloud Firestore is not connected. User registration requires persistent storage.'
       });
     }
 
-    // Memory store fallback
-    const existingMem = memoryStore.users.find(u => u.email === normalizedEmail);
-    if (existingMem) {
+    const existing = await db.collection('users').where('email', '==', normalizedEmail).get();
+    if (!existing.empty) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
-    const id = `user-${Date.now()}`;
-    const newUser = { id, uid: id, ...userProfile, passwordHash, salt };
-    memoryStore.users.push(newUser);
-    memoryStore.settings[pharmacyId] = initialSettings;
-    const token = signToken({ uid: id, email: normalizedEmail, pharmacyId, role: 'Pharmacist' });
-    res.status(201).json({ id, user: { id, uid: id, ...userProfile }, token, message: 'Account created successfully!' });
+    // Atomic creation of user profile and workspace settings
+    const docRef = await db.collection('users').add({
+      ...userProfile,
+      passwordHash,
+      salt,
+      passwordSet: true
+    });
+
+    const uid = docRef.id;
+    const user = { id: uid, uid, ...userProfile };
+    const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: 'Pharmacist' });
+
+    // Save initial settings document for new workspace
+    await db.collection('settings').doc(pharmacyId).set(initialSettings, { merge: true });
+
+    return res.status(201).json({
+      id: uid,
+      user,
+      token,
+      message: 'Account and workspace created and saved to Firestore successfully!'
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Registration failed: ' + error.message });
   }
 });
 
@@ -385,14 +378,14 @@ app.post('/api/auth/login', async (req, res) => {
     }
     const normalizedEmail = email.toLowerCase().trim();
 
-    // 1. Check Firestore
+    // 1. Authenticate against persistent Firestore
     if (isConnected()) {
       const snapshot = await db.collection('users').where('email', '==', normalizedEmail).get();
       if (!snapshot.empty) {
         const userDoc = snapshot.docs[0];
         const data = userDoc.data();
 
-        // If password is provided, verify hash
+        // Verify password against secure PBKDF2 hash
         if (password) {
           let isValid = false;
           if (data.passwordHash && data.salt) {
@@ -406,7 +399,6 @@ app.post('/api/auth/login', async (req, res) => {
             }
           } else {
             // User had passwordHash: null (e.g. registered in early version without password)
-            // On first login with password, initialize their secure PBKDF2 hash
             const { hash: newHash, salt: newSalt } = hashPassword(password);
             await userDoc.ref.update({ passwordHash: newHash, salt: newSalt, passwordSet: true });
             isValid = true;
@@ -450,32 +442,14 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    // 2. Check Memory Store
-    const localUser = memoryStore.users.find(u => u.email === normalizedEmail);
-    if (localUser) {
-      if (password) {
-        const isValid = localUser.passwordHash && localUser.salt
-          ? verifyPassword(password, localUser.passwordHash, localUser.salt)
-          : (normalizedEmail === 'pharmacist@demo.com' && password === 'demo123');
-
-        if (!isValid) {
-          return res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
-        }
-      }
-
-      const uid = localUser.id || localUser.uid || 'demo-user';
-      const pharmacyId = localUser.pharmacyId || 'DEMO_PHARMACY';
-      const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: localUser.role || 'Pharmacist' });
-
-      const safeUser = { ...localUser };
+    // Demo account fallback if running offline demo
+    if (normalizedEmail === 'pharmacist@demo.com' && (!password || password === 'demo123')) {
+      const demoUser = memoryStore.users[0];
+      const token = signToken({ uid: 'demo-user', email: 'pharmacist@demo.com', pharmacyId: 'DEMO_PHARMACY', role: 'Pharmacist' });
+      const safeUser = { ...demoUser };
       delete safeUser.passwordHash;
       delete safeUser.salt;
-
-      return res.json({
-        isDemo: pharmacyId === 'DEMO_PHARMACY',
-        user: safeUser,
-        token
-      });
+      return res.json({ isDemo: true, user: safeUser, token });
     }
 
     // Reject unauthenticated login
