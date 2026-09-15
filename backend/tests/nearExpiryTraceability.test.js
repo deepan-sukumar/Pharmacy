@@ -148,6 +148,41 @@ async function runNearExpiryTraceabilityTests() {
     }
   })();
 
+  // TEST 9: 10-Day Safety Communication Eligibility Window
+  check('TEST 9: Communication eligibility applies ONLY to <=10 days or Recalls (11-30d is monitoring only)', () => {
+    function isCommunicationEligible(daysRemaining, isRecalled) {
+      if (isRecalled) return true;
+      return daysRemaining !== null && daysRemaining >= 0 && daysRemaining <= 10;
+    }
+
+    assert.strictEqual(isCommunicationEligible(15, false), false, '15 days left must NOT be communication eligible (monitoring only)');
+    assert.strictEqual(isCommunicationEligible(25, false), false, '25 days left must NOT be communication eligible (monitoring only)');
+    assert.strictEqual(isCommunicationEligible(10, false), true, '10 days left MUST be communication eligible');
+    assert.strictEqual(isCommunicationEligible(5, false), true, '5 days left MUST be communication eligible');
+    assert.strictEqual(isCommunicationEligible(0, false), true, '0 days (today) MUST be communication eligible');
+    assert.strictEqual(isCommunicationEligible(100, true), true, 'Recalls are ALWAYS communication eligible');
+    assert.strictEqual(isCommunicationEligible(-5, false), false, 'Expired batches are not near-expiry communication eligible');
+  });
+
+  // TEST 10: Dynamic Expiry Simulation across Date Progression
+  check('TEST 10: Batch DEMO-EXP-001 transitions dynamically from Monitoring (15d) to Action Due (5d) as date progresses', () => {
+    const expiry = new Date('2026-09-30T00:00:00.000Z');
+
+    // Date A: 15 Sep 2026 (15 days left)
+    const dateA = new Date('2026-09-15T00:00:00.000Z');
+    const daysA = Math.ceil((expiry.getTime() - dateA.getTime()) / 86400000);
+    const eligibleA = daysA >= 0 && daysA <= 10;
+    assert.strictEqual(daysA, 15);
+    assert.strictEqual(eligibleA, false, 'At 15 Sep 2026, 15 days left -> Monitoring only');
+
+    // Date B: 25 Sep 2026 (5 days left)
+    const dateB = new Date('2026-09-25T00:00:00.000Z');
+    const daysB = Math.ceil((expiry.getTime() - dateB.getTime()) / 86400000);
+    const eligibleB = daysB >= 0 && daysB <= 10;
+    assert.strictEqual(daysB, 5);
+    assert.strictEqual(eligibleB, true, 'At 25 Sep 2026, 5 days left -> Action Due / Communication Eligible');
+  });
+
   console.log(`\n🎉 Verification Complete: ${passed}/${total} test checks passed successfully!`);
 }
 

@@ -119,12 +119,12 @@ const demoHash = hashPassword('demo123', demoSalt).hash;
 let memoryStore = {
   inventory: [
     { id: 'demo-med-1', pharmacyId: 'DEMO_PHARMACY', medicine: 'Paracetamol 500mg', genericName: 'Acetaminophen', batch: 'PCT101', expiry: '30 Nov 2027', quantity: 120, supplier: 'ABC Pharma', status: 'Available', unitPrice: 25, barcode: '890103400101' },
-    { id: 'demo-med-2', pharmacyId: 'DEMO_PHARMACY', medicine: 'Vitamin D3 60K', genericName: 'Cholecalciferol', batch: 'DEMO-NORMAL-001', expiry: '30 Nov 2027', quantity: 180, supplier: 'HealthCare Labs', status: 'Available', unitPrice: 65, barcode: '890103400102' },
+    { id: 'demo-med-2', pharmacyId: 'DEMO_PHARMACY', medicine: 'Vitamin D3 60K', genericName: 'Cholecalciferol', batch: 'VD102', expiry: '25 Sep 2026', quantity: 180, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 65, barcode: '890103400102' },
     { id: 'demo-med-3', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'AMX204', expiry: '15 Oct 2026', quantity: 45, supplier: 'MediSource', status: 'Recalled', unitPrice: 95, barcode: '890103400103' },
     { id: 'demo-med-4', pharmacyId: 'DEMO_PHARMACY', medicine: 'Cetirizine 10mg', genericName: 'Cetirizine Hydrochloride', batch: 'CTZ302', expiry: '15 Jan 2027', quantity: 320, supplier: 'Nova Pharma', status: 'Available', unitPrice: 35, barcode: '890103400104' },
     { id: 'demo-med-5', pharmacyId: 'DEMO_PHARMACY', medicine: 'Azithromycin 250mg', genericName: 'Azithromycin Dihydrate', batch: 'AZI109', expiry: '20 Dec 2027', quantity: 68, supplier: 'MediSource', status: 'Low Stock', unitPrice: 120, barcode: '890103400105' },
     { id: 'demo-med-6', pharmacyId: 'DEMO_PHARMACY', medicine: 'Metformin 500mg', genericName: 'Metformin Hydrochloride', batch: 'MET501', expiry: '10 Mar 2028', quantity: 410, supplier: 'ABC Pharma', status: 'Available', unitPrice: 45, barcode: '890103400106' },
-    // Dedicated Near-Expiry Demo Batch for automated SMS, Manual SMS, and Batch Recall Tracing
+    // Dedicated Near-Expiry Demo Batch (15 days remaining on 15 Sep -> Monitoring window)
     { id: 'demo-med-exp-001', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'DEMO-EXP-001', expiry: '30 Sep 2026', quantity: 77, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 85, barcode: '890103400777' },
   ],
   customers: [
@@ -149,10 +149,12 @@ let memoryStore = {
     { id: 'demo-audit-2', pharmacyId: 'DEMO_PHARMACY', date: '15 Sep 2026, 09:18 AM', medicine: 'Cetirizine 10mg', batch: 'CTZ302', quantity: 5, customer: 'Arun Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88185', totalAmount: 175, timestamp: '2026-09-15T03:48:00.000Z' },
     { id: 'demo-audit-3', pharmacyId: 'DEMO_PHARMACY', date: '12 Sep 2026, 04:35 PM', medicine: 'Vitamin D3 60K', batch: 'DEMO-NORMAL-001', quantity: 10, customer: 'Meena Devi', pharmacist: 'Dr. Suresh', status: 'Completed', rxId: 'RX-2026-88102', totalAmount: 650, timestamp: '2026-09-12T11:05:00.000Z' },
     { id: 'demo-audit-4', pharmacyId: 'DEMO_PHARMACY', date: '18 Aug 2026, 02:15 PM', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 15, customer: 'Rahul Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88050', totalAmount: 1425, timestamp: '2026-08-18T08:45:00.000Z' },
-    // Dispensing records linking batch DEMO-EXP-001 to Deepak, Manish, and Deeps
+    // Dispensing records linking batch DEMO-EXP-001 (15-day monitoring) to Deepak, Manish, and Deeps
     { id: 'demo-audit-exp-1', pharmacyId: 'DEMO_PHARMACY', date: '15 Sep 2026, 11:15 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 10, customer: 'Deepak', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90001', totalAmount: 850, timestamp: '2026-09-15T05:45:00.000Z' },
     { id: 'demo-audit-exp-2', pharmacyId: 'DEMO_PHARMACY', date: '10 Sep 2026, 09:30 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 5, customer: 'Manish', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90002', totalAmount: 425, timestamp: '2026-09-10T04:00:00.000Z' },
     { id: 'demo-audit-exp-3', pharmacyId: 'DEMO_PHARMACY', date: '14 Sep 2026, 03:45 PM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 8, customer: 'Deeps', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90003', totalAmount: 680, timestamp: '2026-09-14T10:15:00.000Z' },
+    // Dispensing records linking batch VD102 (10-day action due) to Arun Kumar
+    { id: 'demo-audit-vd102-1', pharmacyId: 'DEMO_PHARMACY', date: '10 Sep 2026, 02:20 PM', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 15, customer: 'Arun Kumar', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-88120', totalAmount: 975, timestamp: '2026-09-10T08:50:00.000Z' },
   ],
   recalls: [
     { id: 'demo-recall-1', pharmacyId: 'DEMO_PHARMACY', batch: 'AMX204', medicine: 'Amoxicillin 500mg', reason: 'Packaging seal integrity breach reported by manufacturer CDSCO bulletin', status: 'Quarantined', date: 'Today, 08:30 AM', quarantineQty: 45, affectedCustomers: ['Rahul Kumar'] }
@@ -1631,7 +1633,14 @@ app.get('/api/communications/affected-patients', async (req, res) => {
         (l.batchId === a.batch || (l.message && l.message.includes(a.batch)))
       );
 
-      let actionStatus = 'Ready';
+      const isRecall = bInfo.isRecalled;
+      // 10-day communication window rule:
+      // Expiry patients are eligible for safety communication ONLY when daysRemaining >= 0 && daysRemaining <= 10.
+      // 11-30 days = Monitoring only (communication not yet due).
+      const isEligible = isRecall || (bInfo.daysRemaining !== null && bInfo.daysRemaining >= 0 && bInfo.daysRemaining <= 10);
+      const monitoringWindow = isRecall ? 'RECALL' : (bInfo.daysRemaining <= 10 ? 'ACTION_DUE' : 'MONITORING_ONLY');
+
+      let actionStatus = isEligible ? 'Ready to Send' : 'Monitoring (Not Due)';
       if (recentLog) {
         if (recentLog.status === 'WHATSAPP_OPENED') actionStatus = 'WhatsApp Opened';
         else if (recentLog.status === 'SMS_COMPOSER_OPENED') actionStatus = 'SMS Composer Opened';
@@ -1652,14 +1661,18 @@ app.get('/api/communications/affected-patients', async (req, res) => {
         qtyDispensed: Number(a.quantity) || 1,
         rxId: a.rxId || `RX-2026-${String(a.id || 100).padStart(5, '0')}`,
         dispenseDate: a.date || '15 Sep 2026',
-        reason: bInfo.isRecalled ? 'RECALL' : 'NEAR_EXPIRY',
-        recallReason: bInfo.isRecalled ? 'Packaging seal integrity breach reported by manufacturer CDSCO bulletin' : undefined,
+        reason: isRecall ? 'RECALL' : 'NEAR_EXPIRY',
+        isCommunicationEligible: isEligible,
+        monitoringWindow,
+        recallReason: isRecall ? 'Packaging seal integrity breach reported by manufacturer CDSCO bulletin' : undefined,
         status: actionStatus,
         customerObj: cust || { name: a.customer, phone: a.phone || '+91 93845 99028', communicationPreference: 'SMS' }
       });
     });
 
-    const nearExpiryCount = affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY').length;
+    const actionDueCount = affectedPatients.filter(p => p.isCommunicationEligible).length;
+    const nearExpiryMonitoringCount = affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY').length;
+    const nearExpiryActionDueCount = affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY' && p.isCommunicationEligible).length;
     const recallCount = affectedPatients.filter(p => p.reason === 'RECALL').length;
     const whatsAppCount = customers.filter(c => c.communicationPreference === 'WHATSAPP').length;
     const smsCount = customers.filter(c => c.communicationPreference !== 'WHATSAPP').length;
@@ -1675,9 +1688,11 @@ app.get('/api/communications/affected-patients', async (req, res) => {
       pharmacyId,
       affectedPatients,
       counts: {
-        totalAffected: affectedPatients.length,
-        nearExpiry: nearExpiryCount,
-        recall: recallCount,
+        totalMonitored: affectedPatients.length,
+        actionDueCount,
+        nearExpiryMonitoringCount,
+        nearExpiryActionDueCount,
+        recallCount,
         whatsAppPref: whatsAppCount,
         smsPref: smsCount,
         messagesInitiated: messagesInitiatedCount
