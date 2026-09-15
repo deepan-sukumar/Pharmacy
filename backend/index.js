@@ -394,10 +394,27 @@ app.post('/api/auth/login', async (req, res) => {
 
         // If password is provided, verify hash
         if (password) {
-          const isValid = data.passwordHash && data.salt 
-            ? verifyPassword(password, data.passwordHash, data.salt)
-            : (data.passwordHash && data.passwordHash === Buffer.from(password).toString('base64'))
-            || (normalizedEmail === 'pharmacist@demo.com' && password === 'demo123');
+          let isValid = false;
+          if (data.passwordHash && data.salt) {
+            isValid = verifyPassword(password, data.passwordHash, data.salt);
+          } else if (data.passwordHash) {
+            isValid = (data.passwordHash === Buffer.from(password).toString('base64'))
+                   || (data.passwordHash === password);
+            if (isValid) {
+              const { hash: newHash, salt: newSalt } = hashPassword(password);
+              await userDoc.ref.update({ passwordHash: newHash, salt: newSalt });
+            }
+          } else {
+            // User had passwordHash: null (e.g. registered in early version without password)
+            // On first login with password, initialize their secure PBKDF2 hash
+            const { hash: newHash, salt: newSalt } = hashPassword(password);
+            await userDoc.ref.update({ passwordHash: newHash, salt: newSalt });
+            isValid = true;
+          }
+
+          if (!isValid && normalizedEmail === 'pharmacist@demo.com' && password === 'demo123') {
+            isValid = true;
+          }
 
           if (!isValid) {
             return res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
@@ -405,7 +422,12 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         const uid = userDoc.id;
-        const pharmacyId = data.pharmacyId || (normalizedEmail === 'pharmacist@demo.com' ? 'DEMO_PHARMACY' : `pharm_${uid}`);
+        let pharmacyId = data.pharmacyId;
+        if (!pharmacyId) {
+          pharmacyId = normalizedEmail === 'pharmacist@demo.com' ? 'DEMO_PHARMACY' : `pharm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          await userDoc.ref.update({ pharmacyId });
+        }
+
         const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: data.role || 'Pharmacist' });
 
         const safeUser = { id: uid, uid, ...data, pharmacyId };
