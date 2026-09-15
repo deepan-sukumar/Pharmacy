@@ -23,14 +23,28 @@ function sanitizePrivateKey(key) {
     .replace(/\r/g, '\n');
 }
 
-function normalizeServiceAccount(obj) {
+function extractFromObject(obj) {
   if (!obj || typeof obj !== 'object') return null;
-  const projectId = obj.project_id || obj.projectId || 'pharm-b519f';
-  const clientEmail = obj.client_email || obj.clientEmail;
+  
+  // Direct property check
+  let projectId = obj.project_id || obj.projectId;
+  let clientEmail = obj.client_email || obj.clientEmail;
   let privateKey = obj.private_key || obj.privateKey;
+
+  // Check nested properties (e.g. { firebase: { ... } }, { serviceAccount: { ... } }, etc.)
+  if (!clientEmail || !privateKey) {
+    for (const key of Object.keys(obj)) {
+      const nested = obj[key];
+      if (nested && typeof nested === 'object') {
+        const found = extractFromObject(nested);
+        if (found) return found;
+      }
+    }
+  }
+
   if (clientEmail && privateKey) {
     return {
-      projectId,
+      projectId: projectId || 'pharm-b519f',
       clientEmail: String(clientEmail).trim(),
       privateKey: sanitizePrivateKey(privateKey)
     };
@@ -41,30 +55,104 @@ function normalizeServiceAccount(obj) {
 function parseServiceAccountJson(raw) {
   if (!raw) return null;
   let str = String(raw).trim();
-  
-  // Remove wrapping quotes if the whole value was quoted in env var
+
+  // 1. Strip UTF-8 BOM if present
+  if (str.charCodeAt(0) === 0xFEFF) {
+    str = str.slice(1).trim();
+  }
+
+  // 2. Strip outer quotes if entire env var is quoted
   if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
     str = str.slice(1, -1).trim();
   }
 
-  // 1. Direct JSON parse
+  // Attempt A: Direct parse & unwrap nested stringified JSON up to 5 times
+  let current = str;
+  for (let i = 0; i < 5; i++) {
+    try {
+      const parsed = typeof current === 'string' ? JSON.parse(current) : current;
+      if (typeof parsed === 'object' && parsed !== null) {
+        const extracted = extractFromObject(parsed);
+        if (extracted) return { source: `json-pass-${i+1}`, data: extracted };
+      } else if (typeof parsed === 'string') {
+        current = parsed.trim();
+        if (current.includes('\\"')) {
+          current = current.replace(/\\"/g, '"');
+        }
+        continue;
+      }
+    } catch (e) {
+      if (typeof current === 'string' && current.includes('\\"')) {
+        current = current.replace(/\\"/g, '"');
+        continue;
+      }
+      break;
+    }
+  }
+
+  // Attempt B: URL-decoded parse
   try {
-    const res = normalizeServiceAccount(JSON.parse(str));
-    if (res) return { source: 'direct-json', data: res };
+    if (str.includes('%')) {
+      const decodedUrl = decodeURIComponent(str);
+      const parsed = JSON.parse(decodedUrl);
+      const extracted = extractFromObject(parsed);
+      if (extracted) return { source: 'url-decoded-json', data: extracted };
+    }
   } catch (e) {}
 
-  // 2. Base64 decode then JSON parse
+  // Attempt C: Base64 decode (stripping internal whitespace/newlines)
   try {
-    const decoded = Buffer.from(str, 'base64').toString('utf8').trim();
-    const res = normalizeServiceAccount(JSON.parse(decoded));
-    if (res) return { source: 'base64-json', data: res };
+    const cleanB64 = str.replace(/\s+/g, '');
+    const decoded = Buffer.from(cleanB64, 'base64').toString('utf8').trim();
+    if (decoded.startsWith('{') && decoded.endsWith('}')) {
+      let b64Current = decoded;
+      for (let i = 0; i < 3; i++) {
+        try {
+          const parsed = JSON.parse(b64Current);
+          if (typeof parsed === 'object' && parsed !== null) {
+            const extracted = extractFromObject(parsed);
+            if (extracted) return { source: `base64-json-pass-${i+1}`, data: extracted };
+          } else if (typeof parsed === 'string') {
+            b64Current = parsed.trim();
+          }
+        } catch (err) {
+          break;
+        }
+      }
+    }
   } catch (e) {}
 
-  // 3. Unescape escaped double quotes (e.g. \"{\\\"type\\\":...}\")
+  // Attempt D: Fix unescaped control characters/newlines inside JSON string literal
   try {
-    const unescaped = str.replace(/\\"/g, '"');
-    const res = normalizeServiceAccount(JSON.parse(unescaped));
-    if (res) return { source: 'unescaped-quotes-json', data: res };
+    const fixedNewlines = str.replace(/[\r\n]+/g, '\\n');
+    const parsed = JSON.parse(fixedNewlines);
+    const extracted = extractFromObject(parsed);
+    if (extracted) return { source: 'fixed-newlines-json', data: extracted };
+  } catch (e) {}
+
+  // Attempt E: Unescape escaped double quotes
+  try {
+    const unescapedQuotes = str.replace(/\\"/g, '"');
+    const parsed = JSON.parse(unescapedQuotes);
+    const extracted = extractFromObject(parsed);
+    if (extracted) return { source: 'unescaped-quotes-json', data: extracted };
+  } catch (e) {}
+
+  // Attempt F: Fallback Regex extraction of client_email and private_key
+  try {
+    const emailMatch = str.match(/"client_email"\s*:\s*"([^"]+)"/i) || str.match(/'client_email'\s*:\s*'([^']+)'/i);
+    const keyMatch = str.match(/"private_key"\s*:\s*"((?:[^"\\]|\\.)*)"/i) || str.match(/'private_key'\s*:\s*'((?:[^'\\]|\\.)*)'/i);
+    const projMatch = str.match(/"project_id"\s*:\s*"([^"]+)"/i) || str.match(/'project_id'\s*:\s*'([^']+)'/i);
+    if (emailMatch && keyMatch) {
+      return {
+        source: 'regex-extracted',
+        data: {
+          projectId: projMatch ? projMatch[1] : 'pharm-b519f',
+          clientEmail: emailMatch[1].trim(),
+          privateKey: sanitizePrivateKey(keyMatch[1])
+        }
+      };
+    }
   } catch (e) {}
 
   return null;
@@ -132,7 +220,7 @@ function initFirebase() {
     // 2. Check JSON / Base64 environment variables (Vercel production)
     const envJsonRaw = process.env.FIREBASE_SERVICE_ACCOUNT || 
                        process.env.FIREBASE_SERVICE_ACCOUNT_KEY || 
-                       process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+                       process.env.FIREBASE_SERVICE_ACCOUNT_JSON || 
                        process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 ||
                        process.env.FIREBASE_CONFIG ||
                        process.env.FIREBASE_ADMIN_CREDENTIALS ||
@@ -152,7 +240,7 @@ function initFirebase() {
         isConnected = true;
         activeCredentialSource = 'FIREBASE_SERVICE_ACCOUNT';
         initErrorMessage = null;
-        console.log('✅ Firebase Admin SDK initialized successfully with FIREBASE_SERVICE_ACCOUNT environment variable');
+        console.log(`✅ Firebase Admin SDK initialized successfully with FIREBASE_SERVICE_ACCOUNT (${parsed.source})`);
         return true;
       } else {
         initErrorMessage = `FIREBASE_SERVICE_ACCOUNT environment variable is present (length: ${envJsonRaw.length}) but could not be parsed as valid Service Account JSON.`;
