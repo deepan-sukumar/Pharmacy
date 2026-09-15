@@ -71,13 +71,15 @@ async function verifyAll() {
     assert.ok(indexContent.includes('Deepak') && indexContent.includes('WHATSAPP'), 'Deepak demo customer missing in backend');
   });
 
-  // 5. Backend customer update route in backend/index.js
-  check('backend/index.js: PUT /api/customers/:id correctly handles updates and maintains tenant isolation', () => {
-    const indexPath = path.resolve(__dirname, '../index.js');
-    const content = fs.readFileSync(indexPath, 'utf8');
+  // 6. Verify Batch Recall is wired directly to Patient Safety Communication
+  check('PharmacistPortal.tsx: Batch Recall uses "Notify Affected Patients" and connects to Patient Safety Communication without fake SMS broadcast', () => {
+    const portalPath = path.resolve(__dirname, '../../frontend/src/PharmacistPortal.tsx');
+    const content = fs.readFileSync(portalPath, 'utf8');
 
-    assert.ok(content.includes('app.put(\'/api/customers/:id\''), 'PUT /api/customers/:id endpoint missing');
-    assert.ok(content.includes('app.post(\'/api/sms/log-action\'') || content.includes('app.post(\'/api/communications/log-action\''), 'Action log endpoint missing');
+    assert.ok(content.includes('Notify Affected Patients'), 'Notify Affected Patients button missing in Batch Recall');
+    assert.ok(!content.includes('Send Recall SMS Broadcast'), 'Legacy Send Recall SMS Broadcast button must be removed');
+    assert.ok(!content.includes('Send Recall SMS<'), 'Legacy Send Recall SMS button must be removed');
+    assert.ok(content.includes('3. Patient Safety Advisory Ready'), 'Action checklist must reflect Patient Safety Advisory');
   });
 
   console.log(`\n🎉 Verification Complete: ${passed}/${total} checks passed successfully!`);

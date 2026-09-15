@@ -3453,7 +3453,6 @@ function Recall({
   onOpenManualSms?: (cust: any, type?: any, payload?: any) => void;
   onOpenSafetyCommunication?: (cust: any, type?: string, details?: any) => void;
 }) {
-  const [notifyModal, setNotifyModal] = useState(false);
   const [createRecallModal, setCreateRecallModal] = useState(false);
   const [newRecallBatch, setNewRecallBatch] = useState('');
   const [newRecallReason, setNewRecallReason] = useState('Packaging seal defect reported by manufacturer bulletin');
@@ -3525,21 +3524,6 @@ function Recall({
     };
   });
 
-  const handleSendNotice = async () => {
-    try {
-      const res = await api.sendBatchRecallSms({
-        batchNumber: activeBatchCode,
-        medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg',
-        recallReason: newRecallReason,
-      });
-      setNotifyModal(false);
-      showToast(`Recall SMS broadcast dispatched to ${res?.dispatchedCount || impactedPatients.length} affected patient(s)`);
-    } catch (err: any) {
-      setNotifyModal(false);
-      showToast(`Recall broadcast dispatched (${err?.message || 'Logged to notification reports'})`);
-    }
-  };
-
   const handleOpenPatientDetails = (p: any) => {
     setSelectedCustomerForModal({
       recipientName: p.name,
@@ -3593,10 +3577,33 @@ function Recall({
             </button>
             <button
               className="btn btn-danger"
-              onClick={() => setNotifyModal(true)}
+              onClick={() => {
+                if (impactedPatients.length > 0 && onOpenSafetyCommunication) {
+                  const target = impactedPatients[0];
+                  onOpenSafetyCommunication(
+                    {
+                      name: target.name,
+                      phone: target.phone,
+                      preferredLang: target.preferredLang,
+                      communicationPreference: target.communicationPreference,
+                      rxId: target.rxId,
+                      qty: target.qty,
+                      date: target.date,
+                    },
+                    'RECALL',
+                    {
+                      medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg',
+                      batchNumber: activeBatchCode,
+                      recallReason: newRecallReason,
+                    }
+                  );
+                } else {
+                  showToast(impactedPatients.length === 0 ? 'No exposed patients found in audit history for this batch.' : 'Opening Patient Safety Communication...');
+                }
+              }}
               disabled={recalledMedicines.length === 0 && !safeInventory.some(m => m.batch === 'DEMO-EXP-001')}
             >
-              <Send size={14} /> Send Recall SMS Broadcast
+              <Send size={14} /> Notify Affected Patients
             </button>
           </div>
         }
@@ -3707,12 +3714,35 @@ function Recall({
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedBatchForInspection(rec.batch);
-                      setNotifyModal(true);
+                      const batchAudits = audits.filter(a => a.batch === rec.batch && a.customer && a.customer !== 'Walk-in Patient');
+                      if (batchAudits.length > 0 && onOpenSafetyCommunication) {
+                        const firstAudit = batchAudits[0];
+                        const cust = (customersList || []).find(c => c.name.toLowerCase() === firstAudit.customer.toLowerCase());
+                        onOpenSafetyCommunication(
+                          {
+                            name: firstAudit.customer,
+                            phone: cust ? cust.phone : '+91 98450 48123',
+                            preferredLang: (cust as any)?.preferredLang || 'English',
+                            communicationPreference: ((cust as any)?.communicationPreference || 'SMS') as 'WHATSAPP' | 'SMS',
+                            rxId: firstAudit.rxId,
+                            qty: firstAudit.quantity,
+                            date: firstAudit.date,
+                          },
+                          'RECALL',
+                          {
+                            medicineName: rec.medicine,
+                            batchNumber: rec.batch,
+                            recallReason: newRecallReason,
+                          }
+                        );
+                      } else {
+                        showToast(`Batch ${rec.batch} selected. ${batchAudits.length} exposed patient(s) found in audit trail.`);
+                      }
                     }}
                     className="btn btn-teal"
                     style={{ fontSize: 12 }}
                   >
-                    <Send size={14} /> Send Recall SMS
+                    <Send size={14} /> Notify Affected Patients
                   </button>
                 </div>
               </div>
@@ -3753,7 +3783,7 @@ function Recall({
                   <CheckCircle2 size={15} /> 2. Audit Trail Queried ({audits.filter(a => a.batch === rec.batch).length} Patients)
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
-                  <MessageSquare size={15} /> 3. SMS Advisory Ready
+                  <MessageSquare size={15} /> 3. Patient Safety Advisory Ready
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--warning)', fontWeight: 600 }}>
                   <Clock3 size={15} /> 4. Supplier Return Claim Pending
@@ -3820,8 +3850,36 @@ function Recall({
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setNotifyModal(true)} className="btn btn-danger" style={{ fontSize: 12 }} disabled={impactedPatients.length === 0}>
-              <Send size={13} /> Broadcast Recall SMS to All ({impactedPatients.length})
+            <button
+              onClick={() => {
+                if (impactedPatients.length > 0 && onOpenSafetyCommunication) {
+                  const target = impactedPatients[0];
+                  onOpenSafetyCommunication(
+                    {
+                      name: target.name,
+                      phone: target.phone,
+                      preferredLang: target.preferredLang,
+                      communicationPreference: target.communicationPreference,
+                      rxId: target.rxId,
+                      qty: target.qty,
+                      date: target.date,
+                    },
+                    'RECALL',
+                    {
+                      medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg',
+                      batchNumber: activeBatchCode,
+                      recallReason: newRecallReason,
+                    }
+                  );
+                } else {
+                  showToast('No exposed patients found in audit history for this batch.');
+                }
+              }}
+              className="btn btn-danger"
+              style={{ fontSize: 12 }}
+              disabled={impactedPatients.length === 0}
+            >
+              <Send size={13} /> Notify Affected Patients ({impactedPatients.length})
             </button>
             <button onClick={() => onNavigate?.('audit')} className="btn btn-ghost" style={{ fontSize: 12 }}>
               View Full Audit Records →
@@ -3926,7 +3984,7 @@ function Recall({
                         className="btn btn-teal"
                         style={{ fontSize: 11.5, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                       >
-                        <Send size={12} /> Send Message
+                        <Send size={12} /> Notify Patient
                       </button>
                       <button
                         onClick={() => handleOpenPatientDetails(p)}
@@ -4034,7 +4092,7 @@ function Recall({
                     className="btn btn-teal"
                     style={{ fontSize: 11.5, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                   >
-                    <Send size={12} /> Send Message
+                    <Send size={12} /> Notify Patient
                   </button>
                   <button
                     onClick={() => handleOpenPatientDetails(p)}
@@ -4049,35 +4107,6 @@ function Recall({
           ))}
         </div>
       </div>
-
-      {notifyModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(3px)' }} onClick={() => setNotifyModal(false)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, zIndex: 111, padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Send size={18} color="var(--primary)" />
-                <h3 style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>Broadcast Recall Notification</h3>
-              </div>
-              <button onClick={() => setNotifyModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="#64748B"/></button>
-            </div>
-            <div style={{ padding: 20 }}>
-              <p style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, margin: 0 }}>
-                This will automatically send SMS advisory alerts to all <b>{impactedPatients.length} exposed patients</b> who received batch <b>{activeBatchCode}</b>.
-              </p>
-              <div style={{ marginTop: 14, padding: 12, backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, fontSize: 12, color: '#991B1B' }}>
-                <b>Patient Safety Notice:</b> Advise patients to quarantine unused medication and report to pharmacy for replacement.
-              </div>
-              <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button className="btn btn-secondary" onClick={() => setNotifyModal(false)}>Cancel</button>
-                <button className="btn btn-danger" onClick={handleSendNotice}>
-                  <Send size={14} /> Send {impactedPatients.length} Broadcast Notification{impactedPatients.length === 1 ? '' : 's'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Customer SMS & Traceability Modal */}
       <CustomerSmsDetailsModal
