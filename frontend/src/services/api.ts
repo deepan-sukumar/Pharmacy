@@ -1,8 +1,8 @@
 // API Client for interacting with the Node.js / Express Backend & Firebase Firestore
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port !== '5000' ? 'http://localhost:5000/api' : '/api');
 
-
 let activePharmacyId = '';
+let activeAuthToken = '';
 
 export function setApiPharmacyId(id: string) {
   activePharmacyId = (id || '').trim();
@@ -12,11 +12,25 @@ export function getApiPharmacyId(): string {
   return activePharmacyId;
 }
 
+export function setApiAuthToken(token: string) {
+  activeAuthToken = (token || '').trim();
+}
+
+export function getApiAuthToken(): string {
+  return activeAuthToken;
+}
+
 function getHeaders() {
-  return {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-pharmacy-id': activePharmacyId,
   };
+  if (activePharmacyId) {
+    headers['x-pharmacy-id'] = activePharmacyId;
+  }
+  if (activeAuthToken) {
+    headers['Authorization'] = `Bearer ${activeAuthToken}`;
+  }
+  return headers;
 }
 
 export interface MedicineItem {
@@ -604,6 +618,12 @@ export const api = {
     if (!res.ok) {
       throw new Error(data.error || 'Failed to register account');
     }
+    if (data.token) {
+      setApiAuthToken(data.token);
+    }
+    if (data.user?.pharmacyId) {
+      setApiPharmacyId(data.user.pharmacyId);
+    }
     return data;
   },
 
@@ -613,6 +633,21 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(credentials),
     });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Invalid login credentials.');
+    }
+    if (data.token) {
+      setApiAuthToken(data.token);
+    }
+    if (data.user?.pharmacyId) {
+      setApiPharmacyId(data.user.pharmacyId);
+    }
+    return data;
+  },
+
+  async getMe() {
+    const res = await fetch(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
     return await res.json();
   },
 
@@ -621,4 +656,5 @@ export const api = {
     return await res.json();
   },
 };
+
 

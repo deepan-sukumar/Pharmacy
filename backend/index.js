@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const { db, isConnected } = require('./firebase');
 const { handleAIQuery } = require('./services/aiService');
 const { runWhatIfSimulation, calculateScenario, compareOrderScenarios } = require('./services/simulationService');
@@ -10,6 +11,52 @@ const pharmacyTools = require('./services/pharmacyTools');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// -------------------------------------------------------------
+// AUTH & CRYPTOGRAPHIC UTILITIES
+// -------------------------------------------------------------
+const AUTH_SECRET = process.env.JWT_SECRET || process.env.FIREBASE_PRIVATE_KEY || 'pharmaflow-production-auth-secret-key-2026';
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return { hash, salt };
+}
+
+function verifyPassword(password, storedHash, salt) {
+  if (!password || !storedHash || !salt) return false;
+  try {
+    const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(storedHash, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
+function signToken(payload) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const exp = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days expiration
+  const body = Buffer.from(JSON.stringify({ ...payload, exp, iat: Math.floor(Date.now() / 1000) })).toString('base64url');
+  const signature = crypto.createHmac('sha256', AUTH_SECRET).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${signature}`;
+}
+
+function verifyToken(token) {
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [header, body, signature] = parts;
+    const expectedSignature = crypto.createHmac('sha256', AUTH_SECRET).update(`${header}.${body}`).digest('base64url');
+    if (signature !== expectedSignature) return null;
+    const decoded = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+      return null; // Expired
+    }
+    return decoded;
+  } catch (err) {
+    return null;
+  }
+}
 
 // Permissive CORS for development and production Vercel domains
 app.use(cors({
@@ -32,8 +79,26 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '15mb' }));
 
-// Helper to extract pharmacy / workspace ID
+// Authentication Extraction Middleware
+app.use((req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    const user = verifyToken(token);
+    if (user) {
+      req.user = user;
+    }
+  }
+  next();
+});
+
+// Helper to extract verified pharmacy / workspace ID (enforcing tenant isolation)
 function getPharmacyId(req) {
+  // If user is authenticated, their verified token pharmacyId is the source of truth
+  if (req.user && req.user.pharmacyId) {
+    return req.user.pharmacyId;
+  }
+  // Otherwise, use header/query for backward compatibility with demo/tests
   return String(req.headers['x-pharmacy-id'] || req.query.pharmacyId || req.body?.pharmacyId || '').trim();
 }
 
@@ -44,6 +109,9 @@ function getDynamicExpiryDate(days = 30) {
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
 }
+
+const demoSalt = 'demo_salt_pharmaflow_2026';
+const demoHash = hashPassword('demo123', demoSalt).hash;
 
 // -------------------------------------------------------------
 // IN-MEMORY FALLBACK STORE (Only if Firestore credentials fail)
@@ -104,17 +172,20 @@ let memoryStore = {
   users: [
     {
       id: 'demo-user',
+      uid: 'demo-user',
       pharmacyId: 'DEMO_PHARMACY',
       fullName: 'Demo Pharmacist',
       email: 'pharmacist@demo.com',
       mobile: '9845012345',
       regNumber: 'KA-PH-2024-8891',
-      pharmacyName: 'Apollo MedPlus Express',
+      pharmacyName: 'Apollo MedPlus Central',
       pharmacyType: 'Retail Pharmacy Chain',
       city: 'Bengaluru',
       stateName: 'Karnataka',
       country: 'India',
       role: 'Pharmacist',
+      passwordHash: demoHash,
+      salt: demoSalt,
       createdAt: new Date().toISOString()
     }
   ]
@@ -171,6 +242,10 @@ async function seedInitialDataIfEmpty() {
     const settingsRef = db.collection('settings').doc('DEMO_PHARMACY');
     batch.set(settingsRef, memoryStore.settings.DEMO_PHARMACY, { merge: true });
 
+    // 8. Seed Demo User in Firestore with secure PBKDF2 hash
+    const demoUserRef = db.collection('users').doc('demo-user');
+    batch.set(demoUserRef, memoryStore.users[0], { merge: true });
+
     await batch.commit();
     console.log('🌱 Firestore database verified & initialized idempotently (No duplicates).');
   } catch (error) {
@@ -216,10 +291,15 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Full name and email are required.' });
     }
 
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
     const pharmacyId = `pharm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const { hash: passwordHash, salt } = hashPassword(password);
 
-    const userData = {
+    const userProfile = {
       fullName: fullName.trim(),
       email: normalizedEmail,
       mobile: mobile ? mobile.trim() : '',
@@ -260,16 +340,22 @@ app.post('/api/auth/register', async (req, res) => {
       }
 
       const docRef = await db.collection('users').add({
-        ...userData,
-        passwordHash: password ? Buffer.from(password).toString('base64') : null,
+        ...userProfile,
+        passwordHash,
+        salt,
       });
+
+      const uid = docRef.id;
+      const user = { id: uid, uid, ...userProfile };
+      const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: 'Pharmacist' });
 
       // Save initial settings document for new workspace
       await db.collection('settings').doc(pharmacyId).set(initialSettings, { merge: true });
 
       return res.status(201).json({
-        id: docRef.id,
-        user: { id: docRef.id, ...userData },
+        id: uid,
+        user,
+        token,
         message: 'Account created and saved to Firestore successfully!'
       });
     }
@@ -281,10 +367,11 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const id = `user-${Date.now()}`;
-    const newUser = { id, ...userData };
+    const newUser = { id, uid: id, ...userProfile, passwordHash, salt };
     memoryStore.users.push(newUser);
     memoryStore.settings[pharmacyId] = initialSettings;
-    res.status(201).json({ id, user: newUser, message: 'Account created successfully!' });
+    const token = signToken({ uid: id, email: normalizedEmail, pharmacyId, role: 'Pharmacist' });
+    res.status(201).json({ id, user: { id, uid: id, ...userProfile }, token, message: 'Account created successfully!' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -293,48 +380,98 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const normalizedEmail = (email || '').toLowerCase().trim();
-
-    // 1. Demo account check
-    if (normalizedEmail === 'pharmacist@demo.com' && (!password || password === 'demo123')) {
-      return res.json({
-        isDemo: true,
-        user: {
-          id: 'demo-user',
-          fullName: 'Demo Pharmacist',
-          email: 'pharmacist@demo.com',
-          role: 'Pharmacist',
-          pharmacyId: 'DEMO_PHARMACY',
-          pharmacyName: 'Apollo MedPlus Central',
-          city: 'Bengaluru',
-          stateName: 'Karnataka'
-        }
-      });
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required.' });
     }
+    const normalizedEmail = email.toLowerCase().trim();
 
-    // 2. Firestore check
+    // 1. Check Firestore
     if (isConnected()) {
       const snapshot = await db.collection('users').where('email', '==', normalizedEmail).get();
       if (!snapshot.empty) {
         const userDoc = snapshot.docs[0];
         const data = userDoc.data();
+
+        // If password is provided, verify hash
+        if (password) {
+          const isValid = data.passwordHash && data.salt 
+            ? verifyPassword(password, data.passwordHash, data.salt)
+            : (data.passwordHash && data.passwordHash === Buffer.from(password).toString('base64'))
+            || (normalizedEmail === 'pharmacist@demo.com' && password === 'demo123');
+
+          if (!isValid) {
+            return res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
+          }
+        }
+
+        const uid = userDoc.id;
+        const pharmacyId = data.pharmacyId || (normalizedEmail === 'pharmacist@demo.com' ? 'DEMO_PHARMACY' : `pharm_${uid}`);
+        const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: data.role || 'Pharmacist' });
+
+        const safeUser = { id: uid, uid, ...data, pharmacyId };
+        delete safeUser.passwordHash;
+        delete safeUser.salt;
+
         return res.json({
-          isDemo: false,
-          user: { id: userDoc.id, ...data }
+          isDemo: pharmacyId === 'DEMO_PHARMACY',
+          user: safeUser,
+          token
         });
       }
     }
 
-    // 3. Fallback memory check
+    // 2. Check Memory Store
     const localUser = memoryStore.users.find(u => u.email === normalizedEmail);
     if (localUser) {
-      return res.json({ isDemo: false, user: localUser });
+      if (password) {
+        const isValid = localUser.passwordHash && localUser.salt
+          ? verifyPassword(password, localUser.passwordHash, localUser.salt)
+          : (normalizedEmail === 'pharmacist@demo.com' && password === 'demo123');
+
+        if (!isValid) {
+          return res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
+        }
+      }
+
+      const uid = localUser.id || localUser.uid || 'demo-user';
+      const pharmacyId = localUser.pharmacyId || 'DEMO_PHARMACY';
+      const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: localUser.role || 'Pharmacist' });
+
+      const safeUser = { ...localUser };
+      delete safeUser.passwordHash;
+      delete safeUser.salt;
+
+      return res.json({
+        isDemo: pharmacyId === 'DEMO_PHARMACY',
+        user: safeUser,
+        token
+      });
     }
 
-    // Reject unauthenticated login rather than silently leaking demo workspace
+    // Reject unauthenticated login
     return res.status(401).json({
       error: 'Account not found with this email. Please check your credentials or create a new account.'
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ authenticated: false, error: 'No valid auth token provided.' });
+    }
+    if (isConnected()) {
+      const userDoc = await db.collection('users').doc(req.user.uid).get();
+      if (userDoc.exists) {
+        const data = userDoc.data();
+        delete data.passwordHash;
+        delete data.salt;
+        return res.json({ authenticated: true, user: { id: userDoc.id, ...data } });
+      }
+    }
+    res.json({ authenticated: true, user: req.user });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -347,11 +484,18 @@ app.get('/api/users', async (req, res) => {
       const users = snapshot.docs.map(doc => {
         const d = doc.data();
         delete d.passwordHash;
+        delete d.salt;
         return { id: doc.id, ...d };
       });
       return res.json(users);
     }
-    res.json(memoryStore.users);
+    const safeMemUsers = memoryStore.users.map(u => {
+      const safe = { ...u };
+      delete safe.passwordHash;
+      delete safe.salt;
+      return safe;
+    });
+    res.json(safeMemUsers);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

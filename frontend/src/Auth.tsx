@@ -141,7 +141,7 @@ export default function Auth({
       const res = await api.loginUser({ email: loginEmail, password: loginPassword });
       if (res?.user) {
         setIsSubmitting(false);
-        onLogin('Pharmacist', res.user);
+        onLogin('Pharmacist', { ...res.user, token: res.token });
         return;
       }
       throw new Error(res?.error || 'Invalid login credentials.');
@@ -181,12 +181,13 @@ export default function Auth({
       setIsSubmitting(false);
       setSuccessMessage('Pharmacy workspace created successfully! Launching portal...');
       setTimeout(() => {
-        const registeredUser = res?.user || {
+        const registeredUser = res?.user ? { ...res.user, token: res.token } : {
           fullName,
           email,
           pharmacyId: res?.pharmacyId || res?.id,
           pharmacyName: pharmacyName || 'PharmaFlow Workspace',
-          role: 'Pharmacist'
+          role: 'Pharmacist',
+          token: res?.token
         };
         onLogin('Pharmacist', registeredUser);
       }, 800);
@@ -196,9 +197,23 @@ export default function Auth({
     }
   };
 
-  const handleDemoAccess = () => {
+  const handleDemoAccess = async () => {
+    setIsSubmitting(true);
+    setErrors({});
+    try {
+      const res = await api.loginUser({ email: 'pharmacist@demo.com', password: 'demo123' });
+      setIsSubmitting(false);
+      if (res?.user) {
+        onLogin('Pharmacist', { ...res.user, token: res.token });
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+    setIsSubmitting(false);
     onLogin('Pharmacist', {
       fullName: 'Demo Pharmacist',
+      email: 'pharmacist@demo.com',
       pharmacyId: 'DEMO_PHARMACY',
       role: 'Pharmacist',
       pharmacyName: 'Apollo MedPlus Central'

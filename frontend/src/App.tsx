@@ -3,7 +3,7 @@ import Landing from './Landing';
 import Auth from './Auth';
 import PharmacistPortal from './PharmacistPortal';
 import { ThemeProvider } from './components/ThemeContext';
-import { setApiPharmacyId } from './services/api';
+import { setApiPharmacyId, setApiAuthToken, getApiAuthToken, api } from './services/api';
 import type { Role } from './data';
 
 type AppView = 'landing' | 'login' | 'signup' | 'pharmacist';
@@ -14,6 +14,7 @@ export interface UserSession {
   role: Role;
   pharmacyId: string;
   pharmacyName?: string;
+  token?: string;
 }
 
 const SESSION_STORAGE_KEY = 'pharmaflow_session';
@@ -26,6 +27,9 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (parsed?.pharmacyId) {
           setApiPharmacyId(parsed.pharmacyId);
+          if (parsed.token) {
+            setApiAuthToken(parsed.token);
+          }
           return 'pharmacist';
         }
       }
@@ -41,12 +45,16 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.pharmacyId) {
+          if (parsed.token) {
+            setApiAuthToken(parsed.token);
+          }
           return {
             fullName: parsed.fullName || 'Pharmacist',
             email: parsed.email || '',
             role: 'Pharmacist',
             pharmacyId: parsed.pharmacyId,
-            pharmacyName: parsed.pharmacyName || 'PharmaFlow Workspace'
+            pharmacyName: parsed.pharmacyName || 'PharmaFlow Workspace',
+            token: parsed.token || ''
           };
         }
       }
@@ -55,6 +63,7 @@ export default function App() {
     }
     return {
       fullName: 'Demo Pharmacist',
+      email: 'pharmacist@demo.com',
       role: 'Pharmacist',
       pharmacyId: 'DEMO_PHARMACY',
       pharmacyName: 'Apollo MedPlus Central'
@@ -62,15 +71,20 @@ export default function App() {
   });
 
   const handleLogin = (_role: Role, user?: any) => {
+    const token = user?.token || getApiAuthToken();
     const sessionUser: UserSession = {
       fullName: user?.fullName || 'Pharmacist',
       email: user?.email || '',
       role: 'Pharmacist',
       pharmacyId: user?.pharmacyId || 'DEMO_PHARMACY',
-      pharmacyName: user?.pharmacyName || 'PharmaFlow Workspace'
+      pharmacyName: user?.pharmacyName || 'PharmaFlow Workspace',
+      token
     };
     setCurrentUser(sessionUser);
     setApiPharmacyId(sessionUser.pharmacyId);
+    if (token) {
+      setApiAuthToken(token);
+    }
     try {
       localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
     } catch (e) {
@@ -79,22 +93,23 @@ export default function App() {
     setView('pharmacist');
   };
 
-  const handleLaunchDemo = () => {
-    const demoSession: UserSession = {
+  const handleLaunchDemo = async () => {
+    try {
+      const res = await api.loginUser({ email: 'pharmacist@demo.com', password: 'demo123' });
+      if (res?.user) {
+        handleLogin('Pharmacist', { ...res.user, token: res.token });
+        return;
+      }
+    } catch (e) {
+      console.warn('Demo login via API fallback:', e);
+    }
+    handleLogin('Pharmacist', {
       fullName: 'Demo Pharmacist',
       email: 'pharmacist@demo.com',
       role: 'Pharmacist',
       pharmacyId: 'DEMO_PHARMACY',
       pharmacyName: 'Apollo MedPlus Central'
-    };
-    setCurrentUser(demoSession);
-    setApiPharmacyId('DEMO_PHARMACY');
-    try {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(demoSession));
-    } catch (e) {
-      console.warn('Failed to save demo session to localStorage:', e);
-    }
-    setView('pharmacist');
+    });
   };
 
   const handleLogout = () => {
@@ -104,6 +119,7 @@ export default function App() {
       console.warn('Failed to remove session from localStorage:', e);
     }
     setApiPharmacyId('');
+    setApiAuthToken('');
     setView('landing');
   };
 

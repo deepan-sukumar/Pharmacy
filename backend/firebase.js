@@ -35,20 +35,40 @@ function sanitizePrivateKey(key) {
   return cleaned.replace(/\\n/g, '\n');
 }
 
-const keyPath = path.join(__dirname, 'serviceAccountKey.json');
+// Find possible locations of serviceAccountKey.json
+function findServiceAccountKeyFile() {
+  const candidates = [
+    path.join(__dirname, 'serviceAccountKey.json'),
+    path.join(__dirname, '..', 'serviceAccountKey.json'),
+    path.join(process.cwd(), 'serviceAccountKey.json'),
+    path.join(process.cwd(), 'backend', 'serviceAccountKey.json'),
+  ];
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS && !process.env.GOOGLE_APPLICATION_CREDENTIALS.startsWith('{')) {
+    candidates.unshift(path.resolve(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS));
+  }
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return null;
+}
 
 try {
   if (!admin.apps.length) {
-    if (fs.existsSync(keyPath)) {
-      const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+    const keyFile = findServiceAccountKeyFile();
+    const envAccount = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_KEY || (process.env.GOOGLE_APPLICATION_CREDENTIALS && process.env.GOOGLE_APPLICATION_CREDENTIALS.startsWith('{') ? process.env.GOOGLE_APPLICATION_CREDENTIALS : null);
+
+    if (keyFile) {
+      const serviceAccount = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
       db = admin.firestore();
       isConnected = true;
-      console.log('✅ Firebase Admin SDK initialized successfully with serviceAccountKey.json');
-    } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      const serviceAccount = parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
+      console.log(`✅ Firebase Admin SDK initialized successfully with file: ${keyFile}`);
+    } else if (envAccount) {
+      const serviceAccount = parseServiceAccount(envAccount);
       if (serviceAccount) {
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
@@ -84,3 +104,4 @@ module.exports = {
   db,
   isConnected: () => isConnected && db !== null,
 };
+
