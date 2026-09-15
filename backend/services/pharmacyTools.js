@@ -673,5 +673,6 @@ module.exports = {
   getPharmacyAnalytics,
   getUnusualDispensingPatterns,
   calculateExpiryRisk,
-  getTodayPharmacyIntelligence
+  getTodayPharmacyIntelligence,
+  parseExpiryToDays
 };

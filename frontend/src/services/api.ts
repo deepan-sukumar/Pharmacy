@@ -575,6 +575,13 @@ export const api = {
     return await res.json();
   },
 
+  async getAffectedPatients() {
+    const res = await fetch(`${API_BASE_URL}/communications/affected-patients`, {
+      headers: getHeaders(),
+    });
+    return await res.json();
+  },
+
   // -------------------------------------------------------------
   // SETTINGS
   // -------------------------------------------------------------

@@ -118,25 +118,25 @@ const demoHash = hashPassword('demo123', demoSalt).hash;
 // -------------------------------------------------------------
 let memoryStore = {
   inventory: [
-    { id: 'demo-med-1', pharmacyId: 'DEMO_PHARMACY', medicine: 'Paracetamol 500mg', genericName: 'Acetaminophen', batch: 'PCT101', expiry: 'Sep 2026', quantity: 120, supplier: 'ABC Pharma', status: 'Available', unitPrice: 25, barcode: '890103400101' },
-    { id: 'demo-med-2', pharmacyId: 'DEMO_PHARMACY', medicine: 'Vitamin D3 60K', genericName: 'Cholecalciferol', batch: 'VD102', expiry: 'Sep 2026', quantity: 180, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 65, barcode: '890103400102' },
-    { id: 'demo-med-3', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'AMX204', expiry: 'Oct 2026', quantity: 45, supplier: 'MediSource', status: 'Recalled', unitPrice: 95, barcode: '890103400103' },
-    { id: 'demo-med-4', pharmacyId: 'DEMO_PHARMACY', medicine: 'Cetirizine 10mg', genericName: 'Cetirizine Hydrochloride', batch: 'CTZ302', expiry: 'Jan 2027', quantity: 320, supplier: 'Nova Pharma', status: 'Available', unitPrice: 35, barcode: '890103400104' },
-    { id: 'demo-med-5', pharmacyId: 'DEMO_PHARMACY', medicine: 'Azithromycin 250mg', genericName: 'Azithromycin Dihydrate', batch: 'AZI109', expiry: 'Nov 2026', quantity: 68, supplier: 'MediSource', status: 'Low Stock', unitPrice: 120, barcode: '890103400105' },
-    { id: 'demo-med-6', pharmacyId: 'DEMO_PHARMACY', medicine: 'Metformin 500mg', genericName: 'Metformin Hydrochloride', batch: 'MET501', expiry: 'Mar 2027', quantity: 410, supplier: 'ABC Pharma', status: 'Available', unitPrice: 45, barcode: '890103400106' },
+    { id: 'demo-med-1', pharmacyId: 'DEMO_PHARMACY', medicine: 'Paracetamol 500mg', genericName: 'Acetaminophen', batch: 'PCT101', expiry: '30 Nov 2027', quantity: 120, supplier: 'ABC Pharma', status: 'Available', unitPrice: 25, barcode: '890103400101' },
+    { id: 'demo-med-2', pharmacyId: 'DEMO_PHARMACY', medicine: 'Vitamin D3 60K', genericName: 'Cholecalciferol', batch: 'DEMO-NORMAL-001', expiry: '30 Nov 2027', quantity: 180, supplier: 'HealthCare Labs', status: 'Available', unitPrice: 65, barcode: '890103400102' },
+    { id: 'demo-med-3', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'AMX204', expiry: '15 Oct 2026', quantity: 45, supplier: 'MediSource', status: 'Recalled', unitPrice: 95, barcode: '890103400103' },
+    { id: 'demo-med-4', pharmacyId: 'DEMO_PHARMACY', medicine: 'Cetirizine 10mg', genericName: 'Cetirizine Hydrochloride', batch: 'CTZ302', expiry: '15 Jan 2027', quantity: 320, supplier: 'Nova Pharma', status: 'Available', unitPrice: 35, barcode: '890103400104' },
+    { id: 'demo-med-5', pharmacyId: 'DEMO_PHARMACY', medicine: 'Azithromycin 250mg', genericName: 'Azithromycin Dihydrate', batch: 'AZI109', expiry: '20 Dec 2027', quantity: 68, supplier: 'MediSource', status: 'Low Stock', unitPrice: 120, barcode: '890103400105' },
+    { id: 'demo-med-6', pharmacyId: 'DEMO_PHARMACY', medicine: 'Metformin 500mg', genericName: 'Metformin Hydrochloride', batch: 'MET501', expiry: '10 Mar 2028', quantity: 410, supplier: 'ABC Pharma', status: 'Available', unitPrice: 45, barcode: '890103400106' },
     // Dedicated Near-Expiry Demo Batch for automated SMS, Manual SMS, and Batch Recall Tracing
-    { id: 'demo-med-exp-001', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'DEMO-EXP-001', expiry: getDynamicExpiryDate(30), quantity: 77, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 85, barcode: '890103400777' },
+    { id: 'demo-med-exp-001', pharmacyId: 'DEMO_PHARMACY', medicine: 'Amoxicillin 500mg', genericName: 'Amoxicillin Trihydrate', batch: 'DEMO-EXP-001', expiry: '30 Sep 2026', quantity: 77, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 85, barcode: '890103400777' },
   ],
   customers: [
-    { id: 'demo-cust-1', pharmacyId: 'DEMO_PHARMACY', name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true, preferredLang: 'English', communicationPreference: 'SMS' },
-    { id: 'demo-cust-2', pharmacyId: 'DEMO_PHARMACY', name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'Hindi', communicationPreference: 'SMS' },
-    { id: 'demo-cust-3', pharmacyId: 'DEMO_PHARMACY', name: 'Arun Kumar', phone: '+91 94480 77109', email: 'arun.k@example.com', visits: 6, lastVisit: 'Aug 18', allergies: 'Sulfa drugs', alerts: true, preferredLang: 'Kannada', communicationPreference: 'SMS' },
-    { id: 'demo-cust-4', pharmacyId: 'DEMO_PHARMACY', name: 'Kavya S', phone: '+91 99001 22584', email: 'kavya.s@example.com', visits: 4, lastVisit: 'Aug 12', allergies: 'None', alerts: false, preferredLang: 'Tamil', communicationPreference: 'SMS' },
-    { id: 'demo-cust-5', pharmacyId: 'DEMO_PHARMACY', name: 'Meena Devi', phone: '+91 96114 64190', email: 'meena.d@example.com', visits: 3, lastVisit: 'Aug 04', allergies: 'Aspirin', alerts: true, preferredLang: 'Telugu', communicationPreference: 'SMS' },
+    { id: 'demo-cust-1', pharmacyId: 'DEMO_PHARMACY', name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: '18 Aug 2026', allergies: 'Penicillin', alerts: true, preferredLang: 'English', communicationPreference: 'SMS' },
+    { id: 'demo-cust-2', pharmacyId: 'DEMO_PHARMACY', name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: '15 Sep 2026', allergies: 'None', alerts: true, preferredLang: 'Hindi', communicationPreference: 'SMS' },
+    { id: 'demo-cust-3', pharmacyId: 'DEMO_PHARMACY', name: 'Arun Kumar', phone: '+91 94480 77109', email: 'arun.k@example.com', visits: 6, lastVisit: '15 Sep 2026', allergies: 'Sulfa drugs', alerts: true, preferredLang: 'Kannada', communicationPreference: 'SMS' },
+    { id: 'demo-cust-4', pharmacyId: 'DEMO_PHARMACY', name: 'Kavya S', phone: '+91 99001 22584', email: 'kavya.s@example.com', visits: 4, lastVisit: '12 Aug 2026', allergies: 'None', alerts: false, preferredLang: 'Tamil', communicationPreference: 'SMS' },
+    { id: 'demo-cust-5', pharmacyId: 'DEMO_PHARMACY', name: 'Meena Devi', phone: '+91 96114 64190', email: 'meena.d@example.com', visits: 3, lastVisit: '12 Sep 2026', allergies: 'Aspirin', alerts: true, preferredLang: 'Telugu', communicationPreference: 'SMS' },
     // Dedicated Test/Demo Customers for Expiry & Recall safety workflows
-    { id: 'demo-cust-deepak', pharmacyId: 'DEMO_PHARMACY', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
-    { id: 'demo-cust-manish', pharmacyId: 'DEMO_PHARMACY', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
-    { id: 'demo-cust-deeps', pharmacyId: 'DEMO_PHARMACY', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+    { id: 'demo-cust-deepak', pharmacyId: 'DEMO_PHARMACY', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: '15 Sep 2026', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+    { id: 'demo-cust-manish', pharmacyId: 'DEMO_PHARMACY', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: '10 Sep 2026', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
+    { id: 'demo-cust-deeps', pharmacyId: 'DEMO_PHARMACY', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: '14 Sep 2026', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
   ],
   suppliers: [
     { id: 'demo-supp-1', pharmacyId: 'DEMO_PHARMACY', name: 'ABC Pharma', email: 'supp@abcpharma.com', batches: 24, purchases: '₹ 2,48,600', rating: 'Excellent', phone: '+91 80 4122 8890' },
@@ -145,14 +145,14 @@ let memoryStore = {
     { id: 'demo-supp-4', pharmacyId: 'DEMO_PHARMACY', name: 'Nova Pharma Ltd', email: 'dispatch@novapharma.com', batches: 9, purchases: '₹ 74,800', rating: 'Excellent', phone: '+91 80 5566 7788' },
   ],
   audits: [
-    { id: 'demo-audit-1', pharmacyId: 'DEMO_PHARMACY', date: 'Today, 10:42 AM', medicine: 'Paracetamol 500mg', batch: 'PCT101', quantity: 12, customer: 'Priya Sharma', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88192', totalAmount: 300, timestamp: new Date(Date.now() - 3600000).toISOString() },
-    { id: 'demo-audit-2', pharmacyId: 'DEMO_PHARMACY', date: 'Today, 09:18 AM', medicine: 'Cetirizine 10mg', batch: 'CTZ302', quantity: 5, customer: 'Arun Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88185', totalAmount: 175, timestamp: new Date(Date.now() - 7200000).toISOString() },
-    { id: 'demo-audit-3', pharmacyId: 'DEMO_PHARMACY', date: 'Yesterday, 04:35 PM', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 10, customer: 'Meena Devi', pharmacist: 'Dr. Suresh', status: 'Completed', rxId: 'RX-2026-88102', totalAmount: 650, timestamp: new Date(Date.now() - 86400000).toISOString() },
-    { id: 'demo-audit-4', pharmacyId: 'DEMO_PHARMACY', date: 'Aug 18, 02:15 PM', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 15, customer: 'Rahul Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88050', totalAmount: 1425, timestamp: new Date(Date.now() - 172800000).toISOString() },
+    { id: 'demo-audit-1', pharmacyId: 'DEMO_PHARMACY', date: '15 Sep 2026, 10:42 AM', medicine: 'Paracetamol 500mg', batch: 'PCT101', quantity: 12, customer: 'Priya Sharma', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88192', totalAmount: 300, timestamp: '2026-09-15T05:12:00.000Z' },
+    { id: 'demo-audit-2', pharmacyId: 'DEMO_PHARMACY', date: '15 Sep 2026, 09:18 AM', medicine: 'Cetirizine 10mg', batch: 'CTZ302', quantity: 5, customer: 'Arun Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88185', totalAmount: 175, timestamp: '2026-09-15T03:48:00.000Z' },
+    { id: 'demo-audit-3', pharmacyId: 'DEMO_PHARMACY', date: '12 Sep 2026, 04:35 PM', medicine: 'Vitamin D3 60K', batch: 'DEMO-NORMAL-001', quantity: 10, customer: 'Meena Devi', pharmacist: 'Dr. Suresh', status: 'Completed', rxId: 'RX-2026-88102', totalAmount: 650, timestamp: '2026-09-12T11:05:00.000Z' },
+    { id: 'demo-audit-4', pharmacyId: 'DEMO_PHARMACY', date: '18 Aug 2026, 02:15 PM', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 15, customer: 'Rahul Kumar', pharmacist: 'Dr. Anita Rao', status: 'Completed', rxId: 'RX-2026-88050', totalAmount: 1425, timestamp: '2026-08-18T08:45:00.000Z' },
     // Dispensing records linking batch DEMO-EXP-001 to Deepak, Manish, and Deeps
-    { id: 'demo-audit-exp-1', pharmacyId: 'DEMO_PHARMACY', date: 'Today, 11:15 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 10, customer: 'Deepak', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90001', totalAmount: 850, timestamp: new Date(Date.now() - 7200000).toISOString() },
-    { id: 'demo-audit-exp-2', pharmacyId: 'DEMO_PHARMACY', date: 'Today, 09:30 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 5, customer: 'Manish', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90002', totalAmount: 425, timestamp: new Date(Date.now() - 14400000).toISOString() },
-    { id: 'demo-audit-exp-3', pharmacyId: 'DEMO_PHARMACY', date: 'Yesterday, 03:45 PM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 8, customer: 'Deeps', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90003', totalAmount: 680, timestamp: new Date(Date.now() - 86400000).toISOString() },
+    { id: 'demo-audit-exp-1', pharmacyId: 'DEMO_PHARMACY', date: '15 Sep 2026, 11:15 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 10, customer: 'Deepak', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90001', totalAmount: 850, timestamp: '2026-09-15T05:45:00.000Z' },
+    { id: 'demo-audit-exp-2', pharmacyId: 'DEMO_PHARMACY', date: '10 Sep 2026, 09:30 AM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 5, customer: 'Manish', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90002', totalAmount: 425, timestamp: '2026-09-10T04:00:00.000Z' },
+    { id: 'demo-audit-exp-3', pharmacyId: 'DEMO_PHARMACY', date: '14 Sep 2026, 03:45 PM', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 8, customer: 'Deeps', pharmacist: 'Demo Pharmacist', status: 'Completed', rxId: 'RX-2026-90003', totalAmount: 680, timestamp: '2026-09-14T10:15:00.000Z' },
   ],
   recalls: [
     { id: 'demo-recall-1', pharmacyId: 'DEMO_PHARMACY', batch: 'AMX204', medicine: 'Amoxicillin 500mg', reason: 'Packaging seal integrity breach reported by manufacturer CDSCO bulletin', status: 'Quarantined', date: 'Today, 08:30 AM', quarantineQty: 45, affectedCustomers: ['Rahul Kumar'] }
@@ -1556,6 +1556,133 @@ app.post('/api/communications/log', async (req, res) => {
     const id = `comm_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
     const saved = { id, ...logRecord };
     res.status(201).json({ success: true, id, ...saved });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/communications/affected-patients
+// Derives affected patients dynamically based on authoritative BATCH EXPIRY DATE and RECALL STATUS
+app.get('/api/communications/affected-patients', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    let inventory = [];
+    let audits = [];
+    let customers = [];
+    let logs = [];
+
+    if (isConnected()) {
+      const [invSnap, audSnap, custSnap, logSnap] = await Promise.all([
+        db.collection('inventory').where('pharmacyId', '==', pharmacyId).get(),
+        db.collection('audits').where('pharmacyId', '==', pharmacyId).get(),
+        db.collection('customers').where('pharmacyId', '==', pharmacyId).get(),
+        db.collection('smsNotifications').where('pharmacyId', '==', pharmacyId).get()
+      ]);
+      inventory = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      audits = audSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      customers = custSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      logs = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      inventory = (memoryStore.inventory || []).filter(i => i.pharmacyId === pharmacyId);
+      audits = (memoryStore.audits || []).filter(a => a.pharmacyId === pharmacyId);
+      customers = (memoryStore.customers || []).filter(c => c.pharmacyId === pharmacyId);
+      logs = (memoryStore.smsNotifications || []).filter(l => l.pharmacyId === pharmacyId);
+    }
+
+    // Classify batches based on actual batch expiry date
+    const batchMap = new Map();
+    inventory.forEach(item => {
+      const isRecalled = item.status === 'Recalled';
+      const days = parseExpiryToDays(item.expiry);
+      const isExpired = !isRecalled && (days <= 0 || item.status === 'Expired');
+      const isNearExpiry = !isRecalled && !isExpired && ((days > 0 && days <= 30) || item.status === 'Near Expiry');
+
+      batchMap.set(item.batch, {
+        medicine: item.medicine,
+        batch: item.batch,
+        expiry: item.expiry,
+        daysRemaining: isRecalled ? null : days,
+        isRecalled,
+        isNearExpiry,
+        isExpired,
+        status: item.status
+      });
+    });
+
+    const affectedPatients = [];
+    const seen = new Set();
+
+    audits.forEach(a => {
+      if (!a.customer || a.customer === 'Walk-in Patient' || !a.batch) return;
+      const bInfo = batchMap.get(a.batch);
+      if (!bInfo) return;
+
+      // Exclude if neither recalled nor near expiry (e.g. normal batches expiring in 2027)
+      if (!bInfo.isRecalled && !bInfo.isNearExpiry) return;
+
+      const key = `${a.customer}-${a.batch}-${a.rxId || a.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const cust = customers.find(c => c.name.toLowerCase() === a.customer.toLowerCase());
+
+      const recentLog = logs.find(l =>
+        l.recipientName?.toLowerCase() === a.customer.toLowerCase() &&
+        (l.batchId === a.batch || (l.message && l.message.includes(a.batch)))
+      );
+
+      let actionStatus = 'Ready';
+      if (recentLog) {
+        if (recentLog.status === 'WHATSAPP_OPENED') actionStatus = 'WhatsApp Opened';
+        else if (recentLog.status === 'SMS_COMPOSER_OPENED') actionStatus = 'SMS Composer Opened';
+        else if (recentLog.status === 'COMMUNICATION_INITIATED') actionStatus = 'Communication Initiated';
+      }
+
+      affectedPatients.push({
+        id: a.id || `aff_${affectedPatients.length + 1}`,
+        customerName: a.customer,
+        phone: cust ? cust.phone : (a.phone || '+91 93845 99028'),
+        email: cust?.email,
+        preferredLang: cust?.preferredLang || 'English',
+        communicationPreference: (cust?.communicationPreference || 'SMS').toUpperCase(),
+        medicine: a.medicine || bInfo.medicine,
+        batch: a.batch,
+        expiry: bInfo.expiry,
+        daysRemaining: bInfo.daysRemaining,
+        qtyDispensed: Number(a.quantity) || 1,
+        rxId: a.rxId || `RX-2026-${String(a.id || 100).padStart(5, '0')}`,
+        dispenseDate: a.date || '15 Sep 2026',
+        reason: bInfo.isRecalled ? 'RECALL' : 'NEAR_EXPIRY',
+        recallReason: bInfo.isRecalled ? 'Packaging seal integrity breach reported by manufacturer CDSCO bulletin' : undefined,
+        status: actionStatus,
+        customerObj: cust || { name: a.customer, phone: a.phone || '+91 93845 99028', communicationPreference: 'SMS' }
+      });
+    });
+
+    const nearExpiryCount = affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY').length;
+    const recallCount = affectedPatients.filter(p => p.reason === 'RECALL').length;
+    const whatsAppCount = customers.filter(c => c.communicationPreference === 'WHATSAPP').length;
+    const smsCount = customers.filter(c => c.communicationPreference !== 'WHATSAPP').length;
+    const messagesInitiatedCount = logs.filter(l =>
+      l.status === 'WHATSAPP_OPENED' ||
+      l.status === 'SMS_COMPOSER_OPENED' ||
+      l.status === 'COMMUNICATION_INITIATED' ||
+      l.notificationSource === 'manual'
+    ).length;
+
+    res.json({
+      success: true,
+      pharmacyId,
+      affectedPatients,
+      counts: {
+        totalAffected: affectedPatients.length,
+        nearExpiry: nearExpiryCount,
+        recall: recallCount,
+        whatsAppPref: whatsAppCount,
+        smsPref: smsCount,
+        messagesInitiated: messagesInitiatedCount
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -4807,28 +4807,25 @@ export default function PharmacistPortal({
     handleOpenSafetyCommunication(cust, type, payload);
   };
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
-      try {
-        const [inv, cust, supp, aud] = await Promise.all([
-          api.getInventory().catch(() => []),
-          api.getCustomers().catch(() => []),
-          api.getSuppliers().catch(() => []),
-          api.getAudits().catch(() => []),
-        ]);
-        if (isMounted) {
-          setInventory(Array.isArray(inv) ? inv : []);
-          setCustomersList(Array.isArray(cust) ? cust : []);
-          setSuppliersList(Array.isArray(supp) ? supp : []);
-          setAudits(Array.isArray(aud) ? aud : []);
-        }
-      } catch (err) {
-        console.error('Failed to load pharmacy data:', err);
-      }
+  const reloadPharmacyData = async () => {
+    try {
+      const [inv, cust, supp, aud] = await Promise.all([
+        api.getInventory().catch(() => []),
+        api.getCustomers().catch(() => []),
+        api.getSuppliers().catch(() => []),
+        api.getAudits().catch(() => []),
+      ]);
+      setInventory(Array.isArray(inv) ? inv : []);
+      setCustomersList(Array.isArray(cust) ? cust : []);
+      setSuppliersList(Array.isArray(supp) ? supp : []);
+      setAudits(Array.isArray(aud) ? aud : []);
+    } catch (err) {
+      console.error('Failed to load pharmacy data:', err);
     }
-    loadData();
-    return () => { isMounted = false; };
+  };
+
+  useEffect(() => {
+    reloadPharmacyData();
   }, [currentUser?.pharmacyId]);
 
   const showToast = (text: string) => {
@@ -5017,6 +5014,7 @@ export default function PharmacistPortal({
             <SmsReportsView
               onOpenSafetyCommunication={handleOpenSafetyCommunication}
               onOpenManualSms={(c?: CustomerItem) => handleOpenSafetyCommunication(c, 'MANUAL')}
+              onRefresh={reloadPharmacyData}
               showToast={showToast}
               customersList={customersList}
               inventory={inventory}

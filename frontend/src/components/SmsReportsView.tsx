@@ -7,10 +7,12 @@ import {
 } from 'lucide-react';
 import { api, type CustomerItem, type MedicineItem, type AuditItem } from '../services/api';
 import CustomerSmsDetailsModal from './CustomerSmsDetailsModal';
+import { formatReadableDate } from './SafetyCommunicationModal';
 
 interface SmsReportsViewProps {
   onOpenSafetyCommunication?: (cust?: any, type?: string, details?: any) => void;
   onOpenManualSms?: (cust?: any, type?: string, details?: any) => void;
+  onRefresh?: () => Promise<void> | void;
   showToast: (msg: string) => void;
   customersList?: CustomerItem[];
   inventory?: any[];
@@ -59,6 +61,37 @@ interface AffectedPatientRecord {
   customerObj?: any;
 }
 
+// Authoritative calculation of days remaining until batch expiry
+export function parseDaysRemaining(expiryStr?: string | null): number {
+  if (!expiryStr) return 999;
+  const str = String(expiryStr).trim();
+  if (!str) return 999;
+
+  let expiryDate = new Date(str);
+  if (isNaN(expiryDate.getTime())) {
+    // Handle format "Sep 2026" or "Oct 2026"
+    const parts = str.split(/\s+/);
+    if (parts.length === 2) {
+      const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+      const mIdx = monthNames.indexOf(parts[0].toLowerCase().slice(0, 3));
+      const year = parseInt(parts[1], 10);
+      if (mIdx >= 0 && !isNaN(year)) {
+        // End of that month
+        expiryDate = new Date(year, mIdx + 1, 0);
+      }
+    }
+  }
+
+  if (isNaN(expiryDate.getTime())) return 999;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  expiryDate.setHours(0, 0, 0, 0);
+
+  const diffTime = expiryDate.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
 function downloadCSV(filename: string, headers: string[], rows: (string | number)[][]) {
   const content = [
     headers.join(','),
@@ -76,6 +109,7 @@ function downloadCSV(filename: string, headers: string[], rows: (string | number
 export default function SmsReportsView({
   onOpenSafetyCommunication,
   onOpenManualSms,
+  onRefresh,
   showToast,
   customersList = [],
   inventory = [],
@@ -84,6 +118,7 @@ export default function SmsReportsView({
 }: SmsReportsViewProps) {
   const [logs, setLogs] = useState<ActivityLogItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState<'all' | 'NEAR_EXPIRY' | 'RECALL'>('all');
   const [channelFilter, setChannelFilter] = useState<'all' | 'WHATSAPP' | 'SMS'>('all');
@@ -112,81 +147,85 @@ export default function SmsReportsView({
     fetchActivityLogs();
   }, []);
 
-  // Safe fallback list of customers
-  const safeCustomers = useMemo(() => {
-    return Array.isArray(customersList) && customersList.length > 0
-      ? customersList
-      : [
-          { id: 'demo-cust-deepak', name: 'Deepak', phone: '+91 93845 99028', email: 'deepak.demo@pharmaflow.internal', visits: 3, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
-          { id: 'demo-cust-manish', name: 'Manish', phone: '+91 90802 04902', email: 'manish.demo@pharmaflow.internal', visits: 2, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
-          { id: 'demo-cust-deeps', name: 'Deeps', phone: '+91 80988 51999', email: 'deeps.demo@pharmaflow.internal', visits: 4, lastVisit: 'Today', allergies: 'None', alerts: true, preferredLang: 'English', communicationPreference: 'WHATSAPP' },
-          { id: 1, name: 'Rahul Kumar', phone: '+91 98450 48123', email: 'rahul.k@example.com', visits: 12, lastVisit: 'Today', allergies: 'Penicillin', alerts: true, preferredLang: 'English', communicationPreference: 'SMS' },
-          { id: 2, name: 'Priya Sharma', phone: '+91 97312 90342', email: 'priya.s@example.com', visits: 8, lastVisit: 'Yesterday', allergies: 'None', alerts: true, preferredLang: 'Hindi', communicationPreference: 'SMS' },
-        ];
-  }, [customersList]);
+  const handleRefreshAll = async () => {
+    setRefreshing(true);
+    try {
+      if (onRefresh) {
+        await onRefresh();
+      }
+      await fetchActivityLogs();
+      showToast('Refreshed patient safety and near-expiry records from Firestore');
+    } catch (err: any) {
+      console.warn('Error refreshing safety data:', err);
+      showToast('Failed to refresh data: ' + (err?.message || 'Network error'));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-  // Safe fallback list of inventory
-  const safeInventory = useMemo(() => {
-    return Array.isArray(inventory) && inventory.length > 0
-      ? inventory
-      : [
-          { id: 1, medicine: 'Paracetamol 500mg', batch: 'PCT101', expiry: 'Sep 2026', quantity: 12, supplier: 'ABC Pharma', status: 'Low Stock', unitPrice: 25 },
-          { id: 2, medicine: 'Vitamin D3 60K', batch: 'VD102', expiry: 'Sep 2026', quantity: 180, supplier: 'HealthCare Labs', status: 'Near Expiry', unitPrice: 65 },
-          { id: 3, medicine: 'Amoxicillin 500mg', batch: 'AMX204', expiry: 'Oct 2026', quantity: 45, supplier: 'MediSource', status: 'Recalled', unitPrice: 95 },
-          { id: 101, medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', expiry: 'Oct 2026', quantity: 60, supplier: 'Hetero Labs Ltd', status: 'Near Expiry', unitPrice: 90 },
-        ];
-  }, [inventory]);
+  const safeCustomers = Array.isArray(customersList) ? customersList : [];
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+  const safeAudits = Array.isArray(audits) ? audits : [];
 
-  // Safe fallback list of audits
-  const safeAudits = useMemo(() => {
-    return Array.isArray(audits) && audits.length > 0
-      ? audits
-      : [
-          { id: 1, customer: 'Deepak', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 15, date: '14 Sep 2026', rxId: 'RX-2026-00481' },
-          { id: 2, customer: 'Manish', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 20, date: '13 Sep 2026', rxId: 'RX-2026-00482' },
-          { id: 3, customer: 'Deeps', medicine: 'Amoxicillin 500mg', batch: 'DEMO-EXP-001', quantity: 10, date: '14 Sep 2026', rxId: 'RX-2026-00483' },
-          { id: 4, customer: 'Rahul Kumar', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 15, date: '10 Sep 2026', rxId: 'RX-2026-00412' },
-          { id: 5, customer: 'Priya Sharma', medicine: 'Vitamin D3 60K', batch: 'VD102', quantity: 30, date: '08 Sep 2026', rxId: 'RX-2026-00399' },
-          { id: 6, customer: 'Deepak', medicine: 'Amoxicillin 500mg', batch: 'AMX204', quantity: 10, date: '09 Sep 2026', rxId: 'RX-2026-00405' },
-        ];
-  }, [audits]);
-
-  // Derive Affected Patients dynamically from historical dispensing audits of near-expiry and recalled batches
+  // Derive Affected Patients dynamically based purely on BATCH EXPIRY DATE and RECALL STATUS
   const affectedPatients: AffectedPatientRecord[] = useMemo(() => {
     const list: AffectedPatientRecord[] = [];
     const seenKeys = new Set<string>();
 
-    // 1. Identify relevant batches
-    const nearExpiryBatches = safeInventory.filter(m =>
-      m && (m.status === 'Near Expiry' || m.status === 'Expired' || m.batch === 'DEMO-EXP-001' || m.batch === 'VD102')
-    );
-    const recalledBatches = safeInventory.filter(m =>
-      m && (m.status === 'Recalled' || m.batch === 'AMX204')
-    );
+    // 1. Map inventory batches by batch code with authoritative expiry calculation
+    const batchMap = new Map<string, {
+      medicine: string;
+      batch: string;
+      expiry: string;
+      formattedExpiry: string;
+      daysRemaining: number | null;
+      isRecalled: boolean;
+      isNearExpiry: boolean;
+      isExpired: boolean;
+      status: string;
+    }>();
 
-    const nearExpiryBatchCodes = new Set(nearExpiryBatches.map(b => b.batch));
-    const recalledBatchCodes = new Set(recalledBatches.map(b => b.batch));
+    safeInventory.forEach(med => {
+      if (!med || !med.batch) return;
+      const isRecalled = med.status === 'Recalled';
+      const days = parseDaysRemaining(med.expiry);
+      const isExpired = !isRecalled && (days <= 0 || med.status === 'Expired');
+      // Near Expiry rule: Expiry is in the future AND <= 30 days remaining
+      const isNearExpiry = !isRecalled && !isExpired && ((days > 0 && days <= 30) || med.status === 'Near Expiry');
 
-    // 2. Scan audits
+      batchMap.set(med.batch, {
+        medicine: med.medicine,
+        batch: med.batch,
+        expiry: med.expiry,
+        formattedExpiry: formatReadableDate(med.expiry),
+        daysRemaining: isRecalled ? null : days,
+        isRecalled,
+        isNearExpiry,
+        isExpired,
+        status: med.status
+      });
+    });
+
+    // 2. Scan historical dispensing records and match exposed customers
     safeAudits.forEach(a => {
-      if (!a.customer || a.customer === 'Walk-in Patient') return;
+      if (!a || !a.customer || a.customer === 'Walk-in Patient' || !a.batch) return;
 
-      const isRecalled = recalledBatchCodes.has(a.batch);
-      const isNearExpiry = nearExpiryBatchCodes.has(a.batch) && !isRecalled;
+      const bInfo = batchMap.get(a.batch);
+      if (!bInfo) return;
 
-      if (!isRecalled && !isNearExpiry) return;
+      // EXCLUSION: If the batch is normal (not recalled and not near-expiry, e.g. expires 2027), DO NOT INCLUDE!
+      if (!bInfo.isRecalled && !bInfo.isNearExpiry) return;
 
       const key = `${a.customer}-${a.batch}-${a.rxId || a.id}`;
       if (seenKeys.has(key)) return;
       seenKeys.add(key);
 
       const custObj = safeCustomers.find(c => c.name.toLowerCase() === a.customer.toLowerCase());
-      const medObj = safeInventory.find(m => m.batch === a.batch);
 
       // Check if action was already logged for this customer & batch
       const recentLog = logs.find(l =>
         l.recipientName?.toLowerCase() === a.customer.toLowerCase() &&
-        (l.batchId === a.batch || l.message?.includes(a.batch))
+        (l.batchId === a.batch || (l.message && l.message.includes(a.batch)))
       );
 
       let status: AffectedPatientRecord['status'] = 'Ready';
@@ -199,23 +238,23 @@ export default function SmsReportsView({
       list.push({
         id: `${a.id || Date.now()}-${list.length}`,
         customerName: a.customer,
-        phone: custObj ? custObj.phone : '+91 93845 99028',
+        phone: custObj ? custObj.phone : (a.phone || '+91 93845 99028'),
         email: custObj?.email,
         preferredLang: (custObj as any)?.preferredLang || 'English',
-        communicationPreference: ((custObj as any)?.communicationPreference || 'SMS') as 'WHATSAPP' | 'SMS',
-        medicine: a.medicine || medObj?.medicine || 'Prescribed Medicine',
+        communicationPreference: (((custObj as any)?.communicationPreference || 'SMS').toUpperCase()) as 'WHATSAPP' | 'SMS',
+        medicine: a.medicine || bInfo.medicine,
         strength: '500mg',
         dosageForm: 'Oral Tablet',
         batch: a.batch,
-        expiry: medObj?.expiry || 'Oct 2026',
-        daysRemaining: medObj?.status === 'Near Expiry' ? 12 : 30,
-        qtyDispensed: a.quantity || 10,
+        expiry: bInfo.formattedExpiry,
+        daysRemaining: bInfo.daysRemaining,
+        qtyDispensed: Number(a.quantity) || 10,
         rxId: a.rxId || `RX-2026-${String(a.id || 100).padStart(5, '0')}`,
-        dispenseDate: a.date || 'Recent',
-        reason: isRecalled ? 'RECALL' : 'NEAR_EXPIRY',
-        recallReason: isRecalled ? 'Packaging seal defect reported by manufacturer bulletin' : undefined,
+        dispenseDate: formatReadableDate(a.date || a.timestamp),
+        reason: bInfo.isRecalled ? 'RECALL' : 'NEAR_EXPIRY',
+        recallReason: bInfo.isRecalled ? 'Packaging seal defect reported by manufacturer CDSCO bulletin' : undefined,
         status,
-        customerObj: custObj || { name: a.customer, phone: '+91 93845 99028', communicationPreference: 'SMS' }
+        customerObj: custObj || { name: a.customer, phone: a.phone || '+91 93845 99028', communicationPreference: 'SMS' }
       });
     });
 
@@ -277,6 +316,7 @@ export default function SmsReportsView({
       medicineName: p.medicine,
       batchNumber: p.batch,
       expiryDate: p.expiry,
+      dispensedDate: p.dispenseDate,
       recallReason: p.recallReason || 'Packaging seal defect reported by manufacturer bulletin',
       rxId: p.rxId,
       qty: p.qtyDispensed,
@@ -291,6 +331,7 @@ export default function SmsReportsView({
       rxId: p.rxId,
       qty: p.qtyDispensed,
       date: p.dispenseDate,
+      dispensedDate: p.dispenseDate,
     } : null;
 
     if (onOpenSafetyCommunication) {
@@ -331,7 +372,17 @@ export default function SmsReportsView({
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            onClick={handleRefreshAll}
+            className="btn btn-secondary"
+            style={{ fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            title="Refresh expiry and customer safety data"
+            disabled={refreshing}
+          >
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
           <button
             onClick={() => {
               downloadCSV(
@@ -354,7 +405,7 @@ export default function SmsReportsView({
             className="btn btn-secondary"
             style={{ fontSize: 12.5 }}
           >
-            <Download size={14} /> Export Activity Log
+            <Download size={14} /> Export Log
           </button>
           <button
             onClick={() => triggerSafetyComm(null, 'MANUAL')}
@@ -396,7 +447,7 @@ export default function SmsReportsView({
             {nearExpiryPatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Batches &le; 30 Days Left
+            Batches &le; 30 Days Remaining
           </div>
         </div>
 
@@ -422,7 +473,7 @@ export default function SmsReportsView({
             {messagesInitiatedCount}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Pharmacist-Verified Outreach
+            Pharmacist Outreach Logs
           </div>
         </div>
 
@@ -456,132 +507,138 @@ export default function SmsReportsView({
           className={`btn ${activeTab === 'activity' ? 'btn-teal' : 'btn-ghost'}`}
           style={{ fontSize: 13, fontWeight: 700 }}
         >
-          <Clock size={15} /> Recent Communication Activity ({logs.length})
+          <Activity size={15} /> Communication Activity & History ({logs.length})
         </button>
       </div>
 
-      {/* Filter Toolbar */}
-      <div
-        className="card"
-        style={{
-          padding: '14px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Reason filter pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, backgroundColor: 'var(--bg-alt)', padding: 3, borderRadius: 8, border: '1px solid var(--border)' }}>
-            <button
-              onClick={() => setReasonFilter('all')}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 6,
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                backgroundColor: reasonFilter === 'all' ? 'var(--primary)' : 'transparent',
-                color: reasonFilter === 'all' ? '#FFFFFF' : 'var(--text-2)',
-              }}
-            >
-              All ({affectedPatients.length})
-            </button>
-            <button
-              onClick={() => setReasonFilter('NEAR_EXPIRY')}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 6,
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                backgroundColor: reasonFilter === 'NEAR_EXPIRY' ? 'var(--warning)' : 'transparent',
-                color: reasonFilter === 'NEAR_EXPIRY' ? '#FFFFFF' : 'var(--text-2)',
-              }}
-            >
-              Near Expiry ({nearExpiryPatients.length})
-            </button>
-            <button
-              onClick={() => setReasonFilter('RECALL')}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 6,
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                backgroundColor: reasonFilter === 'RECALL' ? 'var(--danger)' : 'transparent',
-                color: reasonFilter === 'RECALL' ? '#FFFFFF' : 'var(--text-2)',
-              }}
-            >
-              Recall ({recallPatients.length})
-            </button>
-          </div>
-
-          {/* Channel selector */}
-          <select
-            value={channelFilter}
-            onChange={e => setChannelFilter(e.target.value as any)}
-            className="input"
-            style={{ width: 'auto', fontSize: 12, padding: '5px 10px' }}
-          >
-            <option value="all">All Channels</option>
-            <option value="WHATSAPP">🟢 WhatsApp Preferred</option>
-            <option value="SMS">📱 SMS Preferred</option>
-          </select>
-        </div>
-
-        {/* Search */}
-        <div className="search-input" style={{ maxWidth: 280, width: '100%' }}>
-          <Search size={14} color="var(--text-3)" />
-          <input
-            placeholder="Search patient, phone, med, batch..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            style={{ fontSize: 12.5 }}
-          />
-        </div>
-      </div>
-
-      {/* Main Tab 1: Customers Requiring Safety Communication */}
+      {/* TAB 1: AFFECTED PATIENTS TABLE */}
       {activeTab === 'affected' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-alt)' }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
-                Customers Requiring Safety Communication
-              </h3>
-              <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
-                Identified automatically from historical dispensing audit records
-              </p>
+          {/* Controls & Filter Toolbar */}
+          <div
+            style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            {/* Filter Pills */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setReasonFilter('all')}
+                className="btn btn-secondary"
+                style={{
+                  fontSize: 12,
+                  padding: '5px 12px',
+                  backgroundColor: reasonFilter === 'all' ? 'var(--primary)' : 'transparent',
+                  color: reasonFilter === 'all' ? '#FFFFFF' : 'var(--text-2)',
+                  borderColor: reasonFilter === 'all' ? 'var(--primary)' : 'var(--border)',
+                  fontWeight: reasonFilter === 'all' ? 700 : 500,
+                }}
+              >
+                All ({affectedPatients.length})
+              </button>
+              <button
+                onClick={() => setReasonFilter('NEAR_EXPIRY')}
+                className="btn btn-secondary"
+                style={{
+                  fontSize: 12,
+                  padding: '5px 12px',
+                  backgroundColor: reasonFilter === 'NEAR_EXPIRY' ? 'var(--warning)' : 'transparent',
+                  color: reasonFilter === 'NEAR_EXPIRY' ? '#FFFFFF' : 'var(--text-2)',
+                  borderColor: reasonFilter === 'NEAR_EXPIRY' ? 'var(--warning)' : 'var(--border)',
+                  fontWeight: reasonFilter === 'NEAR_EXPIRY' ? 700 : 500,
+                }}
+              >
+                ⚠️ Near Expiry ({nearExpiryPatients.length})
+              </button>
+              <button
+                onClick={() => setReasonFilter('RECALL')}
+                className="btn btn-secondary"
+                style={{
+                  fontSize: 12,
+                  padding: '5px 12px',
+                  backgroundColor: reasonFilter === 'RECALL' ? 'var(--danger)' : 'transparent',
+                  color: reasonFilter === 'RECALL' ? '#FFFFFF' : 'var(--text-2)',
+                  borderColor: reasonFilter === 'RECALL' ? 'var(--danger)' : 'var(--border)',
+                  fontWeight: reasonFilter === 'RECALL' ? 700 : 500,
+                }}
+              >
+                🚨 Recalls ({recallPatients.length})
+              </button>
             </div>
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-              Showing {displayedPatients.length} of {affectedPatients.length} records
-            </span>
+
+            {/* Channel Filters & Search */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setChannelFilter('all')}
+                  className={`chip ${channelFilter === 'all' ? 'badge-blue' : ''}`}
+                  style={{ fontSize: 11, cursor: 'pointer', border: '1px solid var(--border)' }}
+                >
+                  All Channels
+                </button>
+                <button
+                  onClick={() => setChannelFilter('WHATSAPP')}
+                  className={`chip ${channelFilter === 'WHATSAPP' ? 'badge-green' : ''}`}
+                  style={{ fontSize: 11, cursor: 'pointer', border: '1px solid var(--border)' }}
+                >
+                  🟢 WhatsApp
+                </button>
+                <button
+                  onClick={() => setChannelFilter('SMS')}
+                  className={`chip ${channelFilter === 'SMS' ? 'badge-blue' : ''}`}
+                  style={{ fontSize: 11, cursor: 'pointer', border: '1px solid var(--border)' }}
+                >
+                  📱 SMS
+                </button>
+              </div>
+
+              <div style={{ position: 'relative', width: 220 }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
+                <input
+                  type="text"
+                  placeholder="Search patients, batches, Rx..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="input"
+                  style={{ fontSize: 12, paddingLeft: 30, height: 32 }}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Desktop Table View */}
           <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr style={{ backgroundColor: 'var(--bg-alt)', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Customer & Mobile</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Preferred Channel</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Medicine & Batch</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Dispensing Info</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Safety Reason</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Status</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Action</th>
+                <tr className="table-header">
+                  {['Customer', 'Preferred Channel', 'Medicine & Batch', 'Dispensed Date', 'Exact Expiry', 'Days Remaining', 'Safety Reason', 'Status', 'Actions'].map(h => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: '11px 16px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: 'var(--text-3)',
+                        letterSpacing: '0.05em',
+                        textTransform: 'uppercase',
+                        textAlign: h === 'Actions' ? 'right' : 'left'
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {displayedPatients.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
                       No patients identified matching the current filters.
                     </td>
                   </tr>
@@ -655,18 +712,38 @@ export default function SmsReportsView({
                           {p.medicine}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 1 }}>
-                          Batch: <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{p.batch}</code> · Exp: <b>{p.expiry}</b>
+                          Batch: <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{p.batch}</code>
                         </div>
                       </td>
 
-                      {/* Dispensing Info */}
+                      {/* Dispensed Date */}
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>
-                          {p.qtyDispensed} units
+                        <div style={{ fontWeight: 700, color: 'var(--text)' }}>
+                          {p.dispenseDate}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
-                          {p.dispenseDate} · <span style={{ fontFamily: 'monospace' }}>{p.rxId}</span>
+                          {p.qtyDispensed} units · <span style={{ fontFamily: 'monospace' }}>{p.rxId}</span>
                         </div>
+                      </td>
+
+                      {/* Exact Expiry */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 700, color: p.reason === 'RECALL' ? 'var(--danger)' : 'var(--warning)' }}>
+                          {p.reason === 'RECALL' ? 'RECALLED' : p.expiry}
+                        </div>
+                      </td>
+
+                      {/* Days Remaining */}
+                      <td style={{ padding: '12px 16px' }}>
+                        {p.reason === 'RECALL' ? (
+                          <span className="chip badge-red" style={{ fontSize: 10.5 }}>Immediate Recall</span>
+                        ) : p.daysRemaining !== null && p.daysRemaining <= 0 ? (
+                          <span className="chip badge-red" style={{ fontSize: 10.5 }}>Expired</span>
+                        ) : (
+                          <span className="chip badge-amber" style={{ fontSize: 10.5, fontWeight: 700 }}>
+                            {p.daysRemaining} days remaining
+                          </span>
+                        )}
                       </td>
 
                       {/* Safety Reason */}
@@ -752,201 +829,90 @@ export default function SmsReportsView({
             </table>
           </div>
 
-          {/* Mobile Cards View */}
-          <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 12 }}>
-            {displayedPatients.map(p => (
-              <div key={p.id} className="mobile-entity-card" style={{ padding: 14, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
-                      {p.customerName}
-                    </h4>
-                    <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
-                      {p.phone} · {p.preferredLang}
-                    </p>
-                  </div>
-                  <span
-                    className="chip"
-                    style={{
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      backgroundColor: p.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                      color: p.communicationPreference === 'WHATSAPP' ? '#16A34A' : '#2563EB',
-                    }}
-                  >
-                    {p.communicationPreference === 'WHATSAPP' ? '🟢 WhatsApp' : '📱 SMS'}
-                  </span>
-                </div>
-
-                <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'var(--bg-alt)', fontSize: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-3)' }}>Medicine:</span>
-                    <b style={{ color: 'var(--text)' }}>{p.medicine}</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-3)' }}>Batch & Expiry:</span>
-                    <span><code>{p.batch}</code> ({p.expiry})</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-3)' }}>Dispensed:</span>
-                    <span>{p.qtyDispensed} units ({p.dispenseDate})</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-3)' }}>Reason:</span>
-                    <span className={`chip ${p.reason === 'RECALL' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10 }}>
-                      {p.reason === 'RECALL' ? 'Recall' : 'Near Expiry'}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => openCustomerDetails({
-                      recipientName: p.customerName,
-                      recipientPhone: p.phone,
-                      language: p.preferredLang,
-                      notificationType: p.reason,
-                      medicine: p.medicine,
-                      batchId: p.batch,
-                      status: p.status,
-                      createdAt: new Date().toISOString()
-                    })}
-                    className="btn btn-secondary"
-                    style={{ fontSize: 12, padding: '6px 12px' }}
-                  >
-                    Details
-                  </button>
-                  <button
-                    onClick={() => triggerSafetyComm(p, p.reason)}
-                    className="btn btn-teal"
-                    style={{ fontSize: 12, padding: '6px 14px', fontWeight: 700 }}
-                  >
-                    <Send size={13} /> Send Message
-                  </button>
-                </div>
-              </div>
-            ))}
+          {/* Table Footer Summary */}
+          <div
+            style={{
+              padding: '12px 20px',
+              borderTop: '1px solid var(--border)',
+              backgroundColor: 'var(--bg-subtle)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 12,
+              color: 'var(--text-3)',
+            }}
+          >
+            <span>
+              Showing {displayedPatients.length} of {affectedPatients.length} records requiring communication
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              Source: Live Firestore Prescription Dispensing Logs
+            </span>
           </div>
         </div>
       )}
 
-      {/* Main Tab 2: Recent Communication Activity */}
+      {/* TAB 2: COMMUNICATION HISTORY & LOGS */}
       {activeTab === 'activity' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-alt)' }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
-                Recent Safety Communication Activity
-              </h3>
-              <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
-                Truthful audit log of pharmacist outreach via WhatsApp and device SMS composer
-              </p>
-            </div>
-            <button
-              onClick={fetchActivityLogs}
-              className="btn btn-ghost"
-              style={{ fontSize: 11.5, padding: '4px 8px' }}
-            >
-              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh Logs
-            </button>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+              Pharmacist Safety Outreach Activity Log ({logs.length})
+            </h3>
+            <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+              Truthful action logs recorded per dispatch
+            </span>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr style={{ backgroundColor: 'var(--bg-alt)', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Time</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Customer</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Medicine & Batch</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Reason</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Channel</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Pharmacist</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left' }}>Status</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Action</th>
+                <tr className="table-header">
+                  {['Timestamp', 'Patient', 'Channel', 'Reason', 'Medicine / Batch', 'Action Status', 'Pharmacist'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {displayedActivityLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
-                      No safety communication activity recorded yet. Select an affected customer above to launch WhatsApp or SMS communication.
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-3)', fontSize: 12.5 }}>
+                      No safety communication activity recorded yet.
                     </td>
                   </tr>
                 ) : (
-                  displayedActivityLogs.map((l, idx) => (
-                    <tr key={l.id || idx} style={{ borderBottom: '1px solid var(--border)' }} className="table-row">
-                      <td style={{ padding: '12px 16px', color: 'var(--text-2)', fontSize: 12 }}>
-                        {new Date(l.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  displayedActivityLogs.map((log, idx) => (
+                    <tr key={log.id || idx} style={{ borderBottom: '1px solid var(--border)' }} className="table-row">
+                      <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-3)' }}>
+                        {new Date(log.createdAt || Date.now()).toLocaleString()}
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{l.recipientName}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{l.recipientPhone}</div>
+                      <td style={{ padding: '10px 14px', fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>
+                        {log.recipientName}
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}>{log.recipientPhone}</div>
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{l.medicine || 'Amoxicillin 500mg'}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Batch: <code>{l.batchId || 'DEMO-EXP-001'}</code></div>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span className={`chip ${l.notificationType === 'RECALL' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10 }}>
-                          {l.notificationType?.replace(/_/g, ' ')}
+                      <td style={{ padding: '10px 14px' }}>
+                        <span className={`chip ${log.provider?.toLowerCase().includes('whatsapp') ? 'badge-green' : 'badge-blue'}`} style={{ fontSize: 10.5 }}>
+                          {log.provider?.toLowerCase().includes('whatsapp') ? '🟢 WhatsApp' : '📱 SMS'}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span
-                          className="chip"
-                          style={{
-                            fontSize: 10.5,
-                            backgroundColor: l.status === 'WHATSAPP_OPENED' || l.provider === 'WhatsApp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                            color: l.status === 'WHATSAPP_OPENED' || l.provider === 'WhatsApp' ? '#16A34A' : '#2563EB',
-                            fontWeight: 700
-                          }}
-                        >
-                          {l.status === 'WHATSAPP_OPENED' || l.provider === 'WhatsApp' ? '🟢 WhatsApp' : '📱 SMS'}
+                      <td style={{ padding: '10px 14px', fontSize: 12 }}>
+                        <span className={`chip ${log.notificationType === 'RECALL' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: 10.5 }}>
+                          {log.notificationType === 'RECALL' ? 'Recall' : 'Near Expiry'}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-2)' }}>
-                        {l.pharmacist || currentUser?.name || 'Demo Pharmacist'}
+                      <td style={{ padding: '10px 14px', fontSize: 12 }}>
+                        <div>{log.medicine || 'Prescribed Med'}</div>
+                        {log.batchId && <div style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--primary)' }}>{log.batchId}</div>}
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span
-                          className={`chip ${
-                            l.status === 'WHATSAPP_OPENED'
-                              ? 'badge-green'
-                              : l.status === 'SMS_COMPOSER_OPENED'
-                              ? 'badge-blue'
-                              : l.status === 'CANCELLED'
-                              ? 'badge-slate'
-                              : 'badge-amber'
-                          }`}
-                          style={{ fontSize: 10.5 }}
-                        >
-                          {l.status === 'WHATSAPP_OPENED' ? (
-                            <>
-                              <CheckCircle2 size={11} /> WhatsApp Opened
-                            </>
-                          ) : l.status === 'SMS_COMPOSER_OPENED' ? (
-                            <>
-                              <CheckCircle2 size={11} /> SMS Composer
-                            </>
-                          ) : l.status === 'CANCELLED' ? (
-                            <>
-                              <XCircle size={11} /> Cancelled
-                            </>
-                          ) : (
-                            <>
-                              <Clock size={11} /> Initiated
-                            </>
-                          )}
+                      <td style={{ padding: '10px 14px' }}>
+                        <span className={`chip ${log.status === 'WHATSAPP_OPENED' ? 'badge-green' : log.status === 'SMS_COMPOSER_OPENED' ? 'badge-blue' : 'badge-teal'}`} style={{ fontSize: 10.5 }}>
+                          <CheckCircle2 size={11} /> {log.status?.replace(/_/g, ' ') || 'Initiated'}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <button
-                          onClick={() => openCustomerDetails(l)}
-                          className="btn btn-ghost"
-                          style={{ fontSize: 11.5, padding: '4px 8px' }}
-                        >
-                          Details
-                        </button>
+                      <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-3)' }}>
+                        {log.pharmacist || currentUser?.name || 'Pharmacist'}
                       </td>
                     </tr>
                   ))
@@ -957,19 +923,14 @@ export default function SmsReportsView({
         </div>
       )}
 
-      {/* Customer SMS & Traceability Modal */}
+      {/* Customer Traceability Details Modal */}
       <CustomerSmsDetailsModal
         isOpen={isDetailsModalOpen}
         onClose={() => setIsDetailsModalOpen(false)}
         smsLog={selectedCustomerForModal}
-        customer={selectedCustomerForModal ? {
-          name: selectedCustomerForModal.recipientName || selectedCustomerForModal.customerName,
-          phone: selectedCustomerForModal.recipientPhone || selectedCustomerForModal.phone,
-          preferredLang: selectedCustomerForModal.language || selectedCustomerForModal.preferredLang || 'English',
-          communicationPreference: selectedCustomerForModal.communicationPreference || 'SMS'
-        } : null}
-        onRefreshSms={fetchActivityLogs}
+        customer={selectedCustomerForModal}
         showToast={showToast}
+        onRefreshSms={fetchActivityLogs}
       />
     </div>
   );
