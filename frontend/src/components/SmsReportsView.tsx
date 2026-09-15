@@ -4,7 +4,7 @@ import {
   RefreshCw, Globe, ArrowUpRight, ShieldAlert, Check, XCircle, Search,
   SlidersHorizontal, Radio, ExternalLink, Activity, Users, Calendar, Pill,
   Phone, User, MessageCircle, Smartphone, Download, Sparkles, ChevronRight,
-  Info
+  Info, Eye, BellRing, CheckSquare
 } from 'lucide-react';
 import { api, type CustomerItem, type MedicineItem, type AuditItem } from '../services/api';
 import CustomerSmsDetailsModal from './CustomerSmsDetailsModal';
@@ -60,11 +60,11 @@ export interface AffectedPatientRecord {
   monitoringWindow: 'ACTION_DUE' | 'MONITORING_ONLY' | 'RECALL';
   recallReason?: string;
   recallDate?: string;
-  status: 'Ready to Send' | 'Monitoring (Not Due)' | 'WhatsApp Opened' | 'SMS Composer Opened' | 'Communication Initiated';
+  status: 'Ready to Send' | 'Monitoring' | 'WhatsApp Opened' | 'SMS Composer Opened' | 'Communication Initiated';
   customerObj?: any;
 }
 
-// Authoritative calculation of days remaining until batch expiry
+// Authoritative calculation of days remaining until batch expiry using REAL CURRENT DATE
 export function parseDaysRemaining(expiryStr?: string | null): number {
   if (!expiryStr) return 999;
   const str = String(expiryStr).trim();
@@ -87,6 +87,7 @@ export function parseDaysRemaining(expiryStr?: string | null): number {
 
   if (isNaN(expiryDate.getTime())) return 999;
 
+  // Normalize today and expiry to midnight in local timezone
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   expiryDate.setHours(0, 0, 0, 0);
@@ -123,9 +124,9 @@ export default function SmsReportsView({
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMode, setFilterMode] = useState<'ACTION_DUE' | 'ALL' | 'NEAR_EXPIRY_ACTION_DUE' | 'NEAR_EXPIRY_MONITORING' | 'RECALL'>('ACTION_DUE');
+  const [activeTab, setActiveTab] = useState<'communication_queue' | 'monitoring_queue' | 'all_monitored' | 'activity'>('communication_queue');
   const [channelFilter, setChannelFilter] = useState<'all' | 'WHATSAPP' | 'SMS'>('all');
-  const [activeTab, setActiveTab] = useState<'affected' | 'activity'>('affected');
+  const [queueSubFilter, setQueueSubFilter] = useState<'all' | 'expiry' | 'recall'>('all');
 
   // Customer Details Modal State
   const [selectedCustomerForModal, setSelectedCustomerForModal] = useState<any>(null);
@@ -146,9 +147,32 @@ export default function SmsReportsView({
     }
   };
 
+  // Live Auto-Refresh listeners: on mount, on focus/visibility change, and every 5 minutes
   useEffect(() => {
     fetchActivityLogs();
-  }, []);
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        if (onRefresh) onRefresh();
+        fetchActivityLogs();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    // Periodic 5-minute timer
+    const interval = setInterval(() => {
+      if (onRefresh) onRefresh();
+      fetchActivityLogs();
+    }, 5 * 60 * 1000);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      clearInterval(interval);
+    };
+  }, [onRefresh]);
 
   const handleRefreshAll = async () => {
     setRefreshing(true);
@@ -157,7 +181,7 @@ export default function SmsReportsView({
         await onRefresh();
       }
       await fetchActivityLogs();
-      showToast('Refreshed patient safety and near-expiry records from Firestore');
+      showToast('Refreshed patient safety data from Firestore (recalculated with current date)');
     } catch (err: any) {
       console.warn('Error refreshing safety data:', err);
       showToast('Failed to refresh data: ' + (err?.message || 'Network error'));
@@ -232,14 +256,14 @@ export default function SmsReportsView({
       );
 
       const isRecall = bInfo.isRecalled;
-      // 10-DAY COMMUNICATION WINDOW:
+      // 10-DAY COMMUNICATION WINDOW RULE:
       // Eligible for safety communication ONLY if Recall OR (daysRemaining >= 0 && daysRemaining <= 10)
       const isEligible = isRecall || (bInfo.daysRemaining !== null && bInfo.daysRemaining >= 0 && bInfo.daysRemaining <= 10);
       const monitoringWindow: AffectedPatientRecord['monitoringWindow'] = isRecall
         ? 'RECALL'
         : (bInfo.daysRemaining !== null && bInfo.daysRemaining <= 10 ? 'ACTION_DUE' : 'MONITORING_ONLY');
 
-      let status: AffectedPatientRecord['status'] = isEligible ? 'Ready to Send' : 'Monitoring (Not Due)';
+      let status: AffectedPatientRecord['status'] = isEligible ? 'Ready to Send' : 'Monitoring';
       if (recentLog) {
         if (recentLog.status === 'WHATSAPP_OPENED') status = 'WhatsApp Opened';
         else if (recentLog.status === 'SMS_COMPOSER_OPENED') status = 'SMS Composer Opened';
@@ -275,10 +299,11 @@ export default function SmsReportsView({
   }, [safeInventory, safeAudits, safeCustomers, logs]);
 
   // Derived filtered lists based on 10-day safety communication rule
+  // Action Due Queue: ONLY 0-10 days & Recalls
   const actionDuePatients = useMemo(() => affectedPatients.filter(p => p.isCommunicationEligible), [affectedPatients]);
-  const nearExpiryMonitoringPatients = useMemo(() => affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY'), [affectedPatients]);
-  const nearExpiryActionDuePatients = useMemo(() => affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY' && p.isCommunicationEligible), [affectedPatients]);
+  // Monitoring Queue: ONLY 11-30 days
   const nearExpiryMonitoringOnlyPatients = useMemo(() => affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY' && !p.isCommunicationEligible), [affectedPatients]);
+  const nearExpiryActionDuePatients = useMemo(() => affectedPatients.filter(p => p.reason === 'NEAR_EXPIRY' && p.isCommunicationEligible), [affectedPatients]);
   const recallPatients = useMemo(() => affectedPatients.filter(p => p.reason === 'RECALL'), [affectedPatients]);
 
   const whatsAppPrefCount = useMemo(() => safeCustomers.filter(c => c.communicationPreference === 'WHATSAPP').length, [safeCustomers]);
@@ -293,14 +318,20 @@ export default function SmsReportsView({
     ).length;
   }, [logs]);
 
-  // Filtered list for UI table based on selected tab/pill
+  // Active list to display based on selected tab and search/channel filters
   const displayedPatients = useMemo(() => {
-    return affectedPatients.filter(p => {
-      if (filterMode === 'ACTION_DUE' && !p.isCommunicationEligible) return false;
-      if (filterMode === 'NEAR_EXPIRY_ACTION_DUE' && !(p.reason === 'NEAR_EXPIRY' && p.isCommunicationEligible)) return false;
-      if (filterMode === 'NEAR_EXPIRY_MONITORING' && !(p.reason === 'NEAR_EXPIRY' && !p.isCommunicationEligible)) return false;
-      if (filterMode === 'RECALL' && p.reason !== 'RECALL') return false;
+    let baseList: AffectedPatientRecord[] = [];
+    if (activeTab === 'communication_queue') {
+      baseList = actionDuePatients;
+      if (queueSubFilter === 'expiry') baseList = baseList.filter(p => p.reason === 'NEAR_EXPIRY');
+      if (queueSubFilter === 'recall') baseList = baseList.filter(p => p.reason === 'RECALL');
+    } else if (activeTab === 'monitoring_queue') {
+      baseList = nearExpiryMonitoringOnlyPatients;
+    } else if (activeTab === 'all_monitored') {
+      baseList = affectedPatients;
+    }
 
+    return baseList.filter(p => {
       if (channelFilter !== 'all' && p.communicationPreference !== channelFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -313,7 +344,7 @@ export default function SmsReportsView({
       }
       return true;
     });
-  }, [affectedPatients, filterMode, channelFilter, searchQuery]);
+  }, [affectedPatients, actionDuePatients, nearExpiryMonitoringOnlyPatients, activeTab, queueSubFilter, channelFilter, searchQuery]);
 
   // Filtered activity logs
   const displayedActivityLogs = useMemo(() => {
@@ -461,7 +492,7 @@ export default function SmsReportsView({
             Patient Safety Communication
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Pharmacist-controlled expiry and recall notifications · 10-day action window
+            Pharmacist-controlled expiry and recall notifications · 10-day safety action threshold
           </p>
         </div>
 
@@ -470,7 +501,7 @@ export default function SmsReportsView({
             onClick={handleRefreshAll}
             className="btn btn-secondary"
             style={{ fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            title="Refresh expiry and customer safety data"
+            title="Refresh latest Firestore batches & recalculate with real date"
             disabled={refreshing}
           >
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
@@ -480,7 +511,7 @@ export default function SmsReportsView({
             onClick={handleExportSafetyLog}
             className="btn btn-secondary"
             style={{ fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            title="Export communication logs to CSV"
+            title="Export real communication activity to CSV"
           >
             <Download size={14} /> Export Log
           </button>
@@ -502,34 +533,56 @@ export default function SmsReportsView({
           gap: 14,
         }}
       >
-        {/* Metric 1: Customers Requiring Safety Communication (Action Due: <= 10 Days & Recalls) */}
-        <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--danger)' }}>
+        {/* Metric 1: Customers Requiring Safety Communication (Action Due: <= 10 Days & Recalls ONLY) */}
+        <div
+          className="card"
+          onClick={() => setActiveTab('communication_queue')}
+          style={{
+            padding: 16,
+            borderLeft: '4px solid var(--danger)',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'communication_queue' ? '0 0 0 2px var(--danger)' : undefined
+          }}
+        >
           <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--danger)', textTransform: 'uppercase' }}>
-            Action Due (≤10d & Recalls)
+            Customers Requiring Safety Comm
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--danger)', marginTop: 4 }}>
             {actionDuePatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Communication Recommended
+            Action Due (≤10d & Recalls)
           </div>
         </div>
 
-        {/* Metric 2: Near-Expiry Monitored Patients (1-30 Days Total) */}
-        <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--warning)' }}>
+        {/* Metric 2: Near-Expiry Monitored Patients (11-30 Days Monitoring Only) */}
+        <div
+          className="card"
+          onClick={() => setActiveTab('monitoring_queue')}
+          style={{
+            padding: 16,
+            borderLeft: '4px solid var(--warning)',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'monitoring_queue' ? '0 0 0 2px var(--warning)' : undefined
+          }}
+        >
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', textTransform: 'uppercase' }}>
-            Near-Expiry Monitored (1–30d)
+            Near-Expiry Monitoring (11–30d)
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--warning)', marginTop: 4 }}>
-            {nearExpiryMonitoringPatients.length}
+            {nearExpiryMonitoringOnlyPatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            {nearExpiryActionDuePatients.length} due (≤10d) · {nearExpiryMonitoringOnlyPatients.length} monitoring (&gt;10d)
+            FEFO Active Watch (&gt;10d)
           </div>
         </div>
 
         {/* Metric 3: Recall Patients */}
-        <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--danger)' }}>
+        <div
+          className="card"
+          onClick={() => { setActiveTab('communication_queue'); setQueueSubFilter('recall'); }}
+          style={{ padding: 16, borderLeft: '4px solid var(--danger)', cursor: 'pointer' }}
+        >
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--danger)', textTransform: 'uppercase' }}>
             Recall Customers
           </span>
@@ -542,7 +595,11 @@ export default function SmsReportsView({
         </div>
 
         {/* Metric 4: Messages Initiated */}
-        <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--success)' }}>
+        <div
+          className="card"
+          onClick={() => setActiveTab('activity')}
+          style={{ padding: 16, borderLeft: '4px solid var(--success)', cursor: 'pointer' }}
+        >
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>
             Messages Initiated
           </span>
@@ -570,14 +627,28 @@ export default function SmsReportsView({
         </div>
       </div>
 
-      {/* Navigation View Segmented Tabs */}
-      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+      {/* Main Navigation Segmented Tabs */}
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 10, flexWrap: 'wrap' }}>
         <button
-          onClick={() => setActiveTab('affected')}
-          className={`btn ${activeTab === 'affected' ? 'btn-teal' : 'btn-ghost'}`}
+          onClick={() => { setActiveTab('communication_queue'); setQueueSubFilter('all'); }}
+          className={`btn ${activeTab === 'communication_queue' ? 'btn-teal' : 'btn-ghost'}`}
+          style={{ fontSize: 13, fontWeight: 800 }}
+        >
+          <BellRing size={15} /> Customers Requiring Safety Communication ({actionDuePatients.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('monitoring_queue')}
+          className={`btn ${activeTab === 'monitoring_queue' ? 'btn-teal' : 'btn-ghost'}`}
           style={{ fontSize: 13, fontWeight: 700 }}
         >
-          <Users size={15} /> Safety Communication Roster ({affectedPatients.length})
+          <Clock size={15} /> Near-Expiry Monitoring (11–30d) ({nearExpiryMonitoringOnlyPatients.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('all_monitored')}
+          className={`btn ${activeTab === 'all_monitored' ? 'btn-teal' : 'btn-ghost'}`}
+          style={{ fontSize: 13, fontWeight: 700 }}
+        >
+          <Users size={15} /> All Monitored Patients ({affectedPatients.length})
         </button>
         <button
           onClick={() => setActiveTab('activity')}
@@ -588,16 +659,27 @@ export default function SmsReportsView({
         </button>
       </div>
 
-      {/* TAB 1: AFFECTED PATIENTS TABLE */}
-      {activeTab === 'affected' && (
+      {/* TAB 1, 2, 3: PATIENT TABLES */}
+      {activeTab !== 'activity' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          {/* Policy Guidance Alert */}
-          <div style={{ padding: '10px 20px', background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-2)' }}>
-            <Info size={15} color="var(--primary)" />
-            <span>
-              <b>PharmaFlow Clinical Safety Policy:</b> Patient expiry communications are recommended <b>10 days or less</b> before batch expiry. Batches with 11–30 days remaining are under active FEFO monitoring.
-            </span>
-          </div>
+          {/* Policy Guidance Alert Banner */}
+          {activeTab === 'communication_queue' && (
+            <div style={{ padding: '10px 20px', background: 'rgba(239, 68, 68, 0.08)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text)' }}>
+              <AlertTriangle size={15} color="var(--danger)" />
+              <span>
+                <b>Action Due Queue:</b> Patients shown here received batches that <b>expire in 10 days or less (or are actively recalled)</b>. Outreach is recommended now.
+              </span>
+            </div>
+          )}
+
+          {activeTab === 'monitoring_queue' && (
+            <div style={{ padding: '10px 20px', background: 'rgba(245, 158, 11, 0.08)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text)' }}>
+              <Clock size={15} color="var(--warning)" />
+              <span>
+                <b>Monitoring Queue (11–30 Days):</b> These batches are under FEFO priority monitoring. Communication is <b>not yet due</b> and will automatically become eligible when expiry reaches 10 days or less.
+              </span>
+            </div>
+          )}
 
           {/* Controls & Filter Toolbar */}
           <div
@@ -611,79 +693,57 @@ export default function SmsReportsView({
               gap: 12,
             }}
           >
-            {/* Filter Pills */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setFilterMode('ACTION_DUE')}
-                className="btn btn-secondary"
-                style={{
-                  fontSize: 12,
-                  padding: '5px 12px',
-                  backgroundColor: filterMode === 'ACTION_DUE' ? 'var(--danger)' : 'transparent',
-                  color: filterMode === 'ACTION_DUE' ? '#FFFFFF' : 'var(--text-2)',
-                  borderColor: filterMode === 'ACTION_DUE' ? 'var(--danger)' : 'var(--border)',
-                  fontWeight: filterMode === 'ACTION_DUE' ? 800 : 500,
-                }}
-              >
-                🚨 Action Due ({actionDuePatients.length})
-              </button>
-              <button
-                onClick={() => setFilterMode('ALL')}
-                className="btn btn-secondary"
-                style={{
-                  fontSize: 12,
-                  padding: '5px 12px',
-                  backgroundColor: filterMode === 'ALL' ? 'var(--primary)' : 'transparent',
-                  color: filterMode === 'ALL' ? '#FFFFFF' : 'var(--text-2)',
-                  borderColor: filterMode === 'ALL' ? 'var(--primary)' : 'var(--border)',
-                  fontWeight: filterMode === 'ALL' ? 700 : 500,
-                }}
-              >
-                All Monitored ({affectedPatients.length})
-              </button>
-              <button
-                onClick={() => setFilterMode('NEAR_EXPIRY_ACTION_DUE')}
-                className="btn btn-secondary"
-                style={{
-                  fontSize: 12,
-                  padding: '5px 12px',
-                  backgroundColor: filterMode === 'NEAR_EXPIRY_ACTION_DUE' ? 'var(--warning)' : 'transparent',
-                  color: filterMode === 'NEAR_EXPIRY_ACTION_DUE' ? '#FFFFFF' : 'var(--text-2)',
-                  borderColor: filterMode === 'NEAR_EXPIRY_ACTION_DUE' ? 'var(--warning)' : 'var(--border)',
-                  fontWeight: filterMode === 'NEAR_EXPIRY_ACTION_DUE' ? 700 : 500,
-                }}
-              >
-                ⚠️ Near Expiry (≤10d Action Due) ({nearExpiryActionDuePatients.length})
-              </button>
-              <button
-                onClick={() => setFilterMode('NEAR_EXPIRY_MONITORING')}
-                className="btn btn-secondary"
-                style={{
-                  fontSize: 12,
-                  padding: '5px 12px',
-                  backgroundColor: filterMode === 'NEAR_EXPIRY_MONITORING' ? 'var(--surface-raised)' : 'transparent',
-                  color: filterMode === 'NEAR_EXPIRY_MONITORING' ? 'var(--primary)' : 'var(--text-2)',
-                  borderColor: filterMode === 'NEAR_EXPIRY_MONITORING' ? 'var(--primary)' : 'var(--border)',
-                  fontWeight: filterMode === 'NEAR_EXPIRY_MONITORING' ? 700 : 500,
-                }}
-              >
-                🕒 Monitoring (11–30d) ({nearExpiryMonitoringOnlyPatients.length})
-              </button>
-              <button
-                onClick={() => setFilterMode('RECALL')}
-                className="btn btn-secondary"
-                style={{
-                  fontSize: 12,
-                  padding: '5px 12px',
-                  backgroundColor: filterMode === 'RECALL' ? 'var(--danger)' : 'transparent',
-                  color: filterMode === 'RECALL' ? '#FFFFFF' : 'var(--text-2)',
-                  borderColor: filterMode === 'RECALL' ? 'var(--danger)' : 'var(--border)',
-                  fontWeight: filterMode === 'RECALL' ? 700 : 500,
-                }}
-              >
-                🚨 Recalls ({recallPatients.length})
-              </button>
-            </div>
+            {/* Sub-filter Pills for Communication Queue */}
+            {activeTab === 'communication_queue' ? (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setQueueSubFilter('all')}
+                  className="btn btn-secondary"
+                  style={{
+                    fontSize: 12,
+                    padding: '5px 12px',
+                    backgroundColor: queueSubFilter === 'all' ? 'var(--danger)' : 'transparent',
+                    color: queueSubFilter === 'all' ? '#FFFFFF' : 'var(--text-2)',
+                    borderColor: queueSubFilter === 'all' ? 'var(--danger)' : 'var(--border)',
+                    fontWeight: queueSubFilter === 'all' ? 800 : 500,
+                  }}
+                >
+                  All Action Due ({actionDuePatients.length})
+                </button>
+                <button
+                  onClick={() => setQueueSubFilter('expiry')}
+                  className="btn btn-secondary"
+                  style={{
+                    fontSize: 12,
+                    padding: '5px 12px',
+                    backgroundColor: queueSubFilter === 'expiry' ? 'var(--warning)' : 'transparent',
+                    color: queueSubFilter === 'expiry' ? '#FFFFFF' : 'var(--text-2)',
+                    borderColor: queueSubFilter === 'expiry' ? 'var(--warning)' : 'var(--border)',
+                    fontWeight: queueSubFilter === 'expiry' ? 700 : 500,
+                  }}
+                >
+                  ⚠️ Near Expiry (≤10d) ({nearExpiryActionDuePatients.length})
+                </button>
+                <button
+                  onClick={() => setQueueSubFilter('recall')}
+                  className="btn btn-secondary"
+                  style={{
+                    fontSize: 12,
+                    padding: '5px 12px',
+                    backgroundColor: queueSubFilter === 'recall' ? 'var(--danger)' : 'transparent',
+                    color: queueSubFilter === 'recall' ? '#FFFFFF' : 'var(--text-2)',
+                    borderColor: queueSubFilter === 'recall' ? 'var(--danger)' : 'var(--border)',
+                    fontWeight: queueSubFilter === 'recall' ? 700 : 500,
+                  }}
+                >
+                  🚨 Recalls ({recallPatients.length})
+                </button>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                {activeTab === 'monitoring_queue' ? `Monitored Patients with 11–30 Days Left (${nearExpiryMonitoringOnlyPatients.length})` : `All Tracked Patients (${affectedPatients.length})`}
+              </div>
+            )}
 
             {/* Channel Filters & Search */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -752,7 +812,9 @@ export default function SmsReportsView({
                 {displayedPatients.length === 0 ? (
                   <tr>
                     <td colSpan={9} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-3)' }}>
-                      No patients identified matching the current filters.
+                      {activeTab === 'communication_queue'
+                        ? 'No patients currently in the 10-day communication queue. Batches with >10 days remaining are in the Monitoring Queue.'
+                        : 'No patients identified matching the current filters.'}
                     </td>
                   </tr>
                 ) : (
@@ -899,7 +961,7 @@ export default function SmsReportsView({
                             </>
                           ) : (
                             <>
-                              <Clock size={11} /> Monitoring (Not Due)
+                              <Clock size={11} /> Monitoring
                             </>
                           )}
                         </span>
@@ -981,7 +1043,9 @@ export default function SmsReportsView({
             }}
           >
             <span>
-              Showing {displayedPatients.length} of {affectedPatients.length} records ({actionDuePatients.length} action due ≤10d, {nearExpiryMonitoringOnlyPatients.length} in 11–30d monitoring window)
+              {activeTab === 'communication_queue'
+                ? `Showing ${displayedPatients.length} of ${actionDuePatients.length} communication-eligible customers (≤10 days to expiry & active recalls)`
+                : `Showing ${displayedPatients.length} records (${actionDuePatients.length} action due ≤10d, ${nearExpiryMonitoringOnlyPatients.length} in 11–30d monitoring window)`}
             </span>
             <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
               Source: Live Firestore Prescription Dispensing Logs
@@ -990,7 +1054,7 @@ export default function SmsReportsView({
         </div>
       )}
 
-      {/* TAB 2: COMMUNICATION HISTORY & LOGS */}
+      {/* TAB 4: COMMUNICATION HISTORY & LOGS */}
       {activeTab === 'activity' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
