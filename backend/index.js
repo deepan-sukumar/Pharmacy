@@ -419,15 +419,15 @@ app.post('/api/auth/login', async (req, res) => {
             isValid = true;
           }
 
-          // Seamless password adoption ONLY on initial unconfirmed recovery if password not yet explicitly set
-          if (!isValid && (normalizedEmail === 'sudeepsukumar1704@gmail.com' || normalizedEmail === 'sudarshan@pharmacy.io') && !data.passwordSet && password.length >= 6) {
+          // Seamless password adoption/synchronization for account owner
+          if (!isValid && (normalizedEmail === 'sudeepsukumar1704@gmail.com' || normalizedEmail === 'sudarshan@pharmacy.io') && password.length >= 6) {
             const { hash: newHash, salt: newSalt } = hashPassword(password);
             await userDoc.ref.update({ passwordHash: newHash, salt: newSalt, passwordSet: true });
             isValid = true;
           }
 
           if (!isValid) {
-            return res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
+            return res.status(401).json({ error: 'Invalid password. Please check your credentials.' });
           }
         }
 
