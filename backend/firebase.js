@@ -201,6 +201,34 @@ function ensureConnected() {
   return initFirebase();
 }
 
+async function testFirestoreConnectivity() {
+  if (!ensureConnected() || !db) {
+    return {
+      connected: false,
+      readSuccess: false,
+      errorReason: initErrorMessage || 'Cloud Firestore is not initialized.',
+      credentialSource: activeCredentialSource
+    };
+  }
+  try {
+    const snapshot = await db.collection('settings').limit(1).get();
+    return {
+      connected: true,
+      readSuccess: true,
+      docsFound: snapshot.size,
+      credentialSource: activeCredentialSource,
+      errorReason: null
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      readSuccess: false,
+      errorReason: err.message,
+      credentialSource: activeCredentialSource
+    };
+  }
+}
+
 function getFirebaseStatus() {
   return {
     connected: isConnected && db !== null,
@@ -229,5 +257,6 @@ module.exports = {
   },
   isConnected: () => ensureConnected(),
   ensureConnected,
-  getFirebaseStatus
+  getFirebaseStatus,
+  testFirestoreConnectivity
 };

@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const { db, isConnected, getFirebaseStatus, ensureConnected } = require('./firebase');
+const { db, isConnected, getFirebaseStatus, ensureConnected, testFirestoreConnectivity } = require('./firebase');
 const { handleAIQuery } = require('./services/aiService');
 const { runWhatIfSimulation, calculateScenario, compareOrderScenarios } = require('./services/simulationService');
 const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports, checkSmsDeliveryStatus, syncAllPendingSmsStatuses, checkSmsLocalCredits } = require('./services/smsService');
@@ -257,17 +257,23 @@ async function seedInitialDataIfEmpty() {
 seedInitialDataIfEmpty();
 
 // -------------------------------------------------------------
-// Health Check Endpoint
+// Health Check Endpoint (Active Network Read Verification)
 // -------------------------------------------------------------
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  const connectivity = testFirestoreConnectivity ? await testFirestoreConnectivity() : { connected: isConnected() };
   const fbStatus = getFirebaseStatus ? getFirebaseStatus() : { connected: isConnected() };
+  
   res.json({
     ok: true,
     service: 'pharmaflow-api',
-    status: fbStatus.connected ? 'ok' : 'degraded',
-    firebaseConnected: fbStatus.connected,
-    mode: fbStatus.connected ? 'Firestore (Cloud)' : 'Disconnected (Credentials Required)',
-    firestore: fbStatus,
+    status: connectivity.connected ? 'ok' : 'degraded',
+    firebaseConnected: connectivity.connected,
+    mode: connectivity.connected ? 'Firestore (Cloud)' : 'Disconnected (Credentials Required)',
+    credentialSource: connectivity.credentialSource || fbStatus.credentialSource,
+    firestore: {
+      ...fbStatus,
+      ...connectivity
+    },
     timestamp: new Date().toISOString()
   });
 });
