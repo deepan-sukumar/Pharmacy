@@ -15,14 +15,18 @@ import {
   Search,
   Sparkles,
   RefreshCw,
+  Info,
+  ScanLine,
 } from 'lucide-react';
 import {
   startCameraStream,
   stopCameraStream,
   toggleTorch,
-  scanFrame,
+  startContinuousScanner,
+  normalizeBarcode,
   ScannerStatus,
   ScannedMedicineData,
+  ContinuousScannerSession,
 } from '../services/barcodeScannerEngine';
 import { api } from '../services/api';
 
@@ -34,6 +38,7 @@ export interface ScannedMedicinePayload {
   supplier: string;
   unitPrice?: number;
   barcode?: string;
+  productCode?: string;
 }
 
 interface LiveBarcodeScannerModalProps {
@@ -53,8 +58,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const scanLoopRef = useRef<number | null>(null);
-  const barcodeDetectorRef = useRef<any>(null);
+  const scannerSessionRef = useRef<ContinuousScannerSession | null>(null);
 
   const [status, setStatus] = useState<ScannerStatus>('INITIALIZING');
   const [cameraLabel, setCameraLabel] = useState<string>('');
@@ -77,6 +81,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     supplier: string;
     unitPrice: number;
     barcode: string;
+    productCode: string;
   }>({
     medicine: '',
     batch: '',
@@ -85,6 +90,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     supplier: 'ABC Pharma',
     unitPrice: 45,
     barcode: '',
+    productCode: '',
   });
 
   // Manual fallback search input
@@ -142,44 +148,82 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     },
   ];
 
-  // Initialize native BarcodeDetector if available
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-      try {
-        const formats = [
-          'qr_code',
-          'ean_13',
-          'ean_8',
-          'upc_a',
-          'upc_e',
-          'code_128',
-          'code_39',
-          'data_matrix',
-          'itf',
-        ];
-        barcodeDetectorRef.current = new (window as any).BarcodeDetector({ formats });
-      } catch (e) {
-        console.warn('Native BarcodeDetector init fallback:', e);
-      }
-    }
-  }, []);
-
   // Cleanup helper
-  const cleanupCamera = useCallback(() => {
-    if (scanLoopRef.current) {
-      cancelAnimationFrame(scanLoopRef.current);
-      scanLoopRef.current = null;
+  const cleanupScanner = useCallback(() => {
+    if (scannerSessionRef.current) {
+      try {
+        scannerSessionRef.current.stop();
+      } catch {}
+      scannerSessionRef.current = null;
     }
     stopCameraStream(videoRef.current, streamRef.current);
     streamRef.current = null;
     setFlashlight(false);
   }, []);
 
-  // Camera start handler
-  const initCamera = useCallback(async () => {
+  // Unified medicine lookup function (shared by camera detection, presets, and manual input)
+  const executeMedicineLookup = useCallback(async (scanned: ScannedMedicineData) => {
+    const rawSearch = scanned.barcode || scanned.rawText;
+    const searchCode = normalizeBarcode(rawSearch);
+    if (!searchCode) return;
+
+    setIsLookingUp(true);
+    setLookupMessage(`Looking up medicine for code [${searchCode}] in database...`);
+
+    try {
+      const res = await api.lookupBarcode(searchCode);
+      setIsLookingUp(false);
+
+      if (res.found && res.medicine) {
+        setIsFoundInDb(true);
+        const med = res.medicine;
+        setLookupMessage(`Medicine found: ${med.medicine || med.medicineName || searchCode}`);
+        setVerifyForm({
+          medicine: med.medicine || med.medicineName || scanned.medicine || `Product (${searchCode})`,
+          batch: med.batch || med.batchNumber || scanned.batch || '',
+          expiry: med.expiry || med.expiryDate || scanned.expiry || '',
+          quantity: med.quantity || scanned.quantity || 100,
+          supplier: med.supplier || scanned.supplier || 'ABC Pharma',
+          unitPrice: med.unitPrice || scanned.unitPrice || 45,
+          barcode: searchCode,
+          productCode: med.productCode || med.batch || searchCode,
+        });
+      } else {
+        setIsFoundInDb(false);
+        setLookupMessage('Barcode detected, but no matching medicine was found in current inventory.');
+        setVerifyForm({
+          medicine: scanned.medicine || `Medicine (${searchCode})`,
+          batch: scanned.batch || (searchCode.length <= 10 && /^[A-Z0-9-]+$/i.test(searchCode) ? searchCode.toUpperCase() : ''),
+          expiry: scanned.expiry || '',
+          quantity: scanned.quantity || 100,
+          supplier: scanned.supplier || 'ABC Pharma',
+          unitPrice: scanned.unitPrice || 45,
+          barcode: searchCode,
+          productCode: searchCode,
+        });
+      }
+    } catch {
+      setIsLookingUp(false);
+      setIsFoundInDb(false);
+      setLookupMessage('Barcode detected, but no matching medicine was found.');
+      setVerifyForm({
+        medicine: scanned.medicine || `Product (${searchCode})`,
+        batch: scanned.batch || '',
+        expiry: scanned.expiry || '',
+        quantity: scanned.quantity || 100,
+        supplier: 'ABC Pharma',
+        unitPrice: 45,
+        barcode: searchCode,
+        productCode: searchCode,
+      });
+    }
+  }, []);
+
+  // Camera start & scanner launch handler
+  const initCameraAndScanner = useCallback(async () => {
     if (!videoRef.current) return;
 
-    cleanupCamera();
+    cleanupScanner();
     setStatus('INITIALIZING');
     setIsSlowFeed(false);
 
@@ -196,6 +240,12 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
           setIsSlowFeed(true);
         }
       }, 2500);
+
+      // Launch continuous multi-engine frame decoder
+      scannerSessionRef.current = startContinuousScanner(videoRef.current, (scannedData) => {
+        setDetectedResult(scannedData);
+        executeMedicineLookup(scannedData);
+      });
     } catch (err: any) {
       console.error('Camera initialization error:', err);
       const msg = err?.message || '';
@@ -211,98 +261,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
         setStatus('ERROR');
       }
     }
-  }, [cleanupCamera]);
-
-  // Lookup barcode code in database
-  const handleLookup = useCallback(async (scanned: ScannedMedicineData) => {
-    const searchCode = scanned.barcode || scanned.rawText;
-    setIsLookingUp(true);
-    setLookupMessage('Searching inventory & drug database for product...');
-
-    try {
-      const res = await api.lookupBarcode(searchCode);
-      setIsLookingUp(false);
-
-      if (res.found && res.medicine) {
-        setIsFoundInDb(true);
-        setLookupMessage('Product matched in pharmacy inventory database.');
-        setVerifyForm({
-          medicine: res.medicine.medicine || scanned.medicine || `Product (${searchCode})`,
-          batch: res.medicine.batch || scanned.batch || searchCode.toUpperCase(),
-          expiry: res.medicine.expiry || scanned.expiry || 'Dec 2027',
-          quantity: res.medicine.quantity || scanned.quantity || 100,
-          supplier: res.medicine.supplier || scanned.supplier || 'ABC Pharma',
-          unitPrice: res.medicine.unitPrice || scanned.unitPrice || 45,
-          barcode: searchCode,
-        });
-      } else {
-        setIsFoundInDb(false);
-        setLookupMessage('Barcode detected, but no matching medicine was found in current inventory.');
-        setVerifyForm({
-          medicine: scanned.medicine || `Medicine (${searchCode})`,
-          batch: scanned.batch || searchCode.toUpperCase(),
-          expiry: scanned.expiry || 'Dec 2027',
-          quantity: scanned.quantity || 100,
-          supplier: scanned.supplier || 'ABC Pharma',
-          unitPrice: scanned.unitPrice || 45,
-          barcode: searchCode,
-        });
-      }
-    } catch {
-      setIsLookingUp(false);
-      setIsFoundInDb(false);
-      setLookupMessage('Barcode detected, but no matching medicine was found.');
-      setVerifyForm({
-        medicine: scanned.medicine || `Product (${searchCode})`,
-        batch: scanned.batch || searchCode.toUpperCase(),
-        expiry: scanned.expiry || 'Dec 2027',
-        quantity: scanned.quantity || 100,
-        supplier: 'ABC Pharma',
-        unitPrice: 45,
-        barcode: searchCode,
-      });
-    }
-  }, []);
-
-  // Frame scanning loop
-  useEffect(() => {
-    if (!isOpen || status !== 'SCANNING' || detectedResult) {
-      return;
-    }
-
-    let isScanning = true;
-    let lastScanTime = 0;
-
-    const loop = async (timestamp: number) => {
-      if (!isScanning) return;
-
-      // Throttle scanning to ~6-7 frames per second (150ms interval) to save CPU & battery
-      if (timestamp - lastScanTime > 150) {
-        lastScanTime = timestamp;
-        if (videoRef.current && videoRef.current.readyState >= 2) {
-          const res = await scanFrame(videoRef.current, barcodeDetectorRef.current);
-          if (res && res.rawText) {
-            isScanning = false;
-            setDetectedResult(res);
-            handleLookup(res);
-            return;
-          }
-        }
-      }
-
-      scanLoopRef.current = requestAnimationFrame(loop);
-    };
-
-    scanLoopRef.current = requestAnimationFrame(loop);
-
-    return () => {
-      isScanning = false;
-      if (scanLoopRef.current) {
-        cancelAnimationFrame(scanLoopRef.current);
-        scanLoopRef.current = null;
-      }
-    };
-  }, [isOpen, status, detectedResult, handleLookup]);
+  }, [cleanupScanner, executeMedicineLookup]);
 
   // Modal open/close lifecycle
   useEffect(() => {
@@ -311,17 +270,16 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       setIsFoundInDb(null);
       setLookupMessage('');
       setCustomCode('');
-      // Launch camera
       const timer = setTimeout(() => {
-        initCamera();
+        initCameraAndScanner();
       }, 50);
       return () => clearTimeout(timer);
     } else {
-      cleanupCamera();
+      cleanupScanner();
       setDetectedResult(null);
       setIsFoundInDb(null);
     }
-  }, [isOpen, initCamera, cleanupCamera]);
+  }, [isOpen, initCameraAndScanner, cleanupScanner]);
 
   // Handle Flashlight toggle
   const handleToggleTorch = async () => {
@@ -335,34 +293,40 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     setDetectedResult(null);
     setIsFoundInDb(null);
     setLookupMessage('');
-    initCamera();
+    initCameraAndScanner();
   };
 
   // Confirm verification and submit to parent
   const handleConfirmVerification = () => {
     onScan({
       medicine: verifyForm.medicine.trim(),
-      batch: verifyForm.batch.trim().toUpperCase(),
-      expiry: verifyForm.expiry.trim(),
+      batch: verifyForm.batch.trim().toUpperCase() || `BTH${Math.floor(100 + Math.random() * 900)}`,
+      expiry: verifyForm.expiry.trim() || 'Dec 2027',
       quantity: Number(verifyForm.quantity) || 1,
       supplier: verifyForm.supplier.trim() || 'ABC Pharma',
       unitPrice: Number(verifyForm.unitPrice) || 45,
       barcode: verifyForm.barcode.trim(),
+      productCode: verifyForm.productCode.trim(),
     });
     onClose();
   };
 
   // Handle manual code lookup
   const handleManualLookup = async () => {
-    if (!customCode.trim()) return;
+    const code = normalizeBarcode(customCode);
+    if (!code) return;
+
     setManualSearching(true);
     const scanned: ScannedMedicineData = {
-      rawText: customCode.trim(),
+      rawText: code,
       format: 'MANUAL_ENTRY',
-      barcode: customCode.trim(),
+      barcode: code,
     };
     setDetectedResult(scanned);
-    await handleLookup(scanned);
+    if (scannerSessionRef.current) {
+      scannerSessionRef.current.stop();
+    }
+    await executeMedicineLookup(scanned);
     setManualSearching(false);
   };
 
@@ -461,7 +425,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                         display: 'inline-block',
                       }}
                     />
-                    LIVE
+                    SCANNING ACTIVE
                   </span>
                 )}
               </div>
@@ -523,7 +487,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                     width: '100%',
                     height: '100%',
                     objectFit: 'cover',
-                    display: status === 'SCANNING' ? 'block' : 'block',
+                    display: 'block',
                   }}
                 />
 
@@ -600,8 +564,12 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                         color: '#E5E5E0',
                         letterSpacing: '0.04em',
                         border: '1px solid rgba(255, 255, 255, 0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
                       }}
                     >
+                      <ScanLine size={12} color="#4ADE80" />
                       ALIGN BARCODE / QR INSIDE FRAME
                     </div>
                   </>
@@ -625,7 +593,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                     <RotateCw size={32} color="#4ADE80" className="animate-spin" style={{ marginBottom: 12 }} />
                     <p style={{ fontSize: 13, fontWeight: 700, color: '#FFFFFF' }}>Initializing camera...</p>
                     <p style={{ fontSize: 11, color: '#A3B19B', marginTop: 4 }}>
-                      Requesting browser video permission & configuring HD lens
+                      Configuring video stream & real-time barcode detector
                     </p>
                   </div>
                 )}
@@ -652,7 +620,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       Please click the camera lock icon in your browser address bar and choose "Allow".
                     </p>
                     <button
-                      onClick={initCamera}
+                      onClick={initCameraAndScanner}
                       className="btn btn-secondary"
                       style={{ marginTop: 14, fontSize: 12, padding: '6px 14px' }}
                     >
@@ -682,7 +650,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       below.
                     </p>
                     <button
-                      onClick={initCamera}
+                      onClick={initCameraAndScanner}
                       className="btn btn-secondary"
                       style={{ marginTop: 14, fontSize: 12, padding: '6px 14px' }}
                     >
@@ -711,7 +679,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       Another browser tab or application is locking the camera stream.
                     </p>
                     <button
-                      onClick={initCamera}
+                      onClick={initCameraAndScanner}
                       className="btn btn-secondary"
                       style={{ marginTop: 14, fontSize: 12, padding: '6px 14px' }}
                     >
@@ -756,6 +724,29 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                 )}
               </div>
 
+              {/* Status Banner / Helpful scan guidance */}
+              <div
+                style={{
+                  marginTop: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 11.5,
+                  color: '#9CAE98',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: '5px 14px',
+                  borderRadius: 20,
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
+              >
+                <Info size={13} color="#4ADE80" />
+                <span>
+                  {status === 'SCANNING'
+                    ? 'Scanning for barcode / QR... Hold the package steady & ensure adequate lighting'
+                    : 'Initializing live camera feed...'}
+                </span>
+              </div>
+
               {/* Diagnostic slow feed notification */}
               {isSlowFeed && status === 'SCANNING' && (
                 <div
@@ -781,12 +772,12 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                   alignItems: 'center',
                   width: '100%',
                   maxWidth: 440,
-                  marginTop: 12,
+                  marginTop: 10,
                 }}
               >
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
-                    onClick={initCamera}
+                    onClick={initCameraAndScanner}
                     style={{
                       background: 'rgba(255, 255, 255, 0.08)',
                       color: '#E5E5E0',
@@ -866,7 +857,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                         color: isFoundInDb ? '#6EE7B7' : '#FCD34D',
                       }}
                     >
-                      Detected Code: [{detectedResult.barcode || detectedResult.rawText}]
+                      Barcode detected: {detectedResult.barcode || detectedResult.rawText}
                     </h4>
                     <span
                       style={{
@@ -882,10 +873,10 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                     </span>
                   </div>
                   <p style={{ fontSize: 12, color: '#E5E5E0', marginTop: 4 }}>
-                    {isLookingUp ? 'Querying Firestore inventory...' : lookupMessage}
+                    {isLookingUp ? 'Looking up medicine...' : lookupMessage}
                   </p>
                   <p style={{ fontSize: 11, color: '#9CAE98', marginTop: 2 }}>
-                    Please verify the medicine, batch number, expiry date, and quantity before applying.
+                    Please verify the medicine name, batch number, expiry date, and quantity before saving.
                   </p>
                 </div>
               </div>
@@ -1023,7 +1014,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                   letterSpacing: '0.06em',
                 }}
               >
-                Quick Package Presets (Click to decode test barcode):
+                Quick Package Presets (Click to test lookup):
               </p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 6 }}>
@@ -1043,7 +1034,10 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       barcode: b.data.barcode,
                     };
                     setDetectedResult(scanned);
-                    handleLookup(scanned);
+                    if (scannerSessionRef.current) {
+                      scannerSessionRef.current.stop();
+                    }
+                    executeMedicineLookup(scanned);
                   }}
                   style={{
                     background: 'rgba(255, 255, 255, 0.05)',

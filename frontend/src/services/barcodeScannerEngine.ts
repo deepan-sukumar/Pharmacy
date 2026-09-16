@@ -1,10 +1,10 @@
 import {
-  MultiFormatReader,
+  BrowserMultiFormatReader,
   BarcodeFormat,
   DecodeHintType,
-  RGBLuminanceSource,
-  HybridBinarizer,
-  BinaryBitmap,
+  NotFoundException,
+  ChecksumException,
+  FormatException,
 } from '@zxing/library';
 
 export type ScannerStatus =
@@ -47,21 +47,26 @@ const SUPPORTED_FORMATS = [
   BarcodeFormat.CODE_39,
   BarcodeFormat.DATA_MATRIX,
   BarcodeFormat.ITF,
+  BarcodeFormat.CODABAR,
 ];
 
-// Configure hints
+// Configure decoding hints
 const hints = new Map();
 hints.set(DecodeHintType.POSSIBLE_FORMATS, SUPPORTED_FORMATS);
 hints.set(DecodeHintType.TRY_HARDER, true);
 
-let zxingReader: MultiFormatReader | null = null;
-
-function getZxingReader(): MultiFormatReader {
-  if (!zxingReader) {
-    zxingReader = new MultiFormatReader();
-    zxingReader.setHints(hints);
-  }
-  return zxingReader;
+/**
+ * Normalizes scanned or entered barcode values.
+ * - Trims whitespace
+ * - Removes line breaks
+ * - Preserves leading zeros (e.g. '0890103400101' stays '0890103400101')
+ * - Preserves letters and hyphens (e.g. 'AMX-26017', 'PCT101')
+ */
+export function normalizeBarcode(raw: string): string {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/[\r\n\t]+/g, '')
+    .trim();
 }
 
 /**
@@ -117,7 +122,7 @@ export async function startCameraStream(videoElement: HTMLVideoElement): Promise
     throw new Error('UNAVAILABLE');
   }
 
-  // CRITICAL STEP: Assign stream to video and await play
+  // Assign stream to video and await play
   videoElement.srcObject = stream;
   videoElement.setAttribute('playsinline', 'true');
   videoElement.setAttribute('autoplay', 'true');
@@ -196,7 +201,7 @@ export async function toggleTorch(stream: MediaStream | null, enable: boolean): 
  * Parses raw barcode text (JSON QR, GS1-128, or raw identifier)
  */
 export function parseBarcodeText(rawText: string, format = 'BARCODE'): ScannedMedicineData {
-  const trimmed = rawText.trim();
+  const trimmed = normalizeBarcode(rawText);
 
   // 1. Check if it's a JSON payload (frequently used in Pharma QR codes)
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
@@ -211,7 +216,7 @@ export function parseBarcodeText(rawText: string, format = 'BARCODE'): ScannedMe
         quantity: Number(parsed.quantity || parsed.qty) || undefined,
         supplier: parsed.supplier || parsed.distributor,
         unitPrice: Number(parsed.unitPrice || parsed.price || parsed.mrp) || undefined,
-        barcode: parsed.barcode || parsed.gtin || trimmed,
+        barcode: normalizeBarcode(parsed.barcode || parsed.gtin || trimmed),
       };
     } catch {
       // not JSON, fallback to regex / standard format
@@ -241,7 +246,7 @@ export function parseBarcodeText(rawText: string, format = 'BARCODE'): ScannedMe
       return {
         rawText: trimmed,
         format: 'GS1_128',
-        barcode: gs1Gtin ? gs1Gtin[1] : trimmed,
+        barcode: normalizeBarcode(gs1Gtin ? gs1Gtin[1] : trimmed),
         batch: gs1Batch ? gs1Batch[1].toUpperCase() : undefined,
         expiry: expFormatted,
       };
@@ -257,55 +262,114 @@ export function parseBarcodeText(rawText: string, format = 'BARCODE'): ScannedMe
   };
 }
 
+export interface ContinuousScannerSession {
+  reader: BrowserMultiFormatReader;
+  stop: () => void;
+}
+
 /**
- * Scans a single frame from video element using Native BarcodeDetector or ZXing
+ * Starts continuous frame scanning on the active live video element.
+ * Dual-engine: Native BarcodeDetector (Chrome/Android hardware acceleration) + ZXing BrowserMultiFormatReader.
  */
-export async function scanFrame(
+export function startContinuousScanner(
   videoElement: HTMLVideoElement,
-  barcodeDetectorInstance?: any
-): Promise<ScannedMedicineData | null> {
-  if (!videoElement || videoElement.readyState < 2 || videoElement.videoWidth === 0) {
-    return null;
-  }
+  onDetected: (data: ScannedMedicineData) => void
+): ContinuousScannerSession {
+  let isStopped = false;
+  let isLocked = false;
+  const reader = new BrowserMultiFormatReader(hints, 80);
 
-  // Engine 1: Native BarcodeDetector (high-performance hardware-accelerated)
-  if (barcodeDetectorInstance) {
+  const handleDetection = (rawText: string, formatName: string) => {
+    if (isStopped || isLocked) return;
+    const clean = normalizeBarcode(rawText);
+    if (!clean) return;
+
+    isLocked = true;
+    isStopped = true;
+
     try {
-      const barcodes = await barcodeDetectorInstance.detect(videoElement);
-      if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-        const item = barcodes[0];
-        return parseBarcodeText(item.rawValue, item.format || 'BARCODE');
-      }
-    } catch {
-      // Fallback to ZXing
-    }
-  }
+      reader.reset();
+    } catch {}
 
-  // Engine 2: ZXing MultiFormatReader direct pixel decoding
+    const parsed = parseBarcodeText(clean, formatName);
+    onDetected(parsed);
+  };
+
+  // Engine 1: ZXing Browser Continuous Decoder
   try {
-    const reader = getZxingReader();
-    const canvas = document.createElement('canvas');
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (ctx) {
-      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const luminanceSource = new RGBLuminanceSource(
-        imageData.data,
-        imageData.width,
-        imageData.height
-      );
-      const binaryBitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource));
-      const result = reader.decode(binaryBitmap);
-      if (result && result.getText()) {
-        const formatName = result.getBarcodeFormat() !== undefined ? BarcodeFormat[result.getBarcodeFormat()] : 'BARCODE';
-        return parseBarcodeText(result.getText(), formatName);
+    reader.decodeFromVideoElementContinuously(videoElement, (result, error) => {
+      if (isStopped || isLocked) return;
+      if (result) {
+        const text = result.getText();
+        if (text) {
+          const fmt = result.getBarcodeFormat() !== undefined
+            ? BarcodeFormat[result.getBarcodeFormat()]
+            : 'BARCODE';
+          handleDetection(text, fmt);
+        }
       }
-    }
-  } catch (zxingErr: unknown) {
-    // NotFoundException is normal when no barcode is in current frame
+    });
+  } catch (readerErr) {
+    console.warn('ZXing decodeFromVideoElementContinuously init warning:', readerErr);
   }
 
-  return null;
+  // Engine 2: Native BarcodeDetector fast loop (if browser supports it)
+  let nativeLoopId: number | null = null;
+  if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+    try {
+      const nativeDetector = new (window as any).BarcodeDetector({
+        formats: [
+          'qr_code',
+          'ean_13',
+          'ean_8',
+          'upc_a',
+          'upc_e',
+          'code_128',
+          'code_39',
+          'data_matrix',
+          'itf',
+        ],
+      });
+
+      let lastNativeScan = 0;
+      const nativeScanLoop = async (now: number) => {
+        if (isStopped || isLocked) return;
+
+        if (now - lastNativeScan > 100) {
+          lastNativeScan = now;
+          if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
+            try {
+              const barcodes = await nativeDetector.detect(videoElement);
+              if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                const item = barcodes[0];
+                handleDetection(item.rawValue, item.format || 'BARCODE');
+                return;
+              }
+            } catch {}
+          }
+        }
+
+        nativeLoopId = requestAnimationFrame(nativeScanLoop);
+      };
+
+      nativeLoopId = requestAnimationFrame(nativeScanLoop);
+    } catch (e) {
+      console.warn('Native BarcodeDetector loop init error:', e);
+    }
+  }
+
+  return {
+    reader,
+    stop: () => {
+      isStopped = true;
+      isLocked = true;
+      if (nativeLoopId) {
+        cancelAnimationFrame(nativeLoopId);
+        nativeLoopId = null;
+      }
+      try {
+        reader.reset();
+      } catch {}
+    },
+  };
 }

@@ -226,6 +226,17 @@ async function runBarcodeTests() {
       }
     });
 
+    await asyncTest('Query parameter lookup /api/inventory/lookup?code=890103400101 returns full metadata', async () => {
+      const res = await makeRequest('/api/inventory/lookup?code=890103400101');
+      if (res.status !== 200) throw new Error(`Status ${res.status}`);
+      if (!res.body.found) throw new Error('Product should be found via query param');
+      const med = res.body.medicine;
+      if (!med.medicineName || !med.productCode || !med.batchNumber || !med.expiryDate) {
+        throw new Error('All standard metadata aliases must be present in response');
+      }
+      if (med.batchNumber !== 'PCT101') throw new Error('Batch mismatch');
+    });
+
     // --- Suite 3: Preserving Existing Inventory & Non-destructive Operations ---
     console.log('\n--- Test 3: Inventory Integrity & Presets ---');
 

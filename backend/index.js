@@ -652,15 +652,37 @@ app.delete('/api/inventory/:id', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// BARCODE / QR CODE LOOKUP
+// BARCODE / QR CODE / INVENTORY LOOKUP (TENANT ISOLATED)
 // -------------------------------------------------------------
-app.get('/api/barcode/lookup/:code', async (req, res) => {
+async function handleBarcodeLookupRequest(req, res, searchCodeRaw) {
   try {
-    const { code } = req.params;
     const pharmacyId = getPharmacyId(req);
-    const searchCode = String(code).trim();
+    const searchCode = String(searchCodeRaw || '').trim();
+    if (!searchCode) {
+      return res.status(400).json({ error: 'Barcode, GTIN, or Batch Code parameter is required' });
+    }
+
     const cleanDigits = searchCode.replace(/\D/g, '');
     const cleanWithoutLeadingZeros = cleanDigits.replace(/^0+/, '');
+
+    const formatMedicineResponse = (med) => {
+      return {
+        id: med.id,
+        medicine: med.medicine || med.medicineName,
+        medicineName: med.medicineName || med.medicine,
+        genericName: med.genericName || '',
+        batch: med.batch || med.batchNumber || searchCode.toUpperCase(),
+        batchNumber: med.batchNumber || med.batch || searchCode.toUpperCase(),
+        expiry: med.expiry || med.expiryDate || 'Dec 2027',
+        expiryDate: med.expiryDate || med.expiry || 'Dec 2027',
+        quantity: med.quantity || 100,
+        supplier: med.supplier || 'ABC Pharma',
+        status: med.status || 'Available',
+        unitPrice: med.unitPrice || 45,
+        barcode: med.barcode || searchCode,
+        productCode: med.productCode || med.batch || searchCode,
+      };
+    };
 
     if (isConnected()) {
       // 1. Exact barcode lookup
@@ -670,7 +692,8 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
         .get();
 
       if (!barcodeQuery.empty) {
-        return res.json({ found: true, medicine: { id: barcodeQuery.docs[0].id, ...barcodeQuery.docs[0].data() } });
+        const data = barcodeQuery.docs[0].data();
+        return res.json({ found: true, medicine: formatMedicineResponse({ id: barcodeQuery.docs[0].id, ...data }) });
       }
 
       // 2. Barcode lookup without leading zeros / normalized digits
@@ -681,7 +704,8 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
           .get();
 
         if (!barcodeQuery.empty) {
-          return res.json({ found: true, medicine: { id: barcodeQuery.docs[0].id, ...barcodeQuery.docs[0].data() } });
+          const data = barcodeQuery.docs[0].data();
+          return res.json({ found: true, medicine: formatMedicineResponse({ id: barcodeQuery.docs[0].id, ...data }) });
         }
       }
 
@@ -692,7 +716,8 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
         .get();
 
       if (!batchQuery.empty) {
-        return res.json({ found: true, medicine: { id: batchQuery.docs[0].id, ...batchQuery.docs[0].data() } });
+        const data = batchQuery.docs[0].data();
+        return res.json({ found: true, medicine: formatMedicineResponse({ id: batchQuery.docs[0].id, ...data }) });
       }
 
       // 4. Case-insensitive batch or partial medicine query
@@ -705,12 +730,13 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
         return (
           (data.barcode && (data.barcode === searchCode || data.barcode.replace(/^0+/, '') === cleanWithoutLeadingZeros)) ||
           (data.batch && data.batch.toUpperCase() === searchCode.toUpperCase()) ||
-          (data.medicine && data.medicine.toLowerCase() === searchCode.toLowerCase())
+          (data.medicine && data.medicine.toLowerCase() === searchCode.toLowerCase()) ||
+          (data.genericName && data.genericName.toLowerCase() === searchCode.toLowerCase())
         );
       });
 
       if (matchedDoc) {
-        return res.json({ found: true, medicine: { id: matchedDoc.id, ...matchedDoc.data() } });
+        return res.json({ found: true, medicine: formatMedicineResponse({ id: matchedDoc.id, ...matchedDoc.data() }) });
       }
     } else {
       const found = memoryStore.inventory.find(i => 
@@ -718,10 +744,11 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
           i.barcode === searchCode || 
           (cleanWithoutLeadingZeros && i.barcode?.replace(/^0+/, '') === cleanWithoutLeadingZeros) ||
           i.batch?.toUpperCase() === searchCode.toUpperCase() ||
-          i.medicine?.toLowerCase() === searchCode.toLowerCase()
+          i.medicine?.toLowerCase() === searchCode.toLowerCase() ||
+          i.genericName?.toLowerCase() === searchCode.toLowerCase()
         )
       );
-      if (found) return res.json({ found: true, medicine: found });
+      if (found) return res.json({ found: true, medicine: formatMedicineResponse(found) });
     }
 
     res.json({ 
@@ -732,6 +759,15 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+}
+
+app.get('/api/barcode/lookup/:code', (req, res) => {
+  handleBarcodeLookupRequest(req, res, req.params.code);
+});
+
+app.get('/api/inventory/lookup', (req, res) => {
+  const queryCode = req.query.code || req.query.query || req.query.barcode || req.query.batch;
+  handleBarcodeLookupRequest(req, res, queryCode);
 });
 
 // -------------------------------------------------------------
