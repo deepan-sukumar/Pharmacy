@@ -1,12 +1,7 @@
 import {
-  MultiFormatReader,
+  BrowserMultiFormatReader,
   BarcodeFormat,
   DecodeHintType,
-  HTMLCanvasElementLuminanceSource,
-  BinaryBitmap,
-  HybridBinarizer,
-  GlobalHistogramBinarizer,
-  InvertedLuminanceSource,
 } from '@zxing/library';
 
 export type ScannerStatus =
@@ -29,6 +24,7 @@ export interface ScannedMedicineData {
   supplier?: string;
   unitPrice?: number;
   barcode?: string;
+  productCode?: string;
 }
 
 export interface CameraInfo {
@@ -38,9 +34,9 @@ export interface CameraInfo {
   isBackFacing: boolean;
 }
 
-// Strict pharmaceutical & retail barcode formats.
-// CRITICAL: CODABAR is explicitly EXCLUDED to eliminate false-positive noise (e.g. 'D9D').
-export const ALLOWED_BARCODE_FORMATS = [
+// Supported barcode formats for retail & pharmacy packaging.
+// Note: CODABAR is removed to prevent false detections from random bar patterns.
+const SUPPORTED_FORMATS = [
   BarcodeFormat.QR_CODE,
   BarcodeFormat.EAN_13,
   BarcodeFormat.EAN_8,
@@ -52,10 +48,10 @@ export const ALLOWED_BARCODE_FORMATS = [
   BarcodeFormat.ITF,
 ];
 
-// Configure ZXing decoding hints with TRY_HARDER and strictly filtered formats
-const zxingHints = new Map<DecodeHintType, any>();
-zxingHints.set(DecodeHintType.POSSIBLE_FORMATS, ALLOWED_BARCODE_FORMATS);
-zxingHints.set(DecodeHintType.TRY_HARDER, true);
+// Configure decoding hints
+const hints = new Map();
+hints.set(DecodeHintType.POSSIBLE_FORMATS, SUPPORTED_FORMATS);
+hints.set(DecodeHintType.TRY_HARDER, true);
 
 /**
  * Normalizes scanned or entered barcode values.
@@ -63,6 +59,7 @@ zxingHints.set(DecodeHintType.TRY_HARDER, true);
  * - Removes line breaks
  * - Preserves leading zeros (e.g. '0890103400101' stays '0890103400101')
  * - Preserves letters and hyphens (e.g. 'AMX-26017', 'PCT101')
+ * - Always handles barcode strictly as STRING
  */
 export function normalizeBarcode(raw: string): string {
   if (!raw) return '';
@@ -72,97 +69,8 @@ export function normalizeBarcode(raw: string): string {
 }
 
 /**
- * Standard Modulo-10 Checksum calculation for EAN-13, EAN-8, and UPC-A.
- */
-export function validateModulo10Checksum(digits: string, oddWeight: number, evenWeight: number): boolean {
-  if (!/^\d+$/.test(digits) || digits.length < 2) return false;
-  let sum = 0;
-  const len = digits.length;
-  for (let i = 0; i < len - 1; i++) {
-    const weight = i % 2 === 0 ? oddWeight : evenWeight;
-    sum += parseInt(digits[i], 10) * weight;
-  }
-  const expectedCheck = (10 - (sum % 10)) % 10;
-  return expectedCheck === parseInt(digits[len - 1], 10);
-}
-
-/**
- * Validates candidate barcode against strict format & length rules.
- * Rejects CODABAR and false-positive fragments.
- */
-export function validateBarcodeCandidate(rawCode: string, formatName: string): { valid: boolean; reason?: string } {
-  const clean = normalizeBarcode(rawCode);
-  if (!clean) return { valid: false, reason: 'Empty code' };
-
-  const fmt = (formatName || '').toUpperCase();
-
-  // 1. Explicitly reject CODABAR
-  if (fmt.includes('CODABAR') || fmt.includes('CODA_BAR')) {
-    return { valid: false, reason: 'CODABAR format disallowed (unreliable for pharma inventory)' };
-  }
-
-  // 2. Reject short noise fragments (< 3 characters for 1D barcodes)
-  if (clean.length < 3 && !fmt.includes('QR')) {
-    return { valid: false, reason: 'Too short to be a valid barcode' };
-  }
-
-  // 3. EAN-13 Validation
-  if (fmt.includes('EAN_13') || fmt.includes('EAN13')) {
-    if (!/^\d{13}$/.test(clean)) {
-      return { valid: false, reason: `EAN-13 must be exactly 13 digits (got ${clean.length})` };
-    }
-    // Modulo 10 with weights 1, 3
-    const isValidChecksum = validateModulo10Checksum(clean, 1, 3);
-    if (!isValidChecksum) {
-      return { valid: false, reason: 'EAN-13 checksum validation failed' };
-    }
-  }
-
-  // 4. EAN-8 Validation
-  if (fmt.includes('EAN_8') || fmt.includes('EAN8')) {
-    if (!/^\d{8}$/.test(clean)) {
-      return { valid: false, reason: `EAN-8 must be exactly 8 digits (got ${clean.length})` };
-    }
-    const isValidChecksum = validateModulo10Checksum(clean, 3, 1);
-    if (!isValidChecksum) {
-      return { valid: false, reason: 'EAN-8 checksum validation failed' };
-    }
-  }
-
-  // 5. UPC-A Validation
-  if (fmt.includes('UPC_A') || fmt.includes('UPCA')) {
-    if (!/^\d{12}$/.test(clean)) {
-      return { valid: false, reason: `UPC-A must be exactly 12 digits (got ${clean.length})` };
-    }
-    const isValidChecksum = validateModulo10Checksum(clean, 3, 1);
-    if (!isValidChecksum) {
-      return { valid: false, reason: 'UPC-A checksum validation failed' };
-    }
-  }
-
-  // 6. UPC-E Validation
-  if (fmt.includes('UPC_E') || fmt.includes('UPCE')) {
-    if (!/^\d{6,8}$/.test(clean)) {
-      return { valid: false, reason: 'UPC-E must be 6 to 8 digits' };
-    }
-  }
-
-  // 7. Code 128 / Code 39 Validation
-  if (fmt.includes('CODE_128') || fmt.includes('CODE128') || fmt.includes('CODE_39') || fmt.includes('CODE39')) {
-    if (clean.length < 3) {
-      return { valid: false, reason: 'Code 128/39 must have at least 3 characters' };
-    }
-    // Disallow pure noise patterns
-    if (/^[A-D]\d[A-D]$/i.test(clean)) {
-      return { valid: false, reason: 'False positive delimiter pattern rejected' };
-    }
-  }
-
-  return { valid: true };
-}
-
-/**
- * Initializes camera stream with requested constraints, continuous autofocus, and resilient fallback.
+ * Initializes camera stream with requested constraints and resilient fallback.
+ * Guarantees videoRef assignment and play().
  */
 export async function startCameraStream(videoElement: HTMLVideoElement): Promise<CameraInfo> {
   if (!navigator?.mediaDevices?.getUserMedia) {
@@ -226,20 +134,6 @@ export async function startCameraStream(videoElement: HTMLVideoElement): Promise
   }
 
   const track = stream.getVideoTracks()[0];
-  if (track) {
-    try {
-      const capabilities = (track.getCapabilities?.() || {}) as any;
-      if (capabilities.focusMode && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes('continuous')) {
-        await (track as any).applyConstraints({
-          advanced: [{ focusMode: 'continuous' }],
-        });
-        console.log('[Scanner] Continuous autofocus enabled');
-      }
-    } catch (focusErr) {
-      console.warn('[Scanner] Autofocus notice:', focusErr);
-    }
-  }
-
   const settings = track ? track.getSettings() : {};
   const label = track?.label || 'Camera Feed';
   const width = settings.width || videoElement.videoWidth || 1280;
@@ -325,6 +219,7 @@ export function parseBarcodeText(rawText: string, format = 'BARCODE'): ScannedMe
         supplier: parsed.supplier || parsed.distributor,
         unitPrice: Number(parsed.unitPrice || parsed.price || parsed.mrp) || undefined,
         barcode: normalizeBarcode(parsed.barcode || parsed.gtin || trimmed),
+        productCode: parsed.productCode,
       };
     } catch {
       // not JSON, fallback to regex / standard format
@@ -366,287 +261,74 @@ export function parseBarcodeText(rawText: string, format = 'BARCODE'): ScannedMe
     rawText: trimmed,
     format,
     barcode: trimmed,
-    batch: trimmed.length <= 10 && /^[A-Z0-9-]+$/i.test(trimmed) ? trimmed.toUpperCase() : undefined,
+    productCode: trimmed.length <= 10 && /^[A-Z0-9-]+$/i.test(trimmed) ? trimmed.toUpperCase() : undefined,
   };
 }
 
 export interface ContinuousScannerSession {
+  reader: BrowserMultiFormatReader;
   stop: () => void;
 }
 
 /**
- * Starts continuous frame scanning with:
- * 1. Allowed format restrictions (CODABAR excluded)
- * 2. Multi-pass frame analysis (Center Crop + Full Frame)
- * 3. Format & Checksum candidate validation
- * 4. Multi-frame stability debounce (requires 2 consistent detections within 500ms)
+ * Starts continuous frame scanning using ZXing BrowserMultiFormatReader.
+ * Restores previous stable decoder behavior with CODABAR excluded.
  */
 export function startContinuousScanner(
   videoElement: HTMLVideoElement,
-  onDetected: (data: ScannedMedicineData) => void,
-  onCandidateFeedback?: (feedback: { code: string; format: string; status: 'VALIDATING' | 'INVALID'; reason?: string }) => void
+  onDetected: (data: ScannedMedicineData) => void
 ): ContinuousScannerSession {
   let isStopped = false;
   let isLocked = false;
-  let animationFrameId: number | null = null;
-  let scanIntervalId: any = null;
+  const reader = new BrowserMultiFormatReader(hints, 80);
 
   console.log(`[Scanner] Decoder initialized`);
-  console.log(`[Scanner] Formats enabled: QR_CODE, EAN_13, EAN_8, UPC_A, UPC_E, CODE_128, CODE_39, DATA_MATRIX, ITF (CODABAR DISABLED)`);
+  console.log(`[Scanner] Scan loop started`);
 
-  const zxingReader = new MultiFormatReader();
-  zxingReader.setHints(zxingHints);
-
-  // Candidate stability tracking (sliding window debounce)
-  let candidateCode: string = '';
-  let candidateFormat: string = '';
-  let candidateCount: number = 0;
-  let candidateFirstSeen: number = 0;
-
-  // Reusable offscreen canvas elements
-  const fullCanvas = document.createElement('canvas');
-  const fullCtx = fullCanvas.getContext('2d', { willReadFrequently: true });
-
-  const cropCanvas = document.createElement('canvas');
-  const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
-
-  const handleFrameCandidate = (rawText: string, formatName: string) => {
+  const handleDetection = (rawText: string, formatName: string) => {
     if (isStopped || isLocked) return;
     const clean = normalizeBarcode(rawText);
     if (!clean) return;
 
-    console.log(`[Scanner] Candidate detected: ${clean} (Format: ${formatName})`);
+    isLocked = true;
+    isStopped = true;
 
-    // Step 1: Format & Checksum Validation
-    const validation = validateBarcodeCandidate(clean, formatName);
-    if (!validation.valid) {
-      console.log(`[Scanner] Validation: FAILED (${validation.reason})`);
-      onCandidateFeedback?.({ code: clean, format: formatName, status: 'INVALID', reason: validation.reason });
-      return;
-    }
-
-    console.log(`[Scanner] Validation: PASSED`);
-
-    const now = performance.now();
-
-    // Step 2: Multi-frame stability check (Require 2 consistent detections within 500ms)
-    // QR codes with rich JSON/GS1 payloads can be accepted on single strong frame
-    const isQrOrGs1 = formatName.includes('QR') || formatName.includes('MATRIX') || clean.startsWith('{') || clean.includes('(01)');
-
-    if (candidateCode === clean && (now - candidateFirstSeen < 600)) {
-      candidateCount++;
-    } else {
-      candidateCode = clean;
-      candidateFormat = formatName;
-      candidateCount = 1;
-      candidateFirstSeen = now;
-      onCandidateFeedback?.({ code: clean, format: formatName, status: 'VALIDATING' });
-    }
-
-    // Accept immediately for complex 2D QR/GS1, or upon 2 consecutive stable frames for 1D retail barcodes
-    if (candidateCount >= 2 || isQrOrGs1) {
-      isLocked = true;
-      isStopped = true;
-
-      console.log(`[Scanner] Accepted barcode: ${clean} (Format: ${formatName})`);
-
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-      }
-      if (scanIntervalId) {
-        clearInterval(scanIntervalId);
-        scanIntervalId = null;
-      }
-
-      try {
-        zxingReader.reset();
-      } catch {}
-
-      const parsed = parseBarcodeText(clean, formatName);
-      onDetected(parsed);
-    }
-  };
-
-  // Safe Native BarcodeDetector initialization (CODABAR excluded)
-  let nativeDetector: any = null;
-  (async () => {
-    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-      try {
-        let formats: string[] = [
-          'qr_code',
-          'ean_13',
-          'ean_8',
-          'upc_a',
-          'upc_e',
-          'code_128',
-          'code_39',
-          'data_matrix',
-          'itf',
-        ];
-
-        if (typeof (window as any).BarcodeDetector.getSupportedFormats === 'function') {
-          const supported = await (window as any).BarcodeDetector.getSupportedFormats();
-          if (Array.isArray(supported) && supported.length > 0) {
-            formats = formats.filter(f => supported.includes(f) && !f.includes('codabar'));
-          }
-        }
-
-        if (formats.length > 0) {
-          nativeDetector = new (window as any).BarcodeDetector({ formats });
-        }
-      } catch (nativeErr) {
-        console.warn('Native BarcodeDetector initialization skipped:', nativeErr);
-      }
-    }
-  })();
-
-  // Multi-pass frame decode attempt on a given canvas
-  const tryDecodeCanvas = (canvas: HTMLCanvasElement): boolean => {
-    if (!canvas.width || !canvas.height) return false;
+    console.log(`[Scanner] Detected: ${clean}`);
+    console.log(`[Scanner] Format: ${formatName}`);
 
     try {
-      const source = new HTMLCanvasElementLuminanceSource(canvas);
+      reader.reset();
+    } catch {}
 
-      // Pass 1: GlobalHistogramBinarizer (Best for 1D retail barcodes like EAN-13, EAN-8, UPC, Code 128)
-      try {
-        const globalBitmap = new BinaryBitmap(new GlobalHistogramBinarizer(source));
-        const res = zxingReader.decodeWithState(globalBitmap);
-        if (res && res.getText()) {
-          const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
-          handleFrameCandidate(res.getText(), fmtName);
-          return true;
-        }
-      } catch {}
-
-      // Pass 2: HybridBinarizer (Best for 2D matrix / QR codes)
-      try {
-        const hybridBitmap = new BinaryBitmap(new HybridBinarizer(source));
-        const res = zxingReader.decodeWithState(hybridBitmap);
-        if (res && res.getText()) {
-          const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
-          handleFrameCandidate(res.getText(), fmtName);
-          return true;
-        }
-      } catch {}
-
-      // Pass 3: Inverted luminance (for dark/reflective packaging)
-      try {
-        const invertedSource = new InvertedLuminanceSource(source);
-        const invBitmap = new BinaryBitmap(new GlobalHistogramBinarizer(invertedSource));
-        const res = zxingReader.decodeWithState(invBitmap);
-        if (res && res.getText()) {
-          const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
-          handleFrameCandidate(res.getText(), fmtName);
-          return true;
-        }
-      } catch {}
-    } catch {
-      // no barcode in frame
-    }
-    return false;
+    const parsed = parseBarcodeText(clean, formatName);
+    onDetected(parsed);
   };
 
-  let isScanningFrame = false;
-  let lastScanTime = 0;
-
-  const processFrame = async () => {
-    if (isStopped || isLocked || isScanningFrame) return;
-
-    // Verify video element is ready with dimensions
-    if (!videoElement || videoElement.readyState < 2 || videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
-      return;
-    }
-
-    const now = performance.now();
-    // Throttle to every ~75ms (~13 FPS)
-    if (now - lastScanTime < 75) return;
-    lastScanTime = now;
-
-    isScanningFrame = true;
-
-    try {
-      const vw = videoElement.videoWidth;
-      const vh = videoElement.videoHeight;
-
-      // 1. Try Native BarcodeDetector directly on video if available
-      if (nativeDetector) {
-        try {
-          const barcodes = await nativeDetector.detect(videoElement);
-          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-            const item = barcodes[0];
-            handleFrameCandidate(item.rawValue, item.format || 'BARCODE');
-            isScanningFrame = false;
-            return;
-          }
-        } catch {}
-      }
-
-      // 2. Central Viewfinder Crop Pass (75% width, 55% height centered)
-      const cropW = Math.round(vw * 0.75);
-      const cropH = Math.round(vh * 0.55);
-      const cropX = Math.round((vw - cropW) / 2);
-      const cropY = Math.round((vh - cropH) / 2);
-
-      if (cropCtx) {
-        if (cropCanvas.width !== cropW || cropCanvas.height !== cropH) {
-          cropCanvas.width = cropW;
-          cropCanvas.height = cropH;
-        }
-        cropCtx.drawImage(videoElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-        if (tryDecodeCanvas(cropCanvas)) {
-          isScanningFrame = false;
-          return;
+  // ZXing Browser Continuous Decoder
+  try {
+    reader.decodeFromVideoElementContinuously(videoElement, (result, error) => {
+      if (isStopped || isLocked) return;
+      if (result) {
+        const text = result.getText();
+        if (text) {
+          const fmt = result.getBarcodeFormat() !== undefined
+            ? BarcodeFormat[result.getBarcodeFormat()]
+            : 'BARCODE';
+          handleDetection(text, fmt);
         }
       }
-
-      // 3. Full Frame Pass (scaled to 720p or original)
-      if (fullCtx) {
-        const targetW = vw > 1280 ? 1280 : vw;
-        const targetH = Math.round((vh / vw) * targetW);
-
-        if (fullCanvas.width !== targetW || fullCanvas.height !== targetH) {
-          fullCanvas.width = targetW;
-          fullCanvas.height = targetH;
-        }
-        fullCtx.drawImage(videoElement, 0, 0, targetW, targetH);
-        if (tryDecodeCanvas(fullCanvas)) {
-          isScanningFrame = false;
-          return;
-        }
-      }
-    } catch (err) {
-      // non-fatal frame decode cycle catch
-    } finally {
-      isScanningFrame = false;
-    }
-  };
-
-  // Continuous loop using requestAnimationFrame + interval fallback
-  const scanLoop = () => {
-    if (isStopped || isLocked) return;
-    processFrame();
-    animationFrameId = requestAnimationFrame(scanLoop);
-  };
-
-  console.log(`[Scanner] Scan loop started`);
-  animationFrameId = requestAnimationFrame(scanLoop);
-  scanIntervalId = setInterval(processFrame, 90);
+    });
+  } catch (readerErr) {
+    console.warn('ZXing decodeFromVideoElementContinuously init notice:', readerErr);
+  }
 
   return {
+    reader,
     stop: () => {
       isStopped = true;
       isLocked = true;
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-      }
-      if (scanIntervalId) {
-        clearInterval(scanIntervalId);
-        scanIntervalId = null;
-      }
       try {
-        zxingReader.reset();
+        reader.reset();
       } catch {}
     },
   };

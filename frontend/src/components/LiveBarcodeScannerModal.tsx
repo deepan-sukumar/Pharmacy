@@ -77,6 +77,19 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
   const [lookupMessage, setLookupMessage] = useState<string>('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [isFoundInDb, setIsFoundInDb] = useState<boolean | null>(null);
+  const [isExternalResult, setIsExternalResult] = useState<boolean>(false);
+  const [lookupSource, setLookupSource] = useState<string>('Local PharmaFlow Inventory');
+  const [sourceConfidence, setSourceConfidence] = useState<string>('Exact Match');
+  const [externalProductDetails, setExternalProductDetails] = useState<{
+    brand?: string;
+    manufacturer?: string;
+    strength?: string;
+    dosageForm?: string;
+    packSize?: string;
+    category?: string;
+  } | null>(null);
+  const [isSavingToInventory, setIsSavingToInventory] = useState<boolean>(false);
+  const [isManualAddMode, setIsManualAddMode] = useState<boolean>(false);
 
   // Pharmacist verification form fields
   const [verifyForm, setVerifyForm] = useState<{
@@ -88,6 +101,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     unitPrice: number;
     barcode: string;
     productCode: string;
+    genericName?: string;
   }>({
     medicine: '',
     batch: '',
@@ -97,6 +111,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     unitPrice: 45,
     barcode: '',
     productCode: '',
+    genericName: '',
   });
 
   // Manual search input state
@@ -105,7 +120,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
 
   const sampleBarcodes = [
     {
-      label: 'PCT101 · Paracetamol 500mg',
+      label: 'PCT101 · Paracetamol 500mg (Local)',
       code: '890103400101',
       fallbackData: {
         medicine: 'Paracetamol 500mg',
@@ -118,42 +133,42 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       },
     },
     {
-      label: 'VD102 · Vitamin D3 60K',
-      code: '890103400102',
+      label: 'Dolo 650 Tablets (Global GTIN)',
+      code: '8906000000010',
       fallbackData: {
-        medicine: 'Vitamin D3 60K',
-        batch: 'VD102',
-        expiry: 'Sep 2026',
-        quantity: 180,
-        supplier: 'HealthCare Labs',
-        unitPrice: 65,
-        barcode: '890103400102',
+        medicine: 'Dolo 650 Tablets',
+        batch: 'DOL-2601',
+        expiry: 'Dec 2027',
+        quantity: 100,
+        supplier: 'Micro Labs Limited',
+        unitPrice: 32,
+        barcode: '8906000000010',
       },
     },
     {
-      label: 'CTZ302 · Cetirizine 10mg',
-      code: '890103400104',
+      label: 'Pantoprazole 40mg (Global GTIN)',
+      code: '8906000000027',
       fallbackData: {
-        medicine: 'Cetirizine 10mg',
-        batch: 'CTZ302',
-        expiry: 'Jan 2027',
-        quantity: 300,
-        supplier: 'Nova Pharma',
-        unitPrice: 35,
-        barcode: '890103400104',
-      },
-    },
-    {
-      label: 'MET624 · Metformin 500mg',
-      code: '890103400106',
-      fallbackData: {
-        medicine: 'Metformin 500mg',
-        batch: 'MET624',
-        expiry: 'Feb 2028',
+        medicine: 'Pantoprazole 40mg Gastro-Resistant Tablets',
+        batch: 'PAN-2609',
+        expiry: 'Oct 2027',
         quantity: 200,
-        supplier: 'ABC Pharma',
-        unitPrice: 45,
-        barcode: '890103400106',
+        supplier: 'Alkem Laboratories Ltd',
+        unitPrice: 55,
+        barcode: '8906000000027',
+      },
+    },
+    {
+      label: 'Amlodipine 5mg (Global GTIN)',
+      code: '8906000000034',
+      fallbackData: {
+        medicine: 'Amlodipine 5mg Tablets',
+        batch: 'AML-2604',
+        expiry: 'Nov 2027',
+        quantity: 150,
+        supplier: 'Micro Labs Limited',
+        unitPrice: 28,
+        barcode: '8906000000034',
       },
     },
   ];
@@ -178,11 +193,14 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     if (!searchCode) return;
 
     console.log(`[Lookup] Searching: ${searchCode}`);
-    console.log(`[Lookup] Request started`);
+    console.log(`[Lookup] Multi-source query started`);
 
     setIsLookingUp(true);
     setLookupError(null);
-    setLookupMessage(`Looking up barcode [${searchCode}] in inventory database...`);
+    setIsExternalResult(false);
+    setExternalProductDetails(null);
+    setIsManualAddMode(false);
+    setLookupMessage(`Searching PharmaFlow inventory for code [${searchCode}]...`);
 
     // Ensure scroll to top of modal so result banner is immediately visible
     if (modalScrollRef.current) {
@@ -191,29 +209,65 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
 
     try {
       const res = await api.lookupBarcode(searchCode);
-      console.log(`[Lookup] Response: 200 OK`);
+      console.log(`[Lookup] Response: 200 OK`, res);
       setIsLookingUp(false);
 
-      if (res && res.found && res.medicine) {
-        console.log(`[Lookup] Result: found (${res.medicine.medicine || res.medicine.medicineName})`);
-        setIsFoundInDb(true);
-        const med = res.medicine;
-        setLookupMessage(`Medicine Found: ${med.medicine || med.medicineName || searchCode}`);
-        setVerifyForm({
-          medicine: med.medicine || med.medicineName || scanned.medicine || `Product (${searchCode})`,
-          // Only use batch & expiry if explicitly provided in scanned QR/GS1 payload or existing stock
-          batch: scanned.batch || med.batch || med.batchNumber || '',
-          expiry: scanned.expiry || med.expiry || med.expiryDate || '',
-          quantity: scanned.quantity || med.quantity || 100,
-          supplier: med.supplier || scanned.supplier || 'ABC Pharma',
-          unitPrice: med.unitPrice || scanned.unitPrice || 45,
-          barcode: searchCode,
-          productCode: med.productCode || searchCode,
-        });
+      if (res && res.found) {
+        if (res.foundInLocalInventory || (!res.isExternal && res.medicine)) {
+          // Local Inventory Match
+          console.log(`[Lookup] Match: Local Inventory (${res.medicine?.medicine || res.medicine?.medicineName})`);
+          setIsFoundInDb(true);
+          setIsExternalResult(false);
+          setLookupSource(res.source || 'Local PharmaFlow Inventory');
+          setSourceConfidence(res.sourceConfidence || 'Exact Match');
+          const med = res.medicine || {};
+          setLookupMessage(`Medicine Found in Local Inventory: ${med.medicine || med.medicineName || searchCode}`);
+          setVerifyForm({
+            medicine: med.medicine || med.medicineName || scanned.medicine || `Product (${searchCode})`,
+            batch: scanned.batch || med.batch || med.batchNumber || '',
+            expiry: scanned.expiry || med.expiry || med.expiryDate || '',
+            quantity: scanned.quantity || med.quantity || 100,
+            supplier: med.supplier || scanned.supplier || 'ABC Pharma',
+            unitPrice: med.unitPrice || scanned.unitPrice || 45,
+            barcode: searchCode,
+            productCode: med.productCode || searchCode,
+            genericName: med.genericName || '',
+          });
+        } else if (res.isExternal && res.product) {
+          // External Global Product Database Match
+          console.log(`[Lookup] Match: External Source (${res.source}) -> ${res.product.medicine}`);
+          setIsFoundInDb(true);
+          setIsExternalResult(true);
+          setLookupSource(res.source || 'Global Product Database');
+          setSourceConfidence(res.sourceConfidence || 'High (Verified)');
+          setExternalProductDetails({
+            brand: res.product.brand,
+            manufacturer: res.product.manufacturer,
+            strength: res.product.strength,
+            dosageForm: res.product.dosageForm,
+            packSize: res.product.packSize,
+            category: res.product.category,
+          });
+          setLookupMessage(`Product Identified Externally (${res.source}). Not currently in this pharmacy inventory.`);
+          setVerifyForm({
+            medicine: res.product.medicine || scanned.medicine || `Product (${searchCode})`,
+            batch: scanned.batch || '',
+            expiry: scanned.expiry || '',
+            quantity: scanned.quantity || 100,
+            supplier: res.product.manufacturer || scanned.supplier || 'Standard Distributor',
+            unitPrice: scanned.unitPrice || 45,
+            barcode: searchCode,
+            productCode: res.product.productCode || searchCode,
+            genericName: res.product.genericName || '',
+          });
+        }
       } else {
-        console.log(`[Lookup] Result: not found in Firestore`);
+        // Not Found in Local Inventory or External Databases
+        console.log(`[Lookup] Result: Not identified in any database`);
         setIsFoundInDb(false);
-        setLookupMessage(`Barcode Not Found: No medicine matches code [${searchCode}] in current inventory.`);
+        setIsExternalResult(true);
+        setLookupSource('None');
+        setLookupMessage(`Product could not be identified from the available barcode databases.`);
         setVerifyForm({
           medicine: scanned.medicine || '',
           batch: scanned.batch || '',
@@ -223,13 +277,14 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
           unitPrice: scanned.unitPrice || 45,
           barcode: searchCode,
           productCode: searchCode,
+          genericName: '',
         });
       }
     } catch (err: any) {
       console.error(`[Lookup] Request failed:`, err);
-      console.log(`[Lookup] Result: error (${err?.message || 'Network/Server Error'})`);
       setIsLookingUp(false);
       setIsFoundInDb(false);
+      setIsExternalResult(false);
       setLookupError(err?.message || 'Lookup request failed. Check server connection.');
       setLookupMessage(`Lookup Failed: Could not query database for code [${searchCode}].`);
       setVerifyForm({
@@ -241,6 +296,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
         unitPrice: 45,
         barcode: searchCode,
         productCode: searchCode,
+        genericName: '',
       });
     }
   }, []);
@@ -268,22 +324,15 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
         }
       }, 2500);
 
-      // Launch continuous multi-engine frame decoder with candidate feedback
+      // Launch continuous frame decoder
       scannerSessionRef.current = startContinuousScanner(
         videoRef.current,
         (scannedData) => {
-          // Stop active camera stream when a validated stable barcode is detected
+          // Stop active camera stream when barcode is detected
           cleanupScanner();
           setDetectedResult(scannedData);
           setCandidateNotice(null);
           executeMedicineLookup(scannedData);
-        },
-        (feedback) => {
-          if (feedback.status === 'VALIDATING') {
-            setCandidateNotice(`Candidate detected: ${feedback.code} (${feedback.format}) · Validating stability...`);
-          } else if (feedback.status === 'INVALID') {
-            setCandidateNotice(`Unreliable pattern rejected (${feedback.reason || 'invalid format'}). Keep barcode horizontal.`);
-          }
         }
       );
     } catch (err: any) {
@@ -358,10 +407,74 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     onClose();
   };
 
+  // Handle adding external or newly identified product directly to Firestore inventory
+  const handleAddToInventoryAndApply = async () => {
+    if (!verifyForm.medicine.trim()) {
+      setLookupError('Medicine name is required.');
+      return;
+    }
+    const finalBatch = verifyForm.batch.trim().toUpperCase() || `BTH${Math.floor(100 + Math.random() * 900)}`;
+    const finalExpiry = verifyForm.expiry.trim() || 'Dec 2027';
+    const finalQty = Number(verifyForm.quantity) || 100;
+    const finalPrice = Number(verifyForm.unitPrice) || 45;
+    const finalSupplier = verifyForm.supplier.trim() || 'Standard Distributor';
+
+    setIsSavingToInventory(true);
+    try {
+      if (isExternalResult || isManualAddMode) {
+        await api.addMedicine({
+          medicine: verifyForm.medicine.trim(),
+          batch: finalBatch,
+          expiry: finalExpiry,
+          quantity: finalQty,
+          supplier: finalSupplier,
+          unitPrice: finalPrice,
+          barcode: verifyForm.barcode.trim(),
+          genericName: verifyForm.genericName?.trim(),
+          status: 'Available',
+        });
+      }
+
+      onScan({
+        medicine: verifyForm.medicine.trim(),
+        batch: finalBatch,
+        expiry: finalExpiry,
+        quantity: finalQty,
+        supplier: finalSupplier,
+        unitPrice: finalPrice,
+        barcode: verifyForm.barcode.trim(),
+        productCode: verifyForm.productCode.trim(),
+      });
+      setIsSavingToInventory(false);
+      onClose();
+    } catch (err: any) {
+      console.error('Failed to save medicine to inventory:', err);
+      setIsSavingToInventory(false);
+      onScan({
+        medicine: verifyForm.medicine.trim(),
+        batch: finalBatch,
+        expiry: finalExpiry,
+        quantity: finalQty,
+        supplier: finalSupplier,
+        unitPrice: finalPrice,
+        barcode: verifyForm.barcode.trim(),
+        productCode: verifyForm.productCode.trim(),
+      });
+      onClose();
+    }
+  };
+
   // Handle manual code lookup (works seamlessly with or without active camera)
   const handleManualLookup = async () => {
     const code = normalizeBarcode(customCode);
-    if (!code || manualSearching) return;
+    if (!code) {
+      setLookupError('Please enter a barcode, GTIN, product code, or batch number.');
+      setLookupMessage('Enter a barcode, GTIN, product code, or batch number.');
+      setIsFoundInDb(false);
+      return;
+    }
+
+    if (manualSearching || isLookingUp) return;
 
     setManualSearching(true);
     // Stop camera if running
@@ -503,6 +616,58 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
 
         {/* Modal Body */}
         <div style={{ padding: 22 }}>
+          {/* DIAGNOSTIC HUD — REAL-TIME PIPELINE MONITOR */}
+          <div
+            style={{
+              background: 'rgba(0, 0, 0, 0.55)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 12,
+              padding: '10px 14px',
+              marginBottom: 16,
+              fontFamily: 'monospace',
+              fontSize: 11.5,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+              gap: 8,
+            }}
+          >
+            <div>
+              <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>Camera:</span>
+              <span style={{ color: status === 'SCANNING' ? '#4ADE80' : status === 'INITIALIZING' ? '#FBBF24' : '#EF4444', fontWeight: 700 }}>
+                {status === 'SCANNING' ? 'READY' : status}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>Decoder:</span>
+              <span style={{ color: status === 'SCANNING' && !detectedResult ? '#4ADE80' : '#A3B19B', fontWeight: 700 }}>
+                {status === 'SCANNING' && !detectedResult ? 'RUNNING' : 'STOPPED'}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>Detected code:</span>
+              <span style={{ color: detectedResult ? '#4ADE80' : '#E5E5E0', fontWeight: 700 }}>
+                {detectedResult ? (detectedResult.barcode || detectedResult.rawText) : 'None'}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>Detected format:</span>
+              <span style={{ color: detectedResult ? '#60A5FA' : '#E5E5E0', fontWeight: 700 }}>
+                {detectedResult ? detectedResult.format : 'None'}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>Lookup:</span>
+              <span
+                style={{
+                  color: isLookingUp ? '#60A5FA' : isFoundInDb === true ? '#4ADE80' : isFoundInDb === false ? '#F59E0B' : '#E5E5E0',
+                  fontWeight: 700,
+                }}
+              >
+                {isLookingUp ? 'SEARCHING' : isFoundInDb === true ? 'FOUND' : isFoundInDb === false ? 'NOT FOUND' : 'NOT STARTED'}
+              </span>
+            </div>
+          </div>
+
           {/* CAMERA FEED OR VERIFICATION VIEW */}
           {!detectedResult ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -901,15 +1066,19 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                 style={{
                   background: isLookingUp
                     ? 'rgba(59, 130, 246, 0.12)'
-                    : isFoundInDb
+                    : isFoundInDb && !isExternalResult
                     ? 'rgba(16, 185, 129, 0.12)'
+                    : isFoundInDb && isExternalResult
+                    ? 'rgba(6, 182, 212, 0.12)'
                     : lookupError
                     ? 'rgba(239, 68, 68, 0.12)'
                     : 'rgba(245, 158, 11, 0.12)',
                   border: isLookingUp
                     ? '1px solid rgba(59, 130, 246, 0.3)'
-                    : isFoundInDb
+                    : isFoundInDb && !isExternalResult
                     ? '1px solid rgba(16, 185, 129, 0.3)'
+                    : isFoundInDb && isExternalResult
+                    ? '1px solid rgba(6, 182, 212, 0.3)'
                     : lookupError
                     ? '1px solid rgba(239, 68, 68, 0.3)'
                     : '1px solid rgba(245, 158, 11, 0.3)',
@@ -922,48 +1091,71 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
               >
                 {isLookingUp ? (
                   <RotateCw size={22} color="#60A5FA" className="animate-spin" style={{ flexShrink: 0, marginTop: 2 }} />
-                ) : isFoundInDb ? (
+                ) : isFoundInDb && !isExternalResult ? (
                   <CheckCircle2 size={22} color="#10B981" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : isFoundInDb && isExternalResult ? (
+                  <Sparkles size={22} color="#06B6D4" style={{ flexShrink: 0, marginTop: 2 }} />
                 ) : lookupError ? (
                   <XCircle size={22} color="#EF4444" style={{ flexShrink: 0, marginTop: 2 }} />
                 ) : (
                   <AlertTriangle size={22} color="#F59E0B" style={{ flexShrink: 0, marginTop: 2 }} />
                 )}
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                     <h4
                       style={{
                         fontWeight: 700,
                         fontSize: 14,
                         color: isLookingUp
                           ? '#93C5FD'
-                          : isFoundInDb
+                          : isFoundInDb && !isExternalResult
                           ? '#6EE7B7'
+                          : isFoundInDb && isExternalResult
+                          ? '#67E8F9'
                           : lookupError
                           ? '#FCA5A5'
                           : '#FCD34D',
                       }}
                     >
                       {isLookingUp
-                        ? 'LOOKING UP MEDICINE...'
-                        : isFoundInDb
-                        ? 'MEDICINE FOUND'
+                        ? 'SEARCHING INVENTORY & GLOBAL DATABASES...'
+                        : isFoundInDb && !isExternalResult
+                        ? 'MEDICINE FOUND IN LOCAL INVENTORY'
+                        : isFoundInDb && isExternalResult
+                        ? 'PRODUCT IDENTIFIED EXTERNALLY'
                         : lookupError
                         ? 'LOOKUP FAILED'
-                        : 'BARCODE NOT FOUND IN INVENTORY'}
+                        : 'PRODUCT NOT IDENTIFIED'}
                     </h4>
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        color: '#A3B19B',
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        padding: '2px 8px',
-                        borderRadius: 6,
-                      }}
-                    >
-                      Format: {detectedResult.format}
-                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {isFoundInDb && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: isExternalResult ? '#22D3EE' : '#34D399',
+                            background: isExternalResult ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            border: `1px solid ${isExternalResult ? 'rgba(6, 182, 212, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                          }}
+                        >
+                          {lookupSource}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#A3B19B',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                        }}
+                      >
+                        {detectedResult.format}
+                      </span>
+                    </div>
                   </div>
 
                   <div style={{ marginTop: 6, fontSize: 12.5, color: '#FFFFFF', fontWeight: 600 }}>
@@ -971,131 +1163,248 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                   </div>
 
                   <p style={{ fontSize: 12, color: '#D1D5DB', marginTop: 4 }}>
-                    {isLookingUp ? `Looking up barcode [${detectedResult.barcode || detectedResult.rawText}]...` : lookupMessage}
+                    {isLookingUp ? `Querying local database & global product registries for [${detectedResult.barcode || detectedResult.rawText}]...` : lookupMessage}
                   </p>
-                  <p style={{ fontSize: 11, color: '#9CAE98', marginTop: 4 }}>
-                    Please verify the medicine details before applying to the batch form.
-                  </p>
+
+                  {isFoundInDb && isExternalResult && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 11.5,
+                        color: '#E0F2FE',
+                        background: 'rgba(6, 182, 212, 0.12)',
+                        padding: '6px 12px',
+                        borderRadius: 8,
+                        border: '1px solid rgba(6, 182, 212, 0.25)',
+                      }}
+                    >
+                      ℹ️ <strong>Not currently in this pharmacy inventory.</strong> Product details were identified from global databases. Please verify batch number, expiry date, quantity, and supplier before saving.
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Editable Verification Form */}
-              <div
-                style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: 14,
-                  padding: 18,
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 14,
-                }}
-              >
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Package size={13} color="#4ADE80" /> Medicine Name *
-                  </label>
-                  <input
-                    className="input"
-                    value={verifyForm.medicine}
-                    onChange={e => setVerifyForm({ ...verifyForm, medicine: e.target.value })}
-                    placeholder="e.g. Paracetamol 500mg"
-                    style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Layers size={13} color="#4ADE80" /> Batch Number *
-                  </label>
-                  <input
-                    className="input"
-                    value={verifyForm.batch}
-                    onChange={e => setVerifyForm({ ...verifyForm, batch: e.target.value.toUpperCase() })}
-                    placeholder="e.g. PCT101"
-                    style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Calendar size={13} color="#4ADE80" /> Expiry Date *
-                  </label>
-                  <input
-                    className="input"
-                    value={verifyForm.expiry}
-                    onChange={e => setVerifyForm({ ...verifyForm, expiry: e.target.value })}
-                    placeholder="e.g. Nov 2027"
-                    style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Package size={13} color="#4ADE80" /> Quantity (Units) *
-                  </label>
-                  <input
-                    className="input"
-                    type="number"
-                    value={verifyForm.quantity}
-                    onChange={e => setVerifyForm({ ...verifyForm, quantity: Number(e.target.value) || 0 })}
-                    placeholder="100"
-                    style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <DollarSign size={13} color="#4ADE80" /> Unit Price (₹)
-                  </label>
-                  <input
-                    className="input"
-                    type="number"
-                    value={verifyForm.unitPrice}
-                    onChange={e => setVerifyForm({ ...verifyForm, unitPrice: Number(e.target.value) || 0 })}
-                    placeholder="45"
-                    style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Building2 size={13} color="#4ADE80" /> Supplier / Distributor
-                  </label>
-                  <input
-                    className="input"
-                    value={verifyForm.supplier}
-                    onChange={e => setVerifyForm({ ...verifyForm, supplier: e.target.value })}
-                    placeholder="e.g. ABC Pharma / MediSource"
-                    style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-                  />
-                </div>
-              </div>
-
-              {/* Verification Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
-                <button
-                  onClick={handleRescan}
-                  className="btn btn-secondary"
-                  style={{ fontSize: 12.5, padding: '8px 16px', color: '#E5E5E0', borderColor: 'rgba(255, 255, 255, 0.2)' }}
-                >
-                  <RefreshCw size={14} /> Scan Another Barcode
-                </button>
-
-                <button
-                  onClick={handleConfirmVerification}
-                  className="btn btn-teal"
+              {/* External Product Metadata Card */}
+              {isFoundInDb && isExternalResult && externalProductDetails && (
+                <div
                   style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    padding: '8px 20px',
-                    background: 'linear-gradient(135deg, #10B981, #059669)',
-                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    background: 'rgba(6, 182, 212, 0.06)',
+                    border: '1px solid rgba(6, 182, 212, 0.18)',
+                    borderRadius: 12,
+                    padding: '12px 16px',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                    gap: 10,
+                    fontSize: 11.5,
                   }}
                 >
-                  <CheckCircle2 size={15} /> Confirm & Apply to Batch Form
-                </button>
-              </div>
+                  <div>
+                    <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>MANUFACTURER:</span>
+                    <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{externalProductDetails.manufacturer || 'External Manufacturer'}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>BRAND / TRADE:</span>
+                    <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{externalProductDetails.brand || verifyForm.medicine}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>STRENGTH & FORM:</span>
+                    <span style={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      {externalProductDetails.strength ? `${externalProductDetails.strength} · ` : ''}{externalProductDetails.dosageForm || 'Oral Form'}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#7E8F7A', display: 'block', fontSize: 10, fontWeight: 700 }}>SOURCE & CONFIDENCE:</span>
+                    <span style={{ color: '#22D3EE', fontWeight: 700 }}>{lookupSource} ({sourceConfidence})</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Unidentified Barcode Guidance */}
+              {!isFoundInDb && !isLookingUp && !isManualAddMode ? (
+                <div
+                  style={{
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.2)',
+                    borderRadius: 12,
+                    padding: '16px 20px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <AlertTriangle size={32} color="#F59E0B" style={{ margin: '0 auto 8px' }} />
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: '#FCD34D' }}>
+                    Product could not be identified from the available barcode databases.
+                  </p>
+                  <p style={{ fontSize: 11.5, color: '#E5E5E0', marginTop: 4, maxWidth: 420, margin: '4px auto 14px' }}>
+                    Detected Barcode: <strong style={{ color: '#4ADE80', fontFamily: 'monospace' }}>{detectedResult.barcode || detectedResult.rawText}</strong>
+                    <br />
+                    You can add this medicine manually to your inventory or scan a different package.
+                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
+                    <button
+                      onClick={handleRescan}
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12.5, padding: '8px 16px', color: '#E5E5E0' }}
+                    >
+                      <RefreshCw size={14} /> Try Again / Rescan
+                    </button>
+                    <button
+                      onClick={() => setIsManualAddMode(true)}
+                      className="btn btn-teal"
+                      style={{ fontSize: 12.5, padding: '8px 18px', fontWeight: 700 }}
+                    >
+                      <Package size={14} /> Add Medicine Manually
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Editable Pharmacist Verification Form */
+                <>
+                  <div
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 14,
+                      padding: 18,
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 14,
+                    }}
+                  >
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Package size={13} color="#4ADE80" /> Medicine Name *
+                      </label>
+                      <input
+                        className="input"
+                        value={verifyForm.medicine}
+                        onChange={e => setVerifyForm({ ...verifyForm, medicine: e.target.value })}
+                        placeholder="e.g. Paracetamol 500mg"
+                        style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Layers size={13} color="#4ADE80" /> Batch Number *
+                      </label>
+                      <input
+                        className="input"
+                        value={verifyForm.batch}
+                        onChange={e => setVerifyForm({ ...verifyForm, batch: e.target.value.toUpperCase() })}
+                        placeholder="e.g. PCT101 or BTH260"
+                        style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Calendar size={13} color="#4ADE80" /> Expiry Date *
+                      </label>
+                      <input
+                        className="input"
+                        value={verifyForm.expiry}
+                        onChange={e => setVerifyForm({ ...verifyForm, expiry: e.target.value })}
+                        placeholder="e.g. Nov 2027"
+                        style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Package size={13} color="#4ADE80" /> Quantity (Units) *
+                      </label>
+                      <input
+                        className="input"
+                        type="number"
+                        value={verifyForm.quantity}
+                        onChange={e => setVerifyForm({ ...verifyForm, quantity: Number(e.target.value) || 0 })}
+                        placeholder="100"
+                        style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <DollarSign size={13} color="#4ADE80" /> Unit Price (₹)
+                      </label>
+                      <input
+                        className="input"
+                        type="number"
+                        value={verifyForm.unitPrice}
+                        onChange={e => setVerifyForm({ ...verifyForm, unitPrice: Number(e.target.value) || 0 })}
+                        placeholder="45"
+                        style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+                      />
+                    </div>
+
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: '#A3B19B', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Building2 size={13} color="#4ADE80" /> Supplier / Manufacturer
+                      </label>
+                      <input
+                        className="input"
+                        value={verifyForm.supplier}
+                        onChange={e => setVerifyForm({ ...verifyForm, supplier: e.target.value })}
+                        placeholder="e.g. ABC Pharma / MediSource Distributors"
+                        style={{ background: 'rgba(0, 0, 0, 0.4)', color: 'white', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Verification Action Buttons */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+                    <button
+                      onClick={handleRescan}
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12.5, padding: '8px 16px', color: '#E5E5E0', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+                    >
+                      <RefreshCw size={14} /> Scan Another Barcode
+                    </button>
+
+                    {isExternalResult || isManualAddMode ? (
+                      <button
+                        onClick={handleAddToInventoryAndApply}
+                        disabled={isSavingToInventory}
+                        className="btn btn-teal"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          padding: '8px 20px',
+                          background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+                          boxShadow: '0 4px 14px rgba(6, 182, 212, 0.35)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        {isSavingToInventory ? (
+                          <>
+                            <RotateCw size={15} className="animate-spin" /> Saving to Inventory...
+                          </>
+                        ) : (
+                          <>
+                            <Package size={15} /> Verify & Add to Inventory
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleConfirmVerification}
+                        className="btn btn-teal"
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          padding: '8px 20px',
+                          background: 'linear-gradient(135deg, #10B981, #059669)',
+                          boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                        }}
+                      >
+                        <CheckCircle2 size={15} /> Confirm & Apply to Batch Form
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

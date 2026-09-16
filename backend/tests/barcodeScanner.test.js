@@ -332,7 +332,7 @@ async function runBarcodeTests() {
       if (res.status !== 200) throw new Error(`Status ${res.status}`);
       if (res.body.found !== false) throw new Error('Found should be false');
       if (res.body.code !== '999888777666') throw new Error('Code should be reflected');
-      if (!res.body.message.includes('Barcode detected, but no matching medicine was found')) {
+      if (!res.body.message.includes('Product could not be identified') && !res.body.message.includes('no matching medicine')) {
         throw new Error(`Unexpected message: ${res.body.message}`);
       }
     });
