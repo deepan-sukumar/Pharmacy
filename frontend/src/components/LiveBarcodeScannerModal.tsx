@@ -68,6 +68,9 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
   const [flashlight, setFlashlight] = useState<boolean>(false);
   const [isSlowFeed, setIsSlowFeed] = useState<boolean>(false);
 
+  // Candidate frame feedback
+  const [candidateNotice, setCandidateNotice] = useState<string | null>(null);
+
   // Scanned / Lookup state
   const [detectedResult, setDetectedResult] = useState<ScannedMedicineData | null>(null);
   const [isLookingUp, setIsLookingUp] = useState<boolean>(false);
@@ -198,13 +201,14 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
         setLookupMessage(`Medicine Found: ${med.medicine || med.medicineName || searchCode}`);
         setVerifyForm({
           medicine: med.medicine || med.medicineName || scanned.medicine || `Product (${searchCode})`,
-          batch: med.batch || med.batchNumber || scanned.batch || '',
-          expiry: med.expiry || med.expiryDate || scanned.expiry || '',
-          quantity: med.quantity || scanned.quantity || 100,
+          // Only use batch & expiry if explicitly provided in scanned QR/GS1 payload or existing stock
+          batch: scanned.batch || med.batch || med.batchNumber || '',
+          expiry: scanned.expiry || med.expiry || med.expiryDate || '',
+          quantity: scanned.quantity || med.quantity || 100,
           supplier: med.supplier || scanned.supplier || 'ABC Pharma',
           unitPrice: med.unitPrice || scanned.unitPrice || 45,
           barcode: searchCode,
-          productCode: med.productCode || med.batch || searchCode,
+          productCode: med.productCode || searchCode,
         });
       } else {
         console.log(`[Lookup] Result: not found in Firestore`);
@@ -212,7 +216,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
         setLookupMessage(`Barcode Not Found: No medicine matches code [${searchCode}] in current inventory.`);
         setVerifyForm({
           medicine: scanned.medicine || '',
-          batch: scanned.batch || (searchCode.length <= 10 && /^[A-Z0-9-]+$/i.test(searchCode) ? searchCode.toUpperCase() : ''),
+          batch: scanned.batch || '',
           expiry: scanned.expiry || '',
           quantity: scanned.quantity || 100,
           supplier: scanned.supplier || 'ABC Pharma',
@@ -248,6 +252,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     cleanupScanner();
     setStatus('INITIALIZING');
     setIsSlowFeed(false);
+    setCandidateNotice(null);
 
     try {
       const info = await startCameraStream(videoRef.current);
@@ -263,13 +268,24 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
         }
       }, 2500);
 
-      // Launch continuous multi-engine frame decoder
-      scannerSessionRef.current = startContinuousScanner(videoRef.current, (scannedData) => {
-        // Stop active camera stream when barcode is detected
-        cleanupScanner();
-        setDetectedResult(scannedData);
-        executeMedicineLookup(scannedData);
-      });
+      // Launch continuous multi-engine frame decoder with candidate feedback
+      scannerSessionRef.current = startContinuousScanner(
+        videoRef.current,
+        (scannedData) => {
+          // Stop active camera stream when a validated stable barcode is detected
+          cleanupScanner();
+          setDetectedResult(scannedData);
+          setCandidateNotice(null);
+          executeMedicineLookup(scannedData);
+        },
+        (feedback) => {
+          if (feedback.status === 'VALIDATING') {
+            setCandidateNotice(`Candidate detected: ${feedback.code} (${feedback.format}) · Validating stability...`);
+          } else if (feedback.status === 'INVALID') {
+            setCandidateNotice(`Unreliable pattern rejected (${feedback.reason || 'invalid format'}). Keep barcode horizontal.`);
+          }
+        }
+      );
     } catch (err: any) {
       console.error('Camera initialization error:', err);
       const msg = err?.message || '';
@@ -295,6 +311,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       setLookupMessage('');
       setLookupError(null);
       setCustomCode('');
+      setCandidateNotice(null);
       const timer = setTimeout(() => {
         initCameraAndScanner();
       }, 50);
@@ -305,6 +322,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       setIsFoundInDb(null);
       setLookupMessage('');
       setLookupError(null);
+      setCandidateNotice(null);
     }
   }, [isOpen, initCameraAndScanner, cleanupScanner]);
 
@@ -321,6 +339,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     setIsFoundInDb(null);
     setLookupMessage('');
     setLookupError(null);
+    setCandidateNotice(null);
     initCameraAndScanner();
   };
 
@@ -530,10 +549,10 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                     <div
                       style={{
                         position: 'absolute',
-                        top: 20,
-                        left: 24,
-                        width: 28,
-                        height: 28,
+                        top: 25,
+                        left: 28,
+                        width: 32,
+                        height: 32,
                         borderTop: '3.5px solid #4ADE80',
                         borderLeft: '3.5px solid #4ADE80',
                         borderRadius: '6px 0 0 0',
@@ -543,10 +562,10 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                     <div
                       style={{
                         position: 'absolute',
-                        top: 20,
-                        right: 24,
-                        width: 28,
-                        height: 28,
+                        top: 25,
+                        right: 28,
+                        width: 32,
+                        height: 32,
                         borderTop: '3.5px solid #4ADE80',
                         borderRight: '3.5px solid #4ADE80',
                         borderRadius: '0 6px 0 0',
@@ -556,10 +575,10 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                     <div
                       style={{
                         position: 'absolute',
-                        bottom: 20,
-                        left: 24,
-                        width: 28,
-                        height: 28,
+                        bottom: 25,
+                        left: 28,
+                        width: 32,
+                        height: 32,
                         borderBottom: '3.5px solid #4ADE80',
                         borderLeft: '3.5px solid #4ADE80',
                         borderRadius: '0 0 0 6px',
@@ -569,14 +588,28 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                     <div
                       style={{
                         position: 'absolute',
-                        bottom: 20,
-                        right: 24,
-                        width: 28,
-                        height: 28,
+                        bottom: 25,
+                        right: 28,
+                        width: 32,
+                        height: 32,
                         borderBottom: '3.5px solid #4ADE80',
                         borderRight: '3.5px solid #4ADE80',
                         borderRadius: '0 0 6px 0',
                         filter: 'drop-shadow(0 0 6px rgba(74, 222, 128, 0.8))',
+                      }}
+                    />
+
+                    {/* Horizontal Alignment Target Guideline */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '15%',
+                        right: '15%',
+                        height: 1,
+                        background: 'rgba(74, 222, 128, 0.25)',
+                        borderTop: '1px dashed rgba(74, 222, 128, 0.6)',
+                        pointerEvents: 'none',
                       }}
                     />
 
@@ -585,7 +618,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       style={{
                         position: 'absolute',
                         top: 10,
-                        background: 'rgba(0, 0, 0, 0.65)',
+                        background: 'rgba(0, 0, 0, 0.7)',
                         backdropFilter: 'blur(4px)',
                         padding: '3px 12px',
                         borderRadius: 20,
@@ -600,7 +633,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       }}
                     >
                       <ScanLine size={12} color="#4ADE80" />
-                      ALIGN BARCODE / QR INSIDE FRAME
+                      KEEP BARCODE HORIZONTAL INSIDE FRAME
                     </div>
                   </>
                 )}
@@ -762,17 +795,23 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                   alignItems: 'center',
                   gap: 6,
                   fontSize: 11.5,
-                  color: '#9CAE98',
-                  background: 'rgba(255, 255, 255, 0.04)',
+                  color: candidateNotice ? '#FCD34D' : '#9CAE98',
+                  background: candidateNotice ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255, 255, 255, 0.04)',
                   padding: '5px 14px',
                   borderRadius: 20,
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  border: candidateNotice ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  transition: 'all 0.2s',
+                  maxWidth: 440,
+                  textAlign: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <Info size={13} color="#4ADE80" />
+                <Info size={13} color={candidateNotice ? '#F59E0B' : '#4ADE80'} style={{ flexShrink: 0 }} />
                 <span>
-                  {status === 'SCANNING'
-                    ? 'Scanning for barcode / QR... Hold the package steady & ensure adequate lighting'
+                  {candidateNotice
+                    ? candidateNotice
+                    : status === 'SCANNING'
+                    ? 'Place full barcode inside frame · Hold steady & ensure good lighting'
                     : 'Initializing live camera feed...'}
                 </span>
               </div>
@@ -1130,7 +1169,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ position: 'relative', flex: 1 }}>
                 <input
-                  placeholder="Enter Barcode / GTIN / Batch (e.g. 8906125100108 or PCT101)..."
+                  placeholder="Enter Barcode / GTIN / Batch (e.g. 890103400101 or PCT101)..."
                   value={customCode}
                   onChange={e => setCustomCode(e.target.value)}
                   onKeyDown={e => {

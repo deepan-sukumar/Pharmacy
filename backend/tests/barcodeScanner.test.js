@@ -1,7 +1,7 @@
 /**
  * PharmaFlow Live Barcode / QR Camera Scanner & Lookup Automated Test Suite
  * Tests barcode format parsing, GS1 parsing, backend lookup, GTIN normalization,
- * and pharmacist verification workflow.
+ * CODABAR false-positive rejection, and candidate validation.
  */
 
 const http = require('http');
@@ -41,6 +41,87 @@ function makeRequest(path, method = 'GET', body = null) {
     if (body) req.write(JSON.stringify(body));
     req.end();
   });
+}
+
+function normalizeBarcode(raw) {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/[\r\n\t]+/g, '')
+    .trim();
+}
+
+function validateModulo10Checksum(digits, oddWeight, evenWeight) {
+  if (!/^\d+$/.test(digits) || digits.length < 2) return false;
+  let sum = 0;
+  const len = digits.length;
+  for (let i = 0; i < len - 1; i++) {
+    const weight = i % 2 === 0 ? oddWeight : evenWeight;
+    sum += parseInt(digits[i], 10) * weight;
+  }
+  const expectedCheck = (10 - (sum % 10)) % 10;
+  return expectedCheck === parseInt(digits[len - 1], 10);
+}
+
+function validateBarcodeCandidate(rawCode, formatName) {
+  const clean = normalizeBarcode(rawCode);
+  if (!clean) return { valid: false, reason: 'Empty code' };
+
+  const fmt = (formatName || '').toUpperCase();
+
+  // 1. Explicitly reject CODABAR
+  if (fmt.includes('CODABAR') || fmt.includes('CODA_BAR')) {
+    return { valid: false, reason: 'CODABAR format disallowed (unreliable for pharma inventory)' };
+  }
+
+  // 2. Reject short noise fragments (< 3 characters for 1D barcodes)
+  if (clean.length < 3 && !fmt.includes('QR')) {
+    return { valid: false, reason: 'Too short to be a valid barcode' };
+  }
+
+  // 3. EAN-13 Validation
+  if (fmt.includes('EAN_13') || fmt.includes('EAN13')) {
+    if (!/^\d{13}$/.test(clean)) {
+      return { valid: false, reason: `EAN-13 must be exactly 13 digits (got ${clean.length})` };
+    }
+    const isValidChecksum = validateModulo10Checksum(clean, 1, 3);
+    if (!isValidChecksum) {
+      return { valid: false, reason: 'EAN-13 checksum validation failed' };
+    }
+  }
+
+  // 4. EAN-8 Validation
+  if (fmt.includes('EAN_8') || fmt.includes('EAN8')) {
+    if (!/^\d{8}$/.test(clean)) {
+      return { valid: false, reason: `EAN-8 must be exactly 8 digits (got ${clean.length})` };
+    }
+    const isValidChecksum = validateModulo10Checksum(clean, 3, 1);
+    if (!isValidChecksum) {
+      return { valid: false, reason: 'EAN-8 checksum validation failed' };
+    }
+  }
+
+  // 5. UPC-A Validation
+  if (fmt.includes('UPC_A') || fmt.includes('UPCA')) {
+    if (!/^\d{12}$/.test(clean)) {
+      return { valid: false, reason: `UPC-A must be exactly 12 digits (got ${clean.length})` };
+    }
+    const isValidChecksum = validateModulo10Checksum(clean, 3, 1);
+    if (!isValidChecksum) {
+      return { valid: false, reason: 'UPC-A checksum validation failed' };
+    }
+  }
+
+  // 6. Code 128 / Code 39 Validation
+  if (fmt.includes('CODE_128') || fmt.includes('CODE128') || fmt.includes('CODE_39') || fmt.includes('CODE39')) {
+    if (clean.length < 3) {
+      return { valid: false, reason: 'Code 128/39 must have at least 3 characters' };
+    }
+    if (/^[A-D]\d[A-D]$/i.test(clean)) {
+      return { valid: false, reason: 'False positive delimiter pattern rejected' };
+    }
+  }
+
+  return { valid: true };
 }
 
 function parseBarcodeTextHelper(rawText, format = 'BARCODE') {
@@ -142,8 +223,38 @@ async function runBarcodeTests() {
   }
 
   try {
-    // --- Suite 1: Barcode / QR Payload Parsing ---
-    console.log('--- Test 1: QR & GS1 Barcode Payload Parsing ---');
+    // --- Suite 1: False Positive & CODABAR Rejection ---
+    console.log('--- Test 1: False Positive & CODABAR Rejection ---');
+
+    test('Rejects CODABAR candidate D9D unconditionally', () => {
+      const result = validateBarcodeCandidate('D9D', 'CODABAR');
+      if (result.valid) throw new Error('CODABAR D9D must be rejected');
+    });
+
+    test('Rejects false-positive delimiter pattern in Code 128 / 39 (e.g. D9D, A1A)', () => {
+      const res1 = validateBarcodeCandidate('D9D', 'CODE_128');
+      if (res1.valid) throw new Error('D9D noise pattern must be rejected');
+      const res2 = validateBarcodeCandidate('A1A', 'CODE_39');
+      if (res2.valid) throw new Error('A1A noise pattern must be rejected');
+    });
+
+    test('Rejects invalid length / non-numeric EAN-13', () => {
+      const res = validateBarcodeCandidate('12345', 'EAN_13');
+      if (res.valid) throw new Error('Short EAN-13 must be rejected');
+    });
+
+    test('Validates real EAN-13 barcode checksum (e.g. 5901234123457)', () => {
+      const res = validateBarcodeCandidate('5901234123457', 'EAN_13');
+      if (!res.valid) throw new Error(`Valid EAN-13 should pass validation: ${res.reason}`);
+    });
+
+    test('Validates real EAN-8 barcode checksum (e.g. 96385074)', () => {
+      const res = validateBarcodeCandidate('96385074', 'EAN_8');
+      if (!res.valid) throw new Error(`Valid EAN-8 should pass validation: ${res.reason}`);
+    });
+
+    // --- Suite 2: Barcode / QR Payload Parsing ---
+    console.log('\n--- Test 2: QR & GS1 Barcode Payload Parsing ---');
 
     test('Parses JSON QR payload with medicine, batch, and expiry', () => {
       const jsonStr = JSON.stringify({
@@ -180,8 +291,8 @@ async function runBarcodeTests() {
       if (parsed.expiry !== undefined) throw new Error('Plain barcode should not assume expiry');
     });
 
-    // --- Suite 2: Backend API Lookup by Barcode ---
-    console.log('\n--- Test 2: Backend Barcode Lookup (/api/barcode/lookup/:code) ---');
+    // --- Suite 3: Backend API Lookup by Barcode ---
+    console.log('\n--- Test 3: Backend Barcode Lookup (/api/barcode/lookup/:code) ---');
 
     await asyncTest('Exact barcode lookup finds Paracetamol 500mg (890103400101)', async () => {
       const res = await makeRequest('/api/barcode/lookup/890103400101');
@@ -237,8 +348,8 @@ async function runBarcodeTests() {
       if (med.batchNumber !== 'PCT101') throw new Error('Batch mismatch');
     });
 
-    // --- Suite 3: Preserving Existing Inventory & Non-destructive Operations ---
-    console.log('\n--- Test 3: Inventory Integrity & Presets ---');
+    // --- Suite 4: Preserving Existing Inventory & Non-destructive Operations ---
+    console.log('\n--- Test 4: Inventory Integrity & Presets ---');
 
     await asyncTest('Preserves existing DEMO_PHARMACY inventory records intact', async () => {
       const res = await makeRequest('/api/inventory');

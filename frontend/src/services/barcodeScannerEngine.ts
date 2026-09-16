@@ -38,8 +38,9 @@ export interface CameraInfo {
   isBackFacing: boolean;
 }
 
-// Full suite of pharmaceutical & retail barcode formats
-const SUPPORTED_FORMATS = [
+// Strict pharmaceutical & retail barcode formats.
+// CRITICAL: CODABAR is explicitly EXCLUDED to eliminate false-positive noise (e.g. 'D9D').
+export const ALLOWED_BARCODE_FORMATS = [
   BarcodeFormat.QR_CODE,
   BarcodeFormat.EAN_13,
   BarcodeFormat.EAN_8,
@@ -49,12 +50,11 @@ const SUPPORTED_FORMATS = [
   BarcodeFormat.CODE_39,
   BarcodeFormat.DATA_MATRIX,
   BarcodeFormat.ITF,
-  BarcodeFormat.CODABAR,
 ];
 
-// Configure ZXing decoding hints with TRY_HARDER
+// Configure ZXing decoding hints with TRY_HARDER and strictly filtered formats
 const zxingHints = new Map<DecodeHintType, any>();
-zxingHints.set(DecodeHintType.POSSIBLE_FORMATS, SUPPORTED_FORMATS);
+zxingHints.set(DecodeHintType.POSSIBLE_FORMATS, ALLOWED_BARCODE_FORMATS);
 zxingHints.set(DecodeHintType.TRY_HARDER, true);
 
 /**
@@ -72,8 +72,97 @@ export function normalizeBarcode(raw: string): string {
 }
 
 /**
- * Initializes camera stream with requested constraints and resilient fallback.
- * Guarantees videoRef assignment and play().
+ * Standard Modulo-10 Checksum calculation for EAN-13, EAN-8, and UPC-A.
+ */
+export function validateModulo10Checksum(digits: string, oddWeight: number, evenWeight: number): boolean {
+  if (!/^\d+$/.test(digits) || digits.length < 2) return false;
+  let sum = 0;
+  const len = digits.length;
+  for (let i = 0; i < len - 1; i++) {
+    const weight = i % 2 === 0 ? oddWeight : evenWeight;
+    sum += parseInt(digits[i], 10) * weight;
+  }
+  const expectedCheck = (10 - (sum % 10)) % 10;
+  return expectedCheck === parseInt(digits[len - 1], 10);
+}
+
+/**
+ * Validates candidate barcode against strict format & length rules.
+ * Rejects CODABAR and false-positive fragments.
+ */
+export function validateBarcodeCandidate(rawCode: string, formatName: string): { valid: boolean; reason?: string } {
+  const clean = normalizeBarcode(rawCode);
+  if (!clean) return { valid: false, reason: 'Empty code' };
+
+  const fmt = (formatName || '').toUpperCase();
+
+  // 1. Explicitly reject CODABAR
+  if (fmt.includes('CODABAR') || fmt.includes('CODA_BAR')) {
+    return { valid: false, reason: 'CODABAR format disallowed (unreliable for pharma inventory)' };
+  }
+
+  // 2. Reject short noise fragments (< 3 characters for 1D barcodes)
+  if (clean.length < 3 && !fmt.includes('QR')) {
+    return { valid: false, reason: 'Too short to be a valid barcode' };
+  }
+
+  // 3. EAN-13 Validation
+  if (fmt.includes('EAN_13') || fmt.includes('EAN13')) {
+    if (!/^\d{13}$/.test(clean)) {
+      return { valid: false, reason: `EAN-13 must be exactly 13 digits (got ${clean.length})` };
+    }
+    // Modulo 10 with weights 1, 3
+    const isValidChecksum = validateModulo10Checksum(clean, 1, 3);
+    if (!isValidChecksum) {
+      return { valid: false, reason: 'EAN-13 checksum validation failed' };
+    }
+  }
+
+  // 4. EAN-8 Validation
+  if (fmt.includes('EAN_8') || fmt.includes('EAN8')) {
+    if (!/^\d{8}$/.test(clean)) {
+      return { valid: false, reason: `EAN-8 must be exactly 8 digits (got ${clean.length})` };
+    }
+    const isValidChecksum = validateModulo10Checksum(clean, 3, 1);
+    if (!isValidChecksum) {
+      return { valid: false, reason: 'EAN-8 checksum validation failed' };
+    }
+  }
+
+  // 5. UPC-A Validation
+  if (fmt.includes('UPC_A') || fmt.includes('UPCA')) {
+    if (!/^\d{12}$/.test(clean)) {
+      return { valid: false, reason: `UPC-A must be exactly 12 digits (got ${clean.length})` };
+    }
+    const isValidChecksum = validateModulo10Checksum(clean, 3, 1);
+    if (!isValidChecksum) {
+      return { valid: false, reason: 'UPC-A checksum validation failed' };
+    }
+  }
+
+  // 6. UPC-E Validation
+  if (fmt.includes('UPC_E') || fmt.includes('UPCE')) {
+    if (!/^\d{6,8}$/.test(clean)) {
+      return { valid: false, reason: 'UPC-E must be 6 to 8 digits' };
+    }
+  }
+
+  // 7. Code 128 / Code 39 Validation
+  if (fmt.includes('CODE_128') || fmt.includes('CODE128') || fmt.includes('CODE_39') || fmt.includes('CODE39')) {
+    if (clean.length < 3) {
+      return { valid: false, reason: 'Code 128/39 must have at least 3 characters' };
+    }
+    // Disallow pure noise patterns
+    if (/^[A-D]\d[A-D]$/i.test(clean)) {
+      return { valid: false, reason: 'False positive delimiter pattern rejected' };
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Initializes camera stream with requested constraints, continuous autofocus, and resilient fallback.
  */
 export async function startCameraStream(videoElement: HTMLVideoElement): Promise<CameraInfo> {
   if (!navigator?.mediaDevices?.getUserMedia) {
@@ -137,6 +226,20 @@ export async function startCameraStream(videoElement: HTMLVideoElement): Promise
   }
 
   const track = stream.getVideoTracks()[0];
+  if (track) {
+    try {
+      const capabilities = (track.getCapabilities?.() || {}) as any;
+      if (capabilities.focusMode && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes('continuous')) {
+        await (track as any).applyConstraints({
+          advanced: [{ focusMode: 'continuous' }],
+        });
+        console.log('[Scanner] Continuous autofocus enabled');
+      }
+    } catch (focusErr) {
+      console.warn('[Scanner] Autofocus notice:', focusErr);
+    }
+  }
+
   const settings = track ? track.getSettings() : {};
   const label = track?.label || 'Camera Feed';
   const width = settings.width || videoElement.videoWidth || 1280;
@@ -272,17 +375,16 @@ export interface ContinuousScannerSession {
 }
 
 /**
- * Starts continuous frame scanning on the active live video element.
- * Multi-Engine Architecture:
- * 1. Native BarcodeDetector with verified supported format list (hardware accelerated on Android/Chrome)
- * 2. High-Performance Multi-Pass ZXing MultiFormatReader:
- *    - Central Viewfinder Crop (high density 1D line sampling for retail/EAN barcodes)
- *    - Full Frame (for large 2D QR codes)
- *    - Dual Binarization: GlobalHistogramBinarizer (1D retail) + HybridBinarizer (2D QR) + Inverted Binarizer
+ * Starts continuous frame scanning with:
+ * 1. Allowed format restrictions (CODABAR excluded)
+ * 2. Multi-pass frame analysis (Center Crop + Full Frame)
+ * 3. Format & Checksum candidate validation
+ * 4. Multi-frame stability debounce (requires 2 consistent detections within 500ms)
  */
 export function startContinuousScanner(
   videoElement: HTMLVideoElement,
-  onDetected: (data: ScannedMedicineData) => void
+  onDetected: (data: ScannedMedicineData) => void,
+  onCandidateFeedback?: (feedback: { code: string; format: string; status: 'VALIDATING' | 'INVALID'; reason?: string }) => void
 ): ContinuousScannerSession {
   let isStopped = false;
   let isLocked = false;
@@ -290,9 +392,16 @@ export function startContinuousScanner(
   let scanIntervalId: any = null;
 
   console.log(`[Scanner] Decoder initialized`);
+  console.log(`[Scanner] Formats enabled: QR_CODE, EAN_13, EAN_8, UPC_A, UPC_E, CODE_128, CODE_39, DATA_MATRIX, ITF (CODABAR DISABLED)`);
 
   const zxingReader = new MultiFormatReader();
   zxingReader.setHints(zxingHints);
+
+  // Candidate stability tracking (sliding window debounce)
+  let candidateCode: string = '';
+  let candidateFormat: string = '';
+  let candidateCount: number = 0;
+  let candidateFirstSeen: number = 0;
 
   // Reusable offscreen canvas elements
   const fullCanvas = document.createElement('canvas');
@@ -301,35 +410,65 @@ export function startContinuousScanner(
   const cropCanvas = document.createElement('canvas');
   const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
 
-  const handleDetection = (rawText: string, formatName: string) => {
+  const handleFrameCandidate = (rawText: string, formatName: string) => {
     if (isStopped || isLocked) return;
     const clean = normalizeBarcode(rawText);
     if (!clean) return;
 
-    isLocked = true;
-    isStopped = true;
+    console.log(`[Scanner] Candidate detected: ${clean} (Format: ${formatName})`);
 
-    console.log(`[Scanner] Detected: ${clean}`);
-    console.log(`[Scanner] Format: ${formatName}`);
-
-    if (animationFrameId) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
-    if (scanIntervalId) {
-      clearInterval(scanIntervalId);
-      scanIntervalId = null;
+    // Step 1: Format & Checksum Validation
+    const validation = validateBarcodeCandidate(clean, formatName);
+    if (!validation.valid) {
+      console.log(`[Scanner] Validation: FAILED (${validation.reason})`);
+      onCandidateFeedback?.({ code: clean, format: formatName, status: 'INVALID', reason: validation.reason });
+      return;
     }
 
-    try {
-      zxingReader.reset();
-    } catch {}
+    console.log(`[Scanner] Validation: PASSED`);
 
-    const parsed = parseBarcodeText(clean, formatName);
-    onDetected(parsed);
+    const now = performance.now();
+
+    // Step 2: Multi-frame stability check (Require 2 consistent detections within 500ms)
+    // QR codes with rich JSON/GS1 payloads can be accepted on single strong frame
+    const isQrOrGs1 = formatName.includes('QR') || formatName.includes('MATRIX') || clean.startsWith('{') || clean.includes('(01)');
+
+    if (candidateCode === clean && (now - candidateFirstSeen < 600)) {
+      candidateCount++;
+    } else {
+      candidateCode = clean;
+      candidateFormat = formatName;
+      candidateCount = 1;
+      candidateFirstSeen = now;
+      onCandidateFeedback?.({ code: clean, format: formatName, status: 'VALIDATING' });
+    }
+
+    // Accept immediately for complex 2D QR/GS1, or upon 2 consecutive stable frames for 1D retail barcodes
+    if (candidateCount >= 2 || isQrOrGs1) {
+      isLocked = true;
+      isStopped = true;
+
+      console.log(`[Scanner] Accepted barcode: ${clean} (Format: ${formatName})`);
+
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      if (scanIntervalId) {
+        clearInterval(scanIntervalId);
+        scanIntervalId = null;
+      }
+
+      try {
+        zxingReader.reset();
+      } catch {}
+
+      const parsed = parseBarcodeText(clean, formatName);
+      onDetected(parsed);
+    }
   };
 
-  // Safe Native BarcodeDetector initialization
+  // Safe Native BarcodeDetector initialization (CODABAR excluded)
   let nativeDetector: any = null;
   (async () => {
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
@@ -349,7 +488,7 @@ export function startContinuousScanner(
         if (typeof (window as any).BarcodeDetector.getSupportedFormats === 'function') {
           const supported = await (window as any).BarcodeDetector.getSupportedFormats();
           if (Array.isArray(supported) && supported.length > 0) {
-            formats = formats.filter(f => supported.includes(f));
+            formats = formats.filter(f => supported.includes(f) && !f.includes('codabar'));
           }
         }
 
@@ -375,7 +514,7 @@ export function startContinuousScanner(
         const res = zxingReader.decodeWithState(globalBitmap);
         if (res && res.getText()) {
           const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
-          handleDetection(res.getText(), fmtName);
+          handleFrameCandidate(res.getText(), fmtName);
           return true;
         }
       } catch {}
@@ -386,7 +525,7 @@ export function startContinuousScanner(
         const res = zxingReader.decodeWithState(hybridBitmap);
         if (res && res.getText()) {
           const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
-          handleDetection(res.getText(), fmtName);
+          handleFrameCandidate(res.getText(), fmtName);
           return true;
         }
       } catch {}
@@ -398,7 +537,7 @@ export function startContinuousScanner(
         const res = zxingReader.decodeWithState(invBitmap);
         if (res && res.getText()) {
           const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
-          handleDetection(res.getText(), fmtName);
+          handleFrameCandidate(res.getText(), fmtName);
           return true;
         }
       } catch {}
@@ -420,7 +559,7 @@ export function startContinuousScanner(
     }
 
     const now = performance.now();
-    // Throttle to every ~75ms (~13 FPS) for optimal CPU performance & responsiveness
+    // Throttle to every ~75ms (~13 FPS)
     if (now - lastScanTime < 75) return;
     lastScanTime = now;
 
@@ -436,7 +575,7 @@ export function startContinuousScanner(
           const barcodes = await nativeDetector.detect(videoElement);
           if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
             const item = barcodes[0];
-            handleDetection(item.rawValue, item.format || 'BARCODE');
+            handleFrameCandidate(item.rawValue, item.format || 'BARCODE');
             isScanningFrame = false;
             return;
           }
@@ -444,7 +583,6 @@ export function startContinuousScanner(
       }
 
       // 2. Central Viewfinder Crop Pass (75% width, 55% height centered)
-      // This magnifies 1D barcode lines in the alignment frame for instant recognition
       const cropW = Math.round(vw * 0.75);
       const cropH = Math.round(vh * 0.55);
       const cropX = Math.round((vw - cropW) / 2);
