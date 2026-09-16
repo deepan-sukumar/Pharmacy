@@ -1,10 +1,12 @@
 import {
-  BrowserMultiFormatReader,
+  MultiFormatReader,
   BarcodeFormat,
   DecodeHintType,
-  NotFoundException,
-  ChecksumException,
-  FormatException,
+  HTMLCanvasElementLuminanceSource,
+  BinaryBitmap,
+  HybridBinarizer,
+  GlobalHistogramBinarizer,
+  InvertedLuminanceSource,
 } from '@zxing/library';
 
 export type ScannerStatus =
@@ -36,7 +38,7 @@ export interface CameraInfo {
   isBackFacing: boolean;
 }
 
-// Supported barcode formats
+// Full suite of pharmaceutical & retail barcode formats
 const SUPPORTED_FORMATS = [
   BarcodeFormat.QR_CODE,
   BarcodeFormat.EAN_13,
@@ -50,10 +52,10 @@ const SUPPORTED_FORMATS = [
   BarcodeFormat.CODABAR,
 ];
 
-// Configure decoding hints
-const hints = new Map();
-hints.set(DecodeHintType.POSSIBLE_FORMATS, SUPPORTED_FORMATS);
-hints.set(DecodeHintType.TRY_HARDER, true);
+// Configure ZXing decoding hints with TRY_HARDER
+const zxingHints = new Map<DecodeHintType, any>();
+zxingHints.set(DecodeHintType.POSSIBLE_FORMATS, SUPPORTED_FORMATS);
+zxingHints.set(DecodeHintType.TRY_HARDER, true);
 
 /**
  * Normalizes scanned or entered barcode values.
@@ -140,6 +142,9 @@ export async function startCameraStream(videoElement: HTMLVideoElement): Promise
   const width = settings.width || videoElement.videoWidth || 1280;
   const height = settings.height || videoElement.videoHeight || 720;
   const isBackFacing = settings.facingMode === 'environment' || /back|rear|environment/i.test(label);
+
+  console.log(`[Scanner] Camera ready`);
+  console.log(`[Scanner] Video: ${width}x${height}`);
 
   return {
     stream,
@@ -263,13 +268,17 @@ export function parseBarcodeText(rawText: string, format = 'BARCODE'): ScannedMe
 }
 
 export interface ContinuousScannerSession {
-  reader: BrowserMultiFormatReader;
   stop: () => void;
 }
 
 /**
  * Starts continuous frame scanning on the active live video element.
- * Dual-engine: Native BarcodeDetector (Chrome/Android hardware acceleration) + ZXing BrowserMultiFormatReader.
+ * Multi-Engine Architecture:
+ * 1. Native BarcodeDetector with verified supported format list (hardware accelerated on Android/Chrome)
+ * 2. High-Performance Multi-Pass ZXing MultiFormatReader:
+ *    - Central Viewfinder Crop (high density 1D line sampling for retail/EAN barcodes)
+ *    - Full Frame (for large 2D QR codes)
+ *    - Dual Binarization: GlobalHistogramBinarizer (1D retail) + HybridBinarizer (2D QR) + Inverted Binarizer
  */
 export function startContinuousScanner(
   videoElement: HTMLVideoElement,
@@ -277,7 +286,20 @@ export function startContinuousScanner(
 ): ContinuousScannerSession {
   let isStopped = false;
   let isLocked = false;
-  const reader = new BrowserMultiFormatReader(hints, 80);
+  let animationFrameId: number | null = null;
+  let scanIntervalId: any = null;
+
+  console.log(`[Scanner] Decoder initialized`);
+
+  const zxingReader = new MultiFormatReader();
+  zxingReader.setHints(zxingHints);
+
+  // Reusable offscreen canvas elements
+  const fullCanvas = document.createElement('canvas');
+  const fullCtx = fullCanvas.getContext('2d', { willReadFrequently: true });
+
+  const cropCanvas = document.createElement('canvas');
+  const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
 
   const handleDetection = (rawText: string, formatName: string) => {
     if (isStopped || isLocked) return;
@@ -287,38 +309,32 @@ export function startContinuousScanner(
     isLocked = true;
     isStopped = true;
 
+    console.log(`[Scanner] Detected: ${clean}`);
+    console.log(`[Scanner] Format: ${formatName}`);
+
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+    if (scanIntervalId) {
+      clearInterval(scanIntervalId);
+      scanIntervalId = null;
+    }
+
     try {
-      reader.reset();
+      zxingReader.reset();
     } catch {}
 
     const parsed = parseBarcodeText(clean, formatName);
     onDetected(parsed);
   };
 
-  // Engine 1: ZXing Browser Continuous Decoder
-  try {
-    reader.decodeFromVideoElementContinuously(videoElement, (result, error) => {
-      if (isStopped || isLocked) return;
-      if (result) {
-        const text = result.getText();
-        if (text) {
-          const fmt = result.getBarcodeFormat() !== undefined
-            ? BarcodeFormat[result.getBarcodeFormat()]
-            : 'BARCODE';
-          handleDetection(text, fmt);
-        }
-      }
-    });
-  } catch (readerErr) {
-    console.warn('ZXing decodeFromVideoElementContinuously init warning:', readerErr);
-  }
-
-  // Engine 2: Native BarcodeDetector fast loop (if browser supports it)
-  let nativeLoopId: number | null = null;
-  if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-    try {
-      const nativeDetector = new (window as any).BarcodeDetector({
-        formats: [
+  // Safe Native BarcodeDetector initialization
+  let nativeDetector: any = null;
+  (async () => {
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        let formats: string[] = [
           'qr_code',
           'ean_13',
           'ean_8',
@@ -328,47 +344,171 @@ export function startContinuousScanner(
           'code_39',
           'data_matrix',
           'itf',
-        ],
-      });
+        ];
 
-      let lastNativeScan = 0;
-      const nativeScanLoop = async (now: number) => {
-        if (isStopped || isLocked) return;
-
-        if (now - lastNativeScan > 100) {
-          lastNativeScan = now;
-          if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
-            try {
-              const barcodes = await nativeDetector.detect(videoElement);
-              if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-                const item = barcodes[0];
-                handleDetection(item.rawValue, item.format || 'BARCODE');
-                return;
-              }
-            } catch {}
+        if (typeof (window as any).BarcodeDetector.getSupportedFormats === 'function') {
+          const supported = await (window as any).BarcodeDetector.getSupportedFormats();
+          if (Array.isArray(supported) && supported.length > 0) {
+            formats = formats.filter(f => supported.includes(f));
           }
         }
 
-        nativeLoopId = requestAnimationFrame(nativeScanLoop);
-      };
-
-      nativeLoopId = requestAnimationFrame(nativeScanLoop);
-    } catch (e) {
-      console.warn('Native BarcodeDetector loop init error:', e);
+        if (formats.length > 0) {
+          nativeDetector = new (window as any).BarcodeDetector({ formats });
+        }
+      } catch (nativeErr) {
+        console.warn('Native BarcodeDetector initialization skipped:', nativeErr);
+      }
     }
-  }
+  })();
+
+  // Multi-pass frame decode attempt on a given canvas
+  const tryDecodeCanvas = (canvas: HTMLCanvasElement): boolean => {
+    if (!canvas.width || !canvas.height) return false;
+
+    try {
+      const source = new HTMLCanvasElementLuminanceSource(canvas);
+
+      // Pass 1: GlobalHistogramBinarizer (Best for 1D retail barcodes like EAN-13, EAN-8, UPC, Code 128)
+      try {
+        const globalBitmap = new BinaryBitmap(new GlobalHistogramBinarizer(source));
+        const res = zxingReader.decodeWithState(globalBitmap);
+        if (res && res.getText()) {
+          const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
+          handleDetection(res.getText(), fmtName);
+          return true;
+        }
+      } catch {}
+
+      // Pass 2: HybridBinarizer (Best for 2D matrix / QR codes)
+      try {
+        const hybridBitmap = new BinaryBitmap(new HybridBinarizer(source));
+        const res = zxingReader.decodeWithState(hybridBitmap);
+        if (res && res.getText()) {
+          const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
+          handleDetection(res.getText(), fmtName);
+          return true;
+        }
+      } catch {}
+
+      // Pass 3: Inverted luminance (for dark/reflective packaging)
+      try {
+        const invertedSource = new InvertedLuminanceSource(source);
+        const invBitmap = new BinaryBitmap(new GlobalHistogramBinarizer(invertedSource));
+        const res = zxingReader.decodeWithState(invBitmap);
+        if (res && res.getText()) {
+          const fmtName = res.getBarcodeFormat() !== undefined ? BarcodeFormat[res.getBarcodeFormat()] : 'BARCODE';
+          handleDetection(res.getText(), fmtName);
+          return true;
+        }
+      } catch {}
+    } catch {
+      // no barcode in frame
+    }
+    return false;
+  };
+
+  let isScanningFrame = false;
+  let lastScanTime = 0;
+
+  const processFrame = async () => {
+    if (isStopped || isLocked || isScanningFrame) return;
+
+    // Verify video element is ready with dimensions
+    if (!videoElement || videoElement.readyState < 2 || videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+      return;
+    }
+
+    const now = performance.now();
+    // Throttle to every ~75ms (~13 FPS) for optimal CPU performance & responsiveness
+    if (now - lastScanTime < 75) return;
+    lastScanTime = now;
+
+    isScanningFrame = true;
+
+    try {
+      const vw = videoElement.videoWidth;
+      const vh = videoElement.videoHeight;
+
+      // 1. Try Native BarcodeDetector directly on video if available
+      if (nativeDetector) {
+        try {
+          const barcodes = await nativeDetector.detect(videoElement);
+          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+            const item = barcodes[0];
+            handleDetection(item.rawValue, item.format || 'BARCODE');
+            isScanningFrame = false;
+            return;
+          }
+        } catch {}
+      }
+
+      // 2. Central Viewfinder Crop Pass (75% width, 55% height centered)
+      // This magnifies 1D barcode lines in the alignment frame for instant recognition
+      const cropW = Math.round(vw * 0.75);
+      const cropH = Math.round(vh * 0.55);
+      const cropX = Math.round((vw - cropW) / 2);
+      const cropY = Math.round((vh - cropH) / 2);
+
+      if (cropCtx) {
+        if (cropCanvas.width !== cropW || cropCanvas.height !== cropH) {
+          cropCanvas.width = cropW;
+          cropCanvas.height = cropH;
+        }
+        cropCtx.drawImage(videoElement, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        if (tryDecodeCanvas(cropCanvas)) {
+          isScanningFrame = false;
+          return;
+        }
+      }
+
+      // 3. Full Frame Pass (scaled to 720p or original)
+      if (fullCtx) {
+        const targetW = vw > 1280 ? 1280 : vw;
+        const targetH = Math.round((vh / vw) * targetW);
+
+        if (fullCanvas.width !== targetW || fullCanvas.height !== targetH) {
+          fullCanvas.width = targetW;
+          fullCanvas.height = targetH;
+        }
+        fullCtx.drawImage(videoElement, 0, 0, targetW, targetH);
+        if (tryDecodeCanvas(fullCanvas)) {
+          isScanningFrame = false;
+          return;
+        }
+      }
+    } catch (err) {
+      // non-fatal frame decode cycle catch
+    } finally {
+      isScanningFrame = false;
+    }
+  };
+
+  // Continuous loop using requestAnimationFrame + interval fallback
+  const scanLoop = () => {
+    if (isStopped || isLocked) return;
+    processFrame();
+    animationFrameId = requestAnimationFrame(scanLoop);
+  };
+
+  console.log(`[Scanner] Scan loop started`);
+  animationFrameId = requestAnimationFrame(scanLoop);
+  scanIntervalId = setInterval(processFrame, 90);
 
   return {
-    reader,
     stop: () => {
       isStopped = true;
       isLocked = true;
-      if (nativeLoopId) {
-        cancelAnimationFrame(nativeLoopId);
-        nativeLoopId = null;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      if (scanIntervalId) {
+        clearInterval(scanIntervalId);
+        scanIntervalId = null;
       }
       try {
-        reader.reset();
+        zxingReader.reset();
       } catch {}
     },
   };

@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Info,
   ScanLine,
+  XCircle,
 } from 'lucide-react';
 import {
   startCameraStream,
@@ -56,6 +57,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
   title = 'Medicine Barcode / QR Scanner',
   subtitle = 'Point camera at package barcode, strip QR code, or lookup code in database',
 }) => {
+  const modalScrollRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scannerSessionRef = useRef<ContinuousScannerSession | null>(null);
@@ -66,10 +68,11 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
   const [flashlight, setFlashlight] = useState<boolean>(false);
   const [isSlowFeed, setIsSlowFeed] = useState<boolean>(false);
 
-  // Scanned verification state
+  // Scanned / Lookup state
   const [detectedResult, setDetectedResult] = useState<ScannedMedicineData | null>(null);
   const [isLookingUp, setIsLookingUp] = useState<boolean>(false);
   const [lookupMessage, setLookupMessage] = useState<string>('');
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [isFoundInDb, setIsFoundInDb] = useState<boolean | null>(null);
 
   // Pharmacist verification form fields
@@ -93,14 +96,15 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     productCode: '',
   });
 
-  // Manual fallback search input
+  // Manual search input state
   const [customCode, setCustomCode] = useState<string>('');
   const [manualSearching, setManualSearching] = useState<boolean>(false);
 
   const sampleBarcodes = [
     {
       label: 'PCT101 · Paracetamol 500mg',
-      data: {
+      code: '890103400101',
+      fallbackData: {
         medicine: 'Paracetamol 500mg',
         batch: 'PCT101',
         expiry: 'Sep 2026',
@@ -112,7 +116,8 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     },
     {
       label: 'VD102 · Vitamin D3 60K',
-      data: {
+      code: '890103400102',
+      fallbackData: {
         medicine: 'Vitamin D3 60K',
         batch: 'VD102',
         expiry: 'Sep 2026',
@@ -124,7 +129,8 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     },
     {
       label: 'CTZ302 · Cetirizine 10mg',
-      data: {
+      code: '890103400104',
+      fallbackData: {
         medicine: 'Cetirizine 10mg',
         batch: 'CTZ302',
         expiry: 'Jan 2027',
@@ -135,8 +141,9 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       },
     },
     {
-      label: 'MET624 · Metformin 500mg (New Batch)',
-      data: {
+      label: 'MET624 · Metformin 500mg',
+      code: '890103400106',
+      fallbackData: {
         medicine: 'Metformin 500mg',
         batch: 'MET624',
         expiry: 'Feb 2028',
@@ -148,7 +155,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     },
   ];
 
-  // Cleanup helper
+  // Camera cleanup helper
   const cleanupScanner = useCallback(() => {
     if (scannerSessionRef.current) {
       try {
@@ -161,23 +168,34 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     setFlashlight(false);
   }, []);
 
-  // Unified medicine lookup function (shared by camera detection, presets, and manual input)
+  // Shared single medicine lookup function (camera detection, manual input, and presets)
   const executeMedicineLookup = useCallback(async (scanned: ScannedMedicineData) => {
     const rawSearch = scanned.barcode || scanned.rawText;
     const searchCode = normalizeBarcode(rawSearch);
     if (!searchCode) return;
 
+    console.log(`[Lookup] Searching: ${searchCode}`);
+    console.log(`[Lookup] Request started`);
+
     setIsLookingUp(true);
-    setLookupMessage(`Looking up medicine for code [${searchCode}] in database...`);
+    setLookupError(null);
+    setLookupMessage(`Looking up barcode [${searchCode}] in inventory database...`);
+
+    // Ensure scroll to top of modal so result banner is immediately visible
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
     try {
       const res = await api.lookupBarcode(searchCode);
+      console.log(`[Lookup] Response: 200 OK`);
       setIsLookingUp(false);
 
-      if (res.found && res.medicine) {
+      if (res && res.found && res.medicine) {
+        console.log(`[Lookup] Result: found (${res.medicine.medicine || res.medicine.medicineName})`);
         setIsFoundInDb(true);
         const med = res.medicine;
-        setLookupMessage(`Medicine found: ${med.medicine || med.medicineName || searchCode}`);
+        setLookupMessage(`Medicine Found: ${med.medicine || med.medicineName || searchCode}`);
         setVerifyForm({
           medicine: med.medicine || med.medicineName || scanned.medicine || `Product (${searchCode})`,
           batch: med.batch || med.batchNumber || scanned.batch || '',
@@ -189,10 +207,11 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
           productCode: med.productCode || med.batch || searchCode,
         });
       } else {
+        console.log(`[Lookup] Result: not found in Firestore`);
         setIsFoundInDb(false);
-        setLookupMessage('Barcode detected, but no matching medicine was found in current inventory.');
+        setLookupMessage(`Barcode Not Found: No medicine matches code [${searchCode}] in current inventory.`);
         setVerifyForm({
-          medicine: scanned.medicine || `Medicine (${searchCode})`,
+          medicine: scanned.medicine || '',
           batch: scanned.batch || (searchCode.length <= 10 && /^[A-Z0-9-]+$/i.test(searchCode) ? searchCode.toUpperCase() : ''),
           expiry: scanned.expiry || '',
           quantity: scanned.quantity || 100,
@@ -202,12 +221,15 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
           productCode: searchCode,
         });
       }
-    } catch {
+    } catch (err: any) {
+      console.error(`[Lookup] Request failed:`, err);
+      console.log(`[Lookup] Result: error (${err?.message || 'Network/Server Error'})`);
       setIsLookingUp(false);
       setIsFoundInDb(false);
-      setLookupMessage('Barcode detected, but no matching medicine was found.');
+      setLookupError(err?.message || 'Lookup request failed. Check server connection.');
+      setLookupMessage(`Lookup Failed: Could not query database for code [${searchCode}].`);
       setVerifyForm({
-        medicine: scanned.medicine || `Product (${searchCode})`,
+        medicine: scanned.medicine || '',
         batch: scanned.batch || '',
         expiry: scanned.expiry || '',
         quantity: scanned.quantity || 100,
@@ -243,6 +265,8 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
 
       // Launch continuous multi-engine frame decoder
       scannerSessionRef.current = startContinuousScanner(videoRef.current, (scannedData) => {
+        // Stop active camera stream when barcode is detected
+        cleanupScanner();
         setDetectedResult(scannedData);
         executeMedicineLookup(scannedData);
       });
@@ -269,6 +293,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       setDetectedResult(null);
       setIsFoundInDb(null);
       setLookupMessage('');
+      setLookupError(null);
       setCustomCode('');
       const timer = setTimeout(() => {
         initCameraAndScanner();
@@ -278,6 +303,8 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       cleanupScanner();
       setDetectedResult(null);
       setIsFoundInDb(null);
+      setLookupMessage('');
+      setLookupError(null);
     }
   }, [isOpen, initCameraAndScanner, cleanupScanner]);
 
@@ -293,13 +320,14 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     setDetectedResult(null);
     setIsFoundInDb(null);
     setLookupMessage('');
+    setLookupError(null);
     initCameraAndScanner();
   };
 
   // Confirm verification and submit to parent
   const handleConfirmVerification = () => {
     onScan({
-      medicine: verifyForm.medicine.trim(),
+      medicine: verifyForm.medicine.trim() || `Medicine (${verifyForm.barcode || 'Unknown'})`,
       batch: verifyForm.batch.trim().toUpperCase() || `BTH${Math.floor(100 + Math.random() * 900)}`,
       expiry: verifyForm.expiry.trim() || 'Dec 2027',
       quantity: Number(verifyForm.quantity) || 1,
@@ -311,21 +339,22 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
     onClose();
   };
 
-  // Handle manual code lookup
+  // Handle manual code lookup (works seamlessly with or without active camera)
   const handleManualLookup = async () => {
     const code = normalizeBarcode(customCode);
-    if (!code) return;
+    if (!code || manualSearching) return;
 
     setManualSearching(true);
+    // Stop camera if running
+    cleanupScanner();
+
     const scanned: ScannedMedicineData = {
       rawText: code,
       format: 'MANUAL_ENTRY',
       barcode: code,
     };
     setDetectedResult(scanned);
-    if (scannerSessionRef.current) {
-      scannerSessionRef.current.stop();
-    }
+
     await executeMedicineLookup(scanned);
     setManualSearching(false);
   };
@@ -355,6 +384,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
       />
 
       <div
+        ref={modalScrollRef}
         className="card animate-scale-in"
         style={{
           position: 'relative',
@@ -830,11 +860,19 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
               {/* Detection Banner */}
               <div
                 style={{
-                  background: isFoundInDb
+                  background: isLookingUp
+                    ? 'rgba(59, 130, 246, 0.12)'
+                    : isFoundInDb
                     ? 'rgba(16, 185, 129, 0.12)'
+                    : lookupError
+                    ? 'rgba(239, 68, 68, 0.12)'
                     : 'rgba(245, 158, 11, 0.12)',
-                  border: isFoundInDb
+                  border: isLookingUp
+                    ? '1px solid rgba(59, 130, 246, 0.3)'
+                    : isFoundInDb
                     ? '1px solid rgba(16, 185, 129, 0.3)'
+                    : lookupError
+                    ? '1px solid rgba(239, 68, 68, 0.3)'
                     : '1px solid rgba(245, 158, 11, 0.3)',
                   borderRadius: 14,
                   padding: '14px 18px',
@@ -843,8 +881,12 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                   gap: 12,
                 }}
               >
-                {isFoundInDb ? (
+                {isLookingUp ? (
+                  <RotateCw size={22} color="#60A5FA" className="animate-spin" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : isFoundInDb ? (
                   <CheckCircle2 size={22} color="#10B981" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : lookupError ? (
+                  <XCircle size={22} color="#EF4444" style={{ flexShrink: 0, marginTop: 2 }} />
                 ) : (
                   <AlertTriangle size={22} color="#F59E0B" style={{ flexShrink: 0, marginTop: 2 }} />
                 )}
@@ -854,10 +896,22 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       style={{
                         fontWeight: 700,
                         fontSize: 14,
-                        color: isFoundInDb ? '#6EE7B7' : '#FCD34D',
+                        color: isLookingUp
+                          ? '#93C5FD'
+                          : isFoundInDb
+                          ? '#6EE7B7'
+                          : lookupError
+                          ? '#FCA5A5'
+                          : '#FCD34D',
                       }}
                     >
-                      Barcode detected: {detectedResult.barcode || detectedResult.rawText}
+                      {isLookingUp
+                        ? 'LOOKING UP MEDICINE...'
+                        : isFoundInDb
+                        ? 'MEDICINE FOUND'
+                        : lookupError
+                        ? 'LOOKUP FAILED'
+                        : 'BARCODE NOT FOUND IN INVENTORY'}
                     </h4>
                     <span
                       style={{
@@ -872,11 +926,16 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                       Format: {detectedResult.format}
                     </span>
                   </div>
-                  <p style={{ fontSize: 12, color: '#E5E5E0', marginTop: 4 }}>
-                    {isLookingUp ? 'Looking up medicine...' : lookupMessage}
+
+                  <div style={{ marginTop: 6, fontSize: 12.5, color: '#FFFFFF', fontWeight: 600 }}>
+                    Detected code: <span style={{ color: '#4ADE80', fontFamily: 'monospace' }}>{detectedResult.barcode || detectedResult.rawText}</span>
+                  </div>
+
+                  <p style={{ fontSize: 12, color: '#D1D5DB', marginTop: 4 }}>
+                    {isLookingUp ? `Looking up barcode [${detectedResult.barcode || detectedResult.rawText}]...` : lookupMessage}
                   </p>
-                  <p style={{ fontSize: 11, color: '#9CAE98', marginTop: 2 }}>
-                    Please verify the medicine name, batch number, expiry date, and quantity before saving.
+                  <p style={{ fontSize: 11, color: '#9CAE98', marginTop: 4 }}>
+                    Please verify the medicine details before applying to the batch form.
                   </p>
                 </div>
               </div>
@@ -1001,7 +1060,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
             </div>
           )}
 
-          {/* QUICK PACKAGE PRESETS (FALLBACK OPTIONS) */}
+          {/* QUICK PACKAGE PRESETS — TEST LOOKUP */}
           <div style={{ width: '100%', marginTop: 22 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <Sparkles size={13} color="#A3B19B" />
@@ -1014,7 +1073,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                   letterSpacing: '0.06em',
                 }}
               >
-                Quick Package Presets (Click to test lookup):
+                Quick Package Presets — Test Lookup:
               </p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 6 }}>
@@ -1022,21 +1081,19 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
                 <button
                   key={b.label}
                   onClick={() => {
+                    cleanupScanner();
                     const scanned: ScannedMedicineData = {
-                      rawText: b.data.barcode,
+                      rawText: b.code,
                       format: 'EAN_13',
-                      medicine: b.data.medicine,
-                      batch: b.data.batch,
-                      expiry: b.data.expiry,
-                      quantity: b.data.quantity,
-                      supplier: b.data.supplier,
-                      unitPrice: b.data.unitPrice,
-                      barcode: b.data.barcode,
+                      barcode: b.code,
+                      medicine: b.fallbackData.medicine,
+                      batch: b.fallbackData.batch,
+                      expiry: b.fallbackData.expiry,
+                      quantity: b.fallbackData.quantity,
+                      supplier: b.fallbackData.supplier,
+                      unitPrice: b.fallbackData.unitPrice,
                     };
                     setDetectedResult(scanned);
-                    if (scannerSessionRef.current) {
-                      scannerSessionRef.current.stop();
-                    }
                     executeMedicineLookup(scanned);
                   }}
                   style={{
@@ -1073,7 +1130,7 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ position: 'relative', flex: 1 }}>
                 <input
-                  placeholder="Enter Barcode / GTIN / Batch (e.g. 890103400101 or PCT101)..."
+                  placeholder="Enter Barcode / GTIN / Batch (e.g. 8906125100108 or PCT101)..."
                   value={customCode}
                   onChange={e => setCustomCode(e.target.value)}
                   onKeyDown={e => {
@@ -1098,11 +1155,27 @@ export const LiveBarcodeScannerModal: React.FC<LiveBarcodeScannerModalProps> = (
               </div>
               <button
                 onClick={handleManualLookup}
-                disabled={manualSearching || !customCode.trim()}
+                disabled={manualSearching || isLookingUp || !customCode.trim()}
                 className="btn btn-teal"
-                style={{ padding: '8px 16px', fontSize: 12.5, whiteSpace: 'nowrap' }}
+                style={{
+                  padding: '8px 18px',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
               >
-                {manualSearching ? 'Searching...' : 'Lookup & Scan'}
+                {manualSearching || isLookingUp ? (
+                  <>
+                    <RotateCw size={14} className="animate-spin" /> Looking Up...
+                  </>
+                ) : (
+                  <>
+                    <Search size={14} /> Lookup & Scan
+                  </>
+                )}
               </button>
             </div>
           </div>
