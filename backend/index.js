@@ -659,9 +659,12 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
     const { code } = req.params;
     const pharmacyId = getPharmacyId(req);
     const searchCode = String(code).trim();
+    const cleanDigits = searchCode.replace(/\D/g, '');
+    const cleanWithoutLeadingZeros = cleanDigits.replace(/^0+/, '');
 
     if (isConnected()) {
-      const barcodeQuery = await db.collection('inventory')
+      // 1. Exact barcode lookup
+      let barcodeQuery = await db.collection('inventory')
         .where('pharmacyId', '==', pharmacyId)
         .where('barcode', '==', searchCode)
         .get();
@@ -670,6 +673,19 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
         return res.json({ found: true, medicine: { id: barcodeQuery.docs[0].id, ...barcodeQuery.docs[0].data() } });
       }
 
+      // 2. Barcode lookup without leading zeros / normalized digits
+      if (cleanWithoutLeadingZeros && cleanWithoutLeadingZeros !== searchCode) {
+        barcodeQuery = await db.collection('inventory')
+          .where('pharmacyId', '==', pharmacyId)
+          .where('barcode', '==', cleanWithoutLeadingZeros)
+          .get();
+
+        if (!barcodeQuery.empty) {
+          return res.json({ found: true, medicine: { id: barcodeQuery.docs[0].id, ...barcodeQuery.docs[0].data() } });
+        }
+      }
+
+      // 3. Exact batch code lookup
       const batchQuery = await db.collection('inventory')
         .where('pharmacyId', '==', pharmacyId)
         .where('batch', '==', searchCode.toUpperCase())
@@ -678,12 +694,41 @@ app.get('/api/barcode/lookup/:code', async (req, res) => {
       if (!batchQuery.empty) {
         return res.json({ found: true, medicine: { id: batchQuery.docs[0].id, ...batchQuery.docs[0].data() } });
       }
+
+      // 4. Case-insensitive batch or partial medicine query
+      const allInventory = await db.collection('inventory')
+        .where('pharmacyId', '==', pharmacyId)
+        .get();
+      
+      const matchedDoc = allInventory.docs.find(d => {
+        const data = d.data();
+        return (
+          (data.barcode && (data.barcode === searchCode || data.barcode.replace(/^0+/, '') === cleanWithoutLeadingZeros)) ||
+          (data.batch && data.batch.toUpperCase() === searchCode.toUpperCase()) ||
+          (data.medicine && data.medicine.toLowerCase() === searchCode.toLowerCase())
+        );
+      });
+
+      if (matchedDoc) {
+        return res.json({ found: true, medicine: { id: matchedDoc.id, ...matchedDoc.data() } });
+      }
     } else {
-      const found = memoryStore.inventory.find(i => (i.barcode === searchCode || i.batch === searchCode.toUpperCase()) && i.pharmacyId === pharmacyId);
+      const found = memoryStore.inventory.find(i => 
+        i.pharmacyId === pharmacyId && (
+          i.barcode === searchCode || 
+          (cleanWithoutLeadingZeros && i.barcode?.replace(/^0+/, '') === cleanWithoutLeadingZeros) ||
+          i.batch?.toUpperCase() === searchCode.toUpperCase() ||
+          i.medicine?.toLowerCase() === searchCode.toLowerCase()
+        )
+      );
       if (found) return res.json({ found: true, medicine: found });
     }
 
-    res.json({ found: false, code: searchCode, message: 'Product not found in current inventory. Please enter details manually.' });
+    res.json({ 
+      found: false, 
+      code: searchCode, 
+      message: 'Barcode detected, but no matching medicine was found.' 
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
