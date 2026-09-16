@@ -331,11 +331,24 @@ export const api = {
   // -------------------------------------------------------------
   // INVOICE OCR & EXCEL IMPORT
   // -------------------------------------------------------------
-  async importInvoice(invoiceText?: string, fileName?: string) {
+  async importInvoice(params: { invoiceText?: string; fileName?: string; fileBase64?: string; mimeType?: string } | string, fileNameLegacy?: string) {
+    const payload = typeof params === 'string'
+      ? { invoiceText: params, fileName: fileNameLegacy }
+      : params;
+
     const res = await fetch(`${API_BASE_URL}/import/invoice`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ invoiceText, fileName }),
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  },
+
+  async confirmInvoiceImport(items: any[], invoiceMeta?: any) {
+    const res = await fetch(`${API_BASE_URL}/import/invoice/confirm`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ items, invoiceMeta }),
     });
     return await res.json();
   },

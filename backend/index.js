@@ -8,6 +8,7 @@ const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, proce
 const { renderSmsTemplate, SMS_TEMPLATES } = require('./services/smsTemplates');
 const { runNotificationCycle, startScheduler } = require('./services/schedulerService');
 const pharmacyTools = require('./services/pharmacyTools');
+const invoiceParserService = require('./services/invoiceParserService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -1312,44 +1313,161 @@ app.get('/api/alerts', async (req, res) => {
 // -------------------------------------------------------------
 app.post('/api/import/invoice', async (req, res) => {
   try {
-    const { invoiceText, fileName } = req.body;
+    const pharmacyId = getPharmacyId(req);
+    const { invoiceText, fileName, fileBase64, mimeType } = req.body;
 
-    // Smart heuristic parser for pharmacy invoices
-    const sampleMedicines = [
-      { medicine: 'Pantoprazole 40mg', batch: 'PAN904', expiry: 'Nov 2026', quantity: 150, unitPrice: 42, supplier: 'HealthCare Labs', status: 'Available' },
-      { medicine: 'Montelukast 10mg', batch: 'MON301', expiry: 'Jan 2027', quantity: 200, unitPrice: 78, supplier: 'ABC Pharma', status: 'Available' },
-      { medicine: 'Telmisartan 40mg', batch: 'TEL802', expiry: 'Dec 2026', quantity: 100, unitPrice: 55, supplier: 'Nova Pharma', status: 'Available' }
-    ];
+    const result = await invoiceParserService.extractInvoiceItems({
+      invoiceText,
+      fileName,
+      fileBase64,
+      mimeType
+    });
 
-    // If actual text was passed, attempt regex matching
-    let extractedRows = [];
-    if (invoiceText && typeof invoiceText === 'string') {
-      const lines = invoiceText.split('\n').filter(l => l.trim().length > 3);
-      lines.forEach((line, idx) => {
-        const parts = line.split(/[,\t|]/);
-        if (parts.length >= 3) {
-          extractedRows.push({
-            medicine: parts[0]?.trim() || `Medicine #${idx + 1}`,
-            batch: parts[1]?.trim().toUpperCase() || `BAT${Math.floor(100 + Math.random() * 900)}`,
-            expiry: parts[2]?.trim() || 'Dec 2026',
-            quantity: Number(parts[3]) || 100,
-            unitPrice: Number(parts[4]) || 40,
-            supplier: parts[5]?.trim() || 'Direct Supplier',
-            status: 'Available'
-          });
-        }
+    // Cross-check extracted batches against existing database batches for duplicate identification
+    let existingBatches = new Map();
+    if (isConnected()) {
+      const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.batch) existingBatches.set(data.batch.toUpperCase(), data);
+      });
+    } else {
+      memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId).forEach(i => {
+        if (i.batch) existingBatches.set(i.batch.toUpperCase(), i);
       });
     }
 
-    if (extractedRows.length === 0) {
-      extractedRows = sampleMedicines;
+    // Annotate items with duplicate and existing stock status
+    const annotatedItems = result.items.map((item, idx) => {
+      const batchKey = (item.batch || '').toUpperCase();
+      const existing = existingBatches.get(batchKey);
+      return {
+        ...item,
+        id: item.id || `inv_row_${Date.now()}_${idx}`,
+        isDuplicate: Boolean(existing),
+        existingQuantity: existing ? existing.quantity : 0,
+        needsReview: item.needsReview || !item.medicine || !item.batch || !item.quantity,
+      };
+    });
+
+    res.json({
+      ...result,
+      items: annotatedItems,
+      extractedCount: annotatedItems.length,
+      duplicateCount: annotatedItems.filter(i => i.isDuplicate).length,
+      reviewCount: annotatedItems.filter(i => i.needsReview).length
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/import/invoice/confirm', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const { items, invoiceMeta } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No medicine items provided for saving.' });
+    }
+
+    const savedRecords = [];
+    let updatedBatchCount = 0;
+    let newBatchCount = 0;
+
+    // Single pre-fetch map of existing batches
+    const existingBatchesMap = new Map();
+    if (isConnected()) {
+      try {
+        const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
+        snap.docs.forEach(d => {
+          const data = d.data();
+          if (data.batch) existingBatchesMap.set(data.batch.toUpperCase(), { docId: d.id, ...data });
+        });
+      } catch (e) {
+        console.warn('⚠️ Batch pre-fetch warning:', e.message);
+      }
+    } else {
+      memoryStore.inventory.filter(i => i.pharmacyId === pharmacyId).forEach(i => {
+        if (i.batch) existingBatchesMap.set(i.batch.toUpperCase(), i);
+      });
+    }
+
+    for (const item of items) {
+      const medName = item.medicine ? String(item.medicine).trim() : 'Unknown Medicine';
+      const batchNum = item.batch ? String(item.batch).trim().toUpperCase() : `BAT-${Math.floor(10000 + Math.random() * 90000)}`;
+      const qty = Number(item.quantity) || 100;
+      const price = Number(item.unitPrice) || 45;
+      const exp = item.expiry ? String(item.expiry).trim() : 'Dec 2027';
+      const supp = item.supplier ? String(item.supplier).trim() : (invoiceMeta?.supplier || 'MediSource Distributors');
+
+      let computedStatus = item.status || 'Available';
+      if (qty <= 0) computedStatus = 'Expired';
+      else if (qty <= 20 && computedStatus !== 'Recalled') computedStatus = 'Low Stock';
+
+      const recordToSave = {
+        pharmacyId,
+        medicine: medName,
+        genericName: item.genericName || '',
+        batch: batchNum,
+        expiry: exp,
+        quantity: qty,
+        supplier: supp,
+        status: computedStatus,
+        unitPrice: price,
+        amount: Math.round(qty * price * 100) / 100,
+        invoiceNumber: item.invoiceNumber || invoiceMeta?.invoiceNumber || 'INV-9842',
+        invoiceDate: item.invoiceDate || invoiceMeta?.invoiceDate || new Date().toISOString().split('T')[0],
+        barcode: item.barcode || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const existingRecord = existingBatchesMap.get(batchNum);
+
+      if (isConnected()) {
+        if (existingRecord && existingRecord.docId) {
+          const newQty = (existingRecord.quantity || 0) + qty;
+          await db.collection('inventory').doc(existingRecord.docId).update({
+            quantity: newQty,
+            unitPrice: price > 0 ? price : existingRecord.unitPrice,
+            amount: Math.round(newQty * (price > 0 ? price : existingRecord.unitPrice) * 100) / 100,
+            updatedAt: new Date().toISOString()
+          });
+          savedRecords.push({ id: existingRecord.docId, ...existingRecord, quantity: newQty, isUpdated: true });
+          updatedBatchCount++;
+        } else {
+          const docRef = await db.collection('inventory').add(recordToSave);
+          existingBatchesMap.set(batchNum, { docId: docRef.id, ...recordToSave });
+          savedRecords.push({ id: docRef.id, ...recordToSave, isUpdated: false });
+          newBatchCount++;
+        }
+      } else {
+        // Memory Store
+        const existingIdx = memoryStore.inventory.findIndex(i => i.pharmacyId === pharmacyId && i.batch === batchNum);
+        if (existingIdx !== -1) {
+          memoryStore.inventory[existingIdx].quantity += qty;
+          memoryStore.inventory[existingIdx].updatedAt = new Date().toISOString();
+          savedRecords.push({ ...memoryStore.inventory[existingIdx], isUpdated: true });
+          updatedBatchCount++;
+        } else {
+          const id = `inv_saved_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          const saved = { id, ...recordToSave, isUpdated: false };
+          memoryStore.inventory.unshift(saved);
+          existingBatchesMap.set(batchNum, saved);
+          savedRecords.push(saved);
+          newBatchCount++;
+        }
+      }
     }
 
     res.json({
       success: true,
-      fileName: fileName || 'supplier_invoice.pdf',
-      extractedCount: extractedRows.length,
-      items: extractedRows
+      totalSaved: savedRecords.length,
+      newBatches: newBatchCount,
+      updatedBatches: updatedBatchCount,
+      invoiceNumber: invoiceMeta?.invoiceNumber || 'INV-9842',
+      items: savedRecords
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

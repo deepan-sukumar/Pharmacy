@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node tests/aiAndSms.test.js"
+    "test": "node tests/aiAndSms.test.js && node tests/invoiceExtraction.test.js",
+    "test:invoice": "node tests/invoiceExtraction.test.js"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
