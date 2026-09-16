@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Medicine } from '../data';
 import {
   SlidersHorizontal, RefreshCw, AlertTriangle, ArrowRight, ShieldCheck,
   TrendingUp, TrendingDown, Clock3, BrainCircuit, CheckCircle2, ChevronRight,
-  PackagePlus, Sparkles, DollarSign, Info, Eye, Boxes
+  PackagePlus, Sparkles, DollarSign, Info, Eye, Boxes, X, Layers, AlertCircle,
+  Truck, ArrowUpRight, Scale
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -16,11 +17,62 @@ interface WhatIfSimulatorProps {
 interface ScenarioComparisonItem {
   orderIncrement: number;
   projectedStock: number;
-  surplusAtExpiry: number;
-  wasteCost: number;
+  expectedConsumption: number;
+  projectedSurplus: number;
+  potentialShortage: number;
+  capitalAtRisk: number;
   utilizationPct: number;
   riskLevel: string;
+  riskLabel?: string;
   recommendation: string;
+}
+
+interface BatchBreakdownItem {
+  id: string | number;
+  batch: string;
+  expiry: string;
+  daysToExpiry: number;
+  quantity: number;
+  unitPrice: number;
+  status: string;
+  isCurrentSelected?: boolean;
+}
+
+// Dynamic helper to calculate days to expiry from real current date
+function calculateDaysToExpiry(expiryStr: string): number {
+  if (!expiryStr) return 45;
+  const str = String(expiryStr).trim();
+  if (!str) return 45;
+
+  let expiryDate = new Date(str);
+  if (isNaN(expiryDate.getTime())) {
+    const parts = str.split(/\s+/);
+    if (parts.length === 2) {
+      const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+      const mIdx = monthNames.indexOf(parts[0].toLowerCase().slice(0, 3));
+      const year = parseInt(parts[1], 10);
+      if (mIdx >= 0 && !isNaN(year)) {
+        expiryDate = new Date(year, mIdx + 1, 0);
+      }
+    } else if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+      const mIdx = monthNames.indexOf(parts[1].toLowerCase().slice(0, 3));
+      const year = parseInt(parts[2], 10);
+      if (!isNaN(day) && mIdx >= 0 && !isNaN(year)) {
+        expiryDate = new Date(year, mIdx, day);
+      }
+    }
+  }
+
+  if (isNaN(expiryDate.getTime())) return 45;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  expiryDate.setHours(0, 0, 0, 0);
+
+  const diffTime = expiryDate.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
 export default function WhatIfSimulator({
@@ -28,230 +80,457 @@ export default function WhatIfSimulator({
   setInventory,
   showToast,
 }: WhatIfSimulatorProps) {
-  // Scenario Parameters
-  const [medicine, setMedicine] = useState('Vitamin D3 60K');
-  const [currentStock, setCurrentStock] = useState(180);
-  const [orderQty, setOrderQty] = useState(300);
-  const [dailyUsage, setDailyUsage] = useState(5);
-  const [leadTimeDays, setLeadTimeDays] = useState(3);
-  const [daysToExpiry, setDaysToExpiry] = useState(45);
-  const [unitCost, setUnitCost] = useState(65);
-  const [scenarioType, setScenarioType] = useState<string>('bulk-order');
+  // Extract unique medicines from live inventory
+  const uniqueMedicines = useMemo(() => {
+    const map = new Map<string, Medicine>();
+    (inventory || []).forEach(item => {
+      const name = item.medicine || (item as any).medicineName || 'Medicine';
+      if (!map.has(name)) {
+        map.set(name, item);
+      }
+    });
+    return Array.from(map.values());
+  }, [inventory]);
+
+  // Selected State
+  const [selectedMedicineName, setSelectedMedicineName] = useState<string>('');
+  const [selectedBatchCode, setSelectedBatchCode] = useState<string>('');
+  
+  // Actual Baseline Parameters from live Firestore
+  const [currentStock, setCurrentStock] = useState<number>(45);
+  const [baseDailyUsage, setBaseDailyUsage] = useState<number>(5);
+  const [daysToExpiry, setDaysToExpiry] = useState<number>(25);
+  const [expiryDateStr, setExpiryDateStr] = useState<string>('25 Sep 2026');
+  const [unitCost, setUnitCost] = useState<number>(95);
+  const [demandProvenance, setDemandProvenance] = useState<string>('');
+
+  // What-If Simulation Variables
+  const [orderQty, setOrderQty] = useState<number>(0);
+  const [dispensingIncreasePct, setDispensingIncreasePct] = useState<number>(0);
+  const [leadTimeDays, setLeadTimeDays] = useState<number>(0);
+  const [holdBatch, setHoldBatch] = useState<boolean>(false);
+  const [scenarioPreset, setScenarioPreset] = useState<string>('baseline');
+
+  // Backend Sync & Multi-Scenario Data
   const [comparisonMatrix, setComparisonMatrix] = useState<ScenarioComparisonItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [multiBatchList, setMultiBatchList] = useState<BatchBreakdownItem[]>([]);
+  const [suggestedAiTarget, setSuggestedAiTarget] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  // Calculations (Local + Backend sync)
-  const totalStock = currentStock + orderQty;
-  const daysUntilRunoutCurrent = dailyUsage > 0 ? Math.round(currentStock / dailyUsage) : 999;
-  const daysUntilRunoutProjected = dailyUsage > 0 ? Math.round(totalStock / dailyUsage) : 999;
+  // Commit Modal
+  const [showCommitModal, setShowCommitModal] = useState<boolean>(false);
+  const [isCommitting, setIsCommitting] = useState<boolean>(false);
 
-  const effectiveWindowDays = Math.max(0, daysToExpiry - leadTimeDays);
-  const projectedConsumption = Math.round(dailyUsage * effectiveWindowDays);
-  const surplusUnused = Math.max(0, totalStock - projectedConsumption);
-  const valueAtRisk = surplusUnused * unitCost;
-
-  const currentSurplus = Math.max(0, currentStock - Math.round(dailyUsage * daysToExpiry));
-  const currentValueAtRisk = currentSurplus * unitCost;
-
-  const isHighRisk = surplusUnused > totalStock * 0.25;
-  const isModerateRisk = surplusUnused > 0 && !isHighRisk;
-
-  // Run backend calculation engine for full comparison matrix
+  // Initialize selected medicine from inventory
   useEffect(() => {
+    if (uniqueMedicines.length > 0 && !selectedMedicineName) {
+      // Find one with near expiry or first item
+      const candidate = uniqueMedicines.find(m => m.status === 'Near Expiry') || uniqueMedicines[0];
+      setSelectedMedicineName(candidate.medicine || (candidate as any).medicineName || 'Vitamin D3 60K');
+      setSelectedBatchCode(candidate.batch || (candidate as any).batchNumber || 'VD102');
+    }
+  }, [uniqueMedicines, selectedMedicineName]);
+
+  // Batches for the currently selected medicine
+  const availableBatches = useMemo(() => {
+    if (!selectedMedicineName) return [];
+    return (inventory || []).filter(item => {
+      const name = item.medicine || (item as any).medicineName || '';
+      return name.toLowerCase() === selectedMedicineName.toLowerCase();
+    }).map(item => {
+      const bDays = calculateDaysToExpiry(item.expiry || '');
+      return {
+        id: item.id,
+        batch: item.batch || (item as any).batchNumber || 'BTH-001',
+        expiry: item.expiry || 'Dec 2027',
+        daysToExpiry: bDays,
+        quantity: Number(item.quantity) || 0,
+        unitPrice: Number(item.unitPrice) || 50,
+        status: item.status || 'Available',
+      };
+    }).sort((a, b) => a.daysToExpiry - b.daysToExpiry); // FEFO Sorting
+  }, [inventory, selectedMedicineName]);
+
+  // Sync baseline whenever selected medicine or batch changes
+  useEffect(() => {
+    if (availableBatches.length > 0) {
+      const matchedBatch = availableBatches.find(b => b.batch === selectedBatchCode) || availableBatches[0];
+      if (matchedBatch) {
+        setSelectedBatchCode(matchedBatch.batch);
+        setCurrentStock(matchedBatch.quantity);
+        setExpiryDateStr(matchedBatch.expiry);
+        setDaysToExpiry(matchedBatch.daysToExpiry);
+        setUnitCost(matchedBatch.unitPrice);
+      }
+    }
+  }, [selectedMedicineName, selectedBatchCode, availableBatches]);
+
+  // Run backend calculation engine for full simulation and comparison matrix
+  useEffect(() => {
+    let isMounted = true;
     async function fetchBackendSimulation() {
       setLoading(true);
       try {
         const res = await api.simulateScenario({
-          medicine,
+          medicine: selectedMedicineName,
+          batchId: selectedBatchCode,
           currentStock,
           orderQty,
-          dailyUsage,
+          dailyUsage: baseDailyUsage,
           daysToExpiry,
           unitCost,
-          leadTimeDays
-        });
+          leadTimeDays,
+          holdBatch,
+          dispensingIncreasePct,
+        } as any);
 
-        if (res && res.multiScenarioComparison?.comparisonMatrix) {
-          setComparisonMatrix(res.multiScenarioComparison.comparisonMatrix);
+        if (isMounted && res) {
+          if (res.multiScenarioComparison?.comparisonMatrix) {
+            setComparisonMatrix(res.multiScenarioComparison.comparisonMatrix);
+          }
+          if (res.demandProvenance) {
+            setDemandProvenance(res.demandProvenance);
+          }
+          if (res.suggestedAiOrder !== undefined) {
+            setSuggestedAiTarget(res.suggestedAiOrder);
+          }
+          if (res.multiBatchBreakdown && res.multiBatchBreakdown.length > 0) {
+            setMultiBatchList(res.multiBatchBreakdown);
+          }
         }
       } catch (err) {
         console.error('Simulation calculation engine error:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
+
     fetchBackendSimulation();
-  }, [medicine, currentStock, orderQty, dailyUsage, leadTimeDays, daysToExpiry, unitCost]);
+    return () => { isMounted = false; };
+  }, [
+    selectedMedicineName,
+    selectedBatchCode,
+    currentStock,
+    orderQty,
+    baseDailyUsage,
+    daysToExpiry,
+    unitCost,
+    leadTimeDays,
+    holdBatch,
+    dispensingIncreasePct
+  ]);
+
+  // Deterministic Local Computations (Matching exact specifications)
+  const demandMultiplier = 1 + (dispensingIncreasePct / 100);
+  const simulatedDailyDemand = holdBatch ? 0 : Math.max(0, baseDailyUsage * demandMultiplier);
+
+  // Baseline (without proposed order)
+  const baselineExpectedConsumption = Math.round(simulatedDailyDemand * Math.max(0, daysToExpiry));
+  const baselineUsableConsumption = Math.min(currentStock, baselineExpectedConsumption);
+  const baselineSurplus = Math.max(0, currentStock - baselineExpectedConsumption);
+  const baselineCapitalAtRisk = baselineSurplus * unitCost;
+
+  // What-If Scenario Projection (with proposed order)
+  const projectedTotalStock = currentStock + orderQty;
+  const effectiveWindowDays = Math.max(0, daysToExpiry - leadTimeDays);
+  const expectedConsumption = Math.round(simulatedDailyDemand * effectiveWindowDays);
+  const projectedSurplus = Math.max(0, projectedTotalStock - expectedConsumption);
+  const potentialShortage = Math.max(0, expectedConsumption - projectedTotalStock);
+  const capitalAtRisk = projectedSurplus * unitCost;
+  const stockoutExposure = potentialShortage * unitCost;
+
+  const projectedConsumptionActual = Math.min(projectedTotalStock, expectedConsumption);
+  const stockUtilizationPct = projectedTotalStock > 0
+    ? Math.min(100, Math.round((projectedConsumptionActual / projectedTotalStock) * 100))
+    : 100;
+
+  const daysUntilStockout = simulatedDailyDemand > 0
+    ? Math.floor(projectedTotalStock / simulatedDailyDemand)
+    : 999;
+
+  // Risk Classification
+  const isHighRisk = daysToExpiry <= 0 || holdBatch || projectedSurplus > projectedTotalStock * 0.25 || projectedSurplus > 50;
+  const isModerateRisk = projectedSurplus > 0 && !isHighRisk;
+  const isShortageRisk = potentialShortage > 0;
 
   // Preset Handlers
-  const applyPreset = (type: string) => {
-    setScenarioType(type);
-    if (type === 'bulk-order') {
-      setMedicine('Vitamin D3 60K');
-      setCurrentStock(180);
-      setOrderQty(300);
-      setDailyUsage(5);
-      setLeadTimeDays(3);
-      setDaysToExpiry(45);
-      setUnitCost(65);
-      showToast('Loaded Scenario: "What if I order 300 more Vitamin D tablets?"');
-    } else if (type === 'demand-surge') {
-      setMedicine('Paracetamol 500mg');
-      setCurrentStock(120);
-      setOrderQty(200);
-      setDailyUsage(18);
-      setLeadTimeDays(2);
-      setDaysToExpiry(60);
-      setUnitCost(25);
-      showToast('Loaded Scenario: "What if dispensing increases by 20%?"');
-    } else if (type === 'delivery-delay') {
-      setMedicine('Cetirizine 10mg');
-      setCurrentStock(35);
-      setOrderQty(250);
-      setDailyUsage(12);
-      setLeadTimeDays(18);
-      setDaysToExpiry(90);
-      setUnitCost(35);
-      showToast('Loaded Scenario: "What if supplier delivery is delayed by 15 days?"');
-    } else if (type === 'no-return') {
-      setMedicine('Amoxicillin 500mg (AMX204)');
-      setCurrentStock(45);
+  const handleApplyPreset = (type: string) => {
+    setScenarioPreset(type);
+    if (type === 'baseline') {
       setOrderQty(0);
-      setDailyUsage(0);
+      setDispensingIncreasePct(0);
       setLeadTimeDays(0);
-      setDaysToExpiry(25);
-      setUnitCost(95);
-      showToast('Loaded Scenario: "What if I don\'t return this batch before expiry?"');
+      setHoldBatch(false);
+      showToast('Restored Current Baseline (+0)');
+    } else if (type === 'order-100') {
+      setOrderQty(100);
+      setHoldBatch(false);
+      showToast('Loaded Scenario: Reorder +100 Units');
+    } else if (type === 'order-300') {
+      setOrderQty(300);
+      setHoldBatch(false);
+      showToast('Loaded Scenario: Reorder +300 Units');
+    } else if (type === 'order-500') {
+      setOrderQty(500);
+      setHoldBatch(false);
+      showToast('Loaded Scenario: Reorder +500 Units');
+    } else if (type === 'demand-20') {
+      setDispensingIncreasePct(20);
+      setHoldBatch(false);
+      showToast('Loaded Scenario: +20% Dispensing Surge');
+    } else if (type === 'delay-15') {
+      setLeadTimeDays(15);
+      showToast('Loaded Scenario: 15-Day Supplier Delivery Delay');
+    } else if (type === 'hold-batch') {
+      setHoldBatch(true);
+      showToast('Loaded Scenario: Hold Expiry Batch (Divert Dispensing)');
     }
   };
 
-  const handleApplyRecommended = () => {
-    const recommended = Math.max(0, Math.round(dailyUsage * effectiveWindowDays) - currentStock);
-    setOrderQty(recommended);
-    showToast(`Order size auto-adjusted to AI optimal target: ${recommended} units`);
+  // Reset to live Firestore baseline
+  const handleResetToBaseline = () => {
+    setOrderQty(0);
+    setDispensingIncreasePct(0);
+    setLeadTimeDays(0);
+    setHoldBatch(false);
+    setScenarioPreset('baseline');
+    showToast('Simulator reset to actual live inventory baseline.');
   };
 
-  const handleCommitOrder = () => {
+  // Auto-Size to AI Target
+  const handleApplyAiTarget = () => {
+    const optimal = Math.max(0, expectedConsumption - currentStock);
+    setOrderQty(optimal);
+    showToast(`Order quantity auto-sized to AI target: ${optimal} units`);
+  };
+
+  // Commit to Live Stock
+  const handleConfirmCommit = async () => {
     if (orderQty <= 0) {
-      showToast('Order quantity must be greater than 0');
+      showToast('Please specify an order quantity greater than 0.');
       return;
     }
-    const newBatchId = `PO-${Math.floor(100 + Math.random() * 900)}`;
-    const newStockItem: Medicine = {
-      id: Date.now(),
-      medicine,
-      batch: newBatchId,
-      expiry: 'Oct 2027',
-      quantity: orderQty,
-      supplier: 'MediSource Distributors',
-      status: 'Available',
-      unitPrice: unitCost,
-    };
-    setInventory(prev => [...prev, newStockItem]);
-    showToast(`Purchase order confirmed! Added ${orderQty} units of ${medicine} (Batch ${newBatchId}) to live inventory.`);
+
+    setIsCommitting(true);
+    try {
+      const newBatchId = `PO-${Math.floor(100 + Math.random() * 900)}`;
+      const savedMedicine = await api.addMedicine({
+        medicine: selectedMedicineName,
+        batch: newBatchId,
+        expiry: 'Nov 2027',
+        quantity: orderQty,
+        supplier: 'MediSource Distributors Pvt Ltd',
+        status: 'Available',
+        unitPrice: unitCost,
+      });
+
+      setInventory(prev => [...prev, savedMedicine as Medicine]);
+      setIsCommitting(false);
+      setShowCommitModal(false);
+      showToast(`Purchase order confirmed: +${orderQty} units of ${selectedMedicineName} (Batch ${newBatchId}) saved to Firestore.`);
+      // Reset simulation order quantity
+      setOrderQty(0);
+    } catch (err: any) {
+      console.error('Failed to commit purchase order:', err);
+      setIsCommitting(false);
+      showToast(`Failed to commit: ${err.message || 'Server error'}`);
+    }
   };
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Simulation Banner */}
+      {/* HEADER BANNER */}
       <div
         style={{
-          padding: '14px 18px',
-          borderRadius: 12,
+          padding: '16px 20px',
+          borderRadius: 14,
           backgroundColor: 'var(--primary-light)',
           border: '1.5px solid var(--primary-border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: 12,
+          gap: 14,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 8,
+              width: 38,
+              height: 38,
+              borderRadius: 10,
               backgroundColor: 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
             }}
           >
-            <SlidersHorizontal size={17} color="#FFFFFF" />
+            <SlidersHorizontal size={19} color="#FFFFFF" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--primary)' }}>
-                Operational What-If Expiry & Inventory Sandbox
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary)' }}>
+                Operational What-If Expiry & Inventory Simulator
               </span>
               <span
                 style={{
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: 800,
                   backgroundColor: 'var(--surface)',
                   color: 'var(--primary)',
-                  padding: '2px 6px',
-                  borderRadius: 4,
+                  padding: '2px 8px',
+                  borderRadius: 6,
                   border: '1px solid var(--primary-border)',
                 }}
               >
                 PROJECTION SANDBOX
               </span>
             </div>
-            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
-              Calculations are computed server-side from live Firestore data without altering actual inventory.
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
+              Simulates hypothetical purchasing, dispensing, and lead-time decisions from live Firestore data before making real inventory changes.
             </p>
           </div>
         </div>
 
-        {/* Preset quick buttons */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {/* Quick Simulation Presets */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <button
-            onClick={() => applyPreset('bulk-order')}
-            className={`btn ${scenarioType === 'bulk-order' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => handleApplyPreset('baseline')}
+            className={`btn ${scenarioPreset === 'baseline' && orderQty === 0 && !holdBatch && dispensingIncreasePct === 0 && leadTimeDays === 0 ? 'btn-primary' : 'btn-secondary'}`}
             style={{ fontSize: 11.5, padding: '5px 10px' }}
           >
-            +300 Vitamin D
+            Baseline (+0)
           </button>
           <button
-            onClick={() => applyPreset('demand-surge')}
-            className={`btn ${scenarioType === 'demand-surge' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => handleApplyPreset('order-100')}
+            className={`btn ${orderQty === 100 ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ fontSize: 11.5, padding: '5px 10px' }}
+          >
+            +100 Units
+          </button>
+          <button
+            onClick={() => handleApplyPreset('order-300')}
+            className={`btn ${orderQty === 300 ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ fontSize: 11.5, padding: '5px 10px' }}
+          >
+            +300 Units
+          </button>
+          <button
+            onClick={() => handleApplyPreset('order-500')}
+            className={`btn ${orderQty === 500 ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ fontSize: 11.5, padding: '5px 10px' }}
+          >
+            +500 Units
+          </button>
+          <button
+            onClick={() => handleApplyPreset('demand-20')}
+            className={`btn ${dispensingIncreasePct === 20 ? 'btn-primary' : 'btn-secondary'}`}
             style={{ fontSize: 11.5, padding: '5px 10px' }}
           >
             +20% Dispensing
           </button>
           <button
-            onClick={() => applyPreset('delivery-delay')}
-            className={`btn ${scenarioType === 'delivery-delay' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => handleApplyPreset('delay-15')}
+            className={`btn ${leadTimeDays === 15 ? 'btn-primary' : 'btn-secondary'}`}
             style={{ fontSize: 11.5, padding: '5px 10px' }}
           >
             15d Delay
           </button>
           <button
-            onClick={() => applyPreset('no-return')}
-            className={`btn ${scenarioType === 'no-return' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => handleApplyPreset('hold-batch')}
+            className={`btn ${holdBatch ? 'btn-primary' : 'btn-secondary'}`}
             style={{ fontSize: 11.5, padding: '5px 10px' }}
           >
-            Hold Expiry Batch
+            Hold Batch
+          </button>
+          <button
+            onClick={handleResetToBaseline}
+            className="btn btn-ghost"
+            style={{ fontSize: 11.5, padding: '5px 8px', color: 'var(--text-3)' }}
+            title="Reset Simulator to Current State"
+          >
+            <RefreshCw size={13} /> Reset
           </button>
         </div>
       </div>
 
-      {/* 4-STAGE OPERATIONAL PIPELINE CARDS */}
+      {/* MEDICINE & BATCH SELECTOR TOOLBAR */}
+      <div
+        className="card"
+        style={{
+          padding: '14px 18px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flex: 1 }}>
+          <div style={{ minWidth: 240, flex: 1 }}>
+            <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
+              Select Live Pharmacy Medicine:
+            </label>
+            <select
+              className="input"
+              value={selectedMedicineName}
+              onChange={e => {
+                setSelectedMedicineName(e.target.value);
+                setSelectedBatchCode('');
+              }}
+              style={{ fontSize: 13, fontWeight: 600 }}
+            >
+              {uniqueMedicines.map((m, idx) => (
+                <option key={idx} value={m.medicine || (m as any).medicineName}>
+                  {m.medicine || (m as any).medicineName} ({m.quantity} units · Batch {m.batch})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {availableBatches.length > 1 && (
+            <div style={{ minWidth: 180 }}>
+              <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>
+                Target Batch (FEFO Prioritized):
+              </label>
+              <select
+                className="input"
+                value={selectedBatchCode}
+                onChange={e => setSelectedBatchCode(e.target.value)}
+                style={{ fontSize: 13, fontWeight: 600 }}
+              >
+                {availableBatches.map((b, idx) => (
+                  <option key={idx} value={b.batch}>
+                    {b.batch} ({b.quantity} units · {b.daysToExpiry}d left)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-3)' }}>
+          <span className="chip badge-blue" style={{ fontSize: 11 }}>
+            {availableBatches.length} {availableBatches.length === 1 ? 'Batch' : 'Batches'} in Inventory
+          </span>
+          <span>FEFO Active</span>
+        </div>
+      </div>
+
+      {/* 4-STAGE OPERATIONAL SIMULATION PIPELINE */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: 14,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: 16,
         }}
       >
-        {/* Stage 1: Current State */}
+        {/* Stage 1: Actual Current State */}
         <div
           className="card"
           style={{
-            padding: 16,
+            padding: 18,
             borderLeft: '4px solid #3B82F6',
             display: 'flex',
             flexDirection: 'column',
@@ -259,42 +538,52 @@ export default function WhatIfSimulator({
           }}
         >
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 1. Actual Current State
               </span>
-              <span className="chip badge-blue" style={{ fontSize: 10 }}>ACTUAL DATA</span>
+              <span className="chip badge-blue" style={{ fontSize: 10 }}>FIRESTORE DATA</span>
             </div>
-            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
-              {medicine}
+            
+            <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>
+              {selectedMedicineName}
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 12 }}>
+              Batch: <strong style={{ color: 'var(--text)' }}>{selectedBatchCode}</strong> · Expiry: <strong style={{ color: 'var(--text)' }}>{expiryDateStr}</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Available Stock:</span>
+                <span style={{ color: 'var(--text-3)' }}>Current Stock:</span>
                 <b style={{ color: 'var(--text)' }}>{currentStock} units</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Daily Dispensing:</span>
-                <b style={{ color: 'var(--text)' }}>{dailyUsage} units / day</b>
+                <span style={{ color: 'var(--text-3)' }}>Daily Dispensing Rate:</span>
+                <b style={{ color: 'var(--text)' }}>{baseDailyUsage} units / day</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Runout Estimate:</span>
-                <b style={{ color: daysUntilRunoutCurrent < 10 ? 'var(--danger)' : 'var(--success)' }}>
-                  {daysUntilRunoutCurrent} days
+                <span style={{ color: 'var(--text-3)' }}>Days to Expiry (Real Date):</span>
+                <b style={{ color: daysToExpiry <= 30 ? 'var(--danger)' : 'var(--text)' }}>
+                  {daysToExpiry > 0 ? `${daysToExpiry} days remaining` : 'Expired'}
                 </b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Unit Purchase Cost:</span>
+                <b style={{ color: 'var(--text)' }}>₹ {unitCost}</b>
               </div>
             </div>
           </div>
-          <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-3)' }}>
-            Current waste risk: <b>₹ {currentValueAtRisk.toLocaleString('en-IN')}</b>
+
+          <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 11.5, color: 'var(--text-3)' }}>
+            Baseline Consumption: <b>{baselineUsableConsumption} units</b> · Surplus: <b style={{ color: baselineSurplus > 0 ? 'var(--warning)' : 'var(--success)' }}>{baselineSurplus} units (₹ {baselineCapitalAtRisk.toLocaleString('en-IN')})</b>
           </div>
         </div>
 
-        {/* Stage 2: Scenario Input */}
+        {/* Stage 2: Scenario Hypothesis */}
         <div
           className="card"
           style={{
-            padding: 16,
+            padding: 18,
             borderLeft: '4px solid var(--primary)',
             display: 'flex',
             flexDirection: 'column',
@@ -302,32 +591,40 @@ export default function WhatIfSimulator({
           }}
         >
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 2. Scenario Hypothesis
               </span>
               <span className="chip badge-teal" style={{ fontSize: 10 }}>SIMULATED</span>
             </div>
-            <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
-              Reorder +{orderQty} units
+
+            <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>
+              {orderQty > 0 ? `Proposed Order: +${orderQty} units` : 'Baseline Order: +0 units'}
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 12 }}>
+              Simulated Velocity: <strong style={{ color: 'var(--text)' }}>{simulatedDailyDemand.toFixed(1)} / day</strong> {dispensingIncreasePct !== 0 ? `(${dispensingIncreasePct > 0 ? '+' : ''}${dispensingIncreasePct}%)` : ''} {holdBatch ? '· [HELD]' : ''}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Delivery Lead Time:</span>
-                <b>{leadTimeDays} days</b>
+                <span style={{ color: 'var(--text-3)' }}>Supplier Lead Time:</span>
+                <b>{leadTimeDays} days delay</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Batch Shelf Life:</span>
-                <b>{daysToExpiry} days</b>
+                <span style={{ color: 'var(--text-3)' }}>Usable Window Remaining:</span>
+                <b>{effectiveWindowDays} days</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Unit Procurement:</span>
-                <b>₹ {unitCost} / unit</b>
+                <span style={{ color: 'var(--text-3)' }}>Batch Holding Status:</span>
+                <b style={{ color: holdBatch ? 'var(--danger)' : 'var(--success)' }}>
+                  {holdBatch ? 'Hold Batch (0 Dispensing)' : 'Active FEFO Dispensing'}
+                </b>
               </div>
             </div>
           </div>
-          <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-3)' }}>
-            Total investment: <b>₹ {(orderQty * unitCost).toLocaleString('en-IN')}</b>
+
+          <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 11.5, color: 'var(--text-3)' }}>
+            Proposed Order Value: <b>₹ {(orderQty * unitCost).toLocaleString('en-IN')}</b> (Purchase Cost)
           </div>
         </div>
 
@@ -335,60 +632,77 @@ export default function WhatIfSimulator({
         <div
           className="card"
           style={{
-            padding: 16,
-            borderLeft: `4px solid ${isHighRisk ? 'var(--danger)' : isModerateRisk ? 'var(--warning)' : 'var(--success)'}`,
+            padding: 18,
+            borderLeft: `4px solid ${isHighRisk ? 'var(--danger)' : isModerateRisk ? 'var(--warning)' : isShortageRisk ? '#F59E0B' : 'var(--success)'}`,
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
           }}
         >
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span
                 style={{
                   fontSize: 11,
                   fontWeight: 800,
-                  color: isHighRisk ? 'var(--danger)' : isModerateRisk ? 'var(--warning)' : 'var(--success)',
+                  color: isHighRisk ? 'var(--danger)' : isModerateRisk ? 'var(--warning)' : isShortageRisk ? '#F59E0B' : 'var(--success)',
                   textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
                 }}
               >
                 3. Projected Impact
               </span>
               <span
-                className={`chip ${isHighRisk ? 'badge-red' : isModerateRisk ? 'badge-amber' : 'badge-green'}`}
+                className={`chip ${isHighRisk ? 'badge-red' : isModerateRisk ? 'badge-amber' : isShortageRisk ? 'badge-orange' : 'badge-green'}`}
                 style={{ fontSize: 10 }}
               >
-                {isHighRisk ? 'High Waste' : isModerateRisk ? 'Moderate Surplus' : 'Optimal'}
+                {isHighRisk ? 'High Expiry Risk' : isModerateRisk ? 'Moderate Surplus' : isShortageRisk ? 'Shortage Risk' : 'Optimal Balance'}
               </span>
             </div>
-            <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
-              Total Stock → {totalStock} units
+
+            <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>
+              Projected Stock → {projectedTotalStock} units
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 12 }}>
+              Expected Consumption: <strong style={{ color: 'var(--text)' }}>{expectedConsumption} units</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Projected Demand:</span>
-                <b>{projectedConsumption} units</b>
+                <span style={{ color: 'var(--text-3)' }}>Projected Surplus at Expiry:</span>
+                <b style={{ color: isHighRisk ? 'var(--danger)' : isModerateRisk ? 'var(--warning)' : 'var(--text)' }}>
+                  {projectedSurplus} units
+                </b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Unsold at Expiry:</span>
-                <b style={{ color: isHighRisk ? 'var(--danger)' : 'var(--text)' }}>{surplusUnused} units</b>
+                <span style={{ color: 'var(--text-3)' }}>Capital at Risk (Purchase Cost):</span>
+                <b style={{ color: isHighRisk ? 'var(--danger)' : isModerateRisk ? 'var(--warning)' : 'var(--text)' }}>
+                  ₹ {capitalAtRisk.toLocaleString('en-IN')}
+                </b>
               </div>
+              {potentialShortage > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#F59E0B' }}>Potential Shortage:</span>
+                  <b style={{ color: '#F59E0B' }}>{potentialShortage} units (₹ {stockoutExposure.toLocaleString('en-IN')})</b>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Value at Expiry Risk:</span>
-                <b style={{ color: isHighRisk ? 'var(--danger)' : 'var(--text)' }}>₹ {valueAtRisk.toLocaleString('en-IN')}</b>
+                <span style={{ color: 'var(--text-3)' }}>Stock Utilization:</span>
+                <b>{stockUtilizationPct}%</b>
               </div>
             </div>
           </div>
-          <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-3)' }}>
-            Utilization: <b>{Math.min(100, Math.round((projectedConsumption / (totalStock || 1)) * 100))}%</b>
+
+          <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 11.5, color: 'var(--text-3)' }}>
+            Days to Runout: <b>{daysUntilStockout > 365 ? '365+ days' : `${daysUntilStockout} days`}</b>
           </div>
         </div>
 
-        {/* Stage 4: AI Decision & Action */}
+        {/* Stage 4: AI Decision Support */}
         <div
           className="card"
           style={{
-            padding: 16,
+            padding: 18,
             borderLeft: '4px solid #8B5CF6',
             backgroundColor: 'var(--bg-alt)',
             display: 'flex',
@@ -397,94 +711,132 @@ export default function WhatIfSimulator({
           }}
         >
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#8B5CF6', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#8B5CF6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 4. AI Decision Support
               </span>
-              <BrainCircuit size={16} color="#8B5CF6" />
+              <BrainCircuit size={17} color="#8B5CF6" />
             </div>
-            <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', lineHeight: 1.45, marginBottom: 8 }}>
-              {isHighRisk
-                ? `Waste Warning: An order of ${orderQty} units causes ${surplusUnused} units (₹ ${valueAtRisk.toLocaleString('en-IN')}) to expire unsold.`
-                : 'Balanced scenario. Stock velocity aligns with expiration date.'}
+
+            <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', lineHeight: 1.5, marginBottom: 12 }}>
+              {holdBatch
+                ? `Holding this batch diverts dispensing velocity; all ${projectedTotalStock} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) remain at risk of expiring unsold.`
+                : isHighRisk
+                ? `Ordering +${orderQty} units creates a projected surplus of ${projectedSurplus} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) expiring unsold if demand remains ${simulatedDailyDemand.toFixed(1)}/day. Optimal order size is ~${Math.max(0, expectedConsumption - currentStock)} units.`
+                : isModerateRisk
+                ? `Moderate surplus of ${projectedSurplus} units projected at expiry date (₹ ${capitalAtRisk.toLocaleString('en-IN')}). Maintain FEFO priority.`
+                : isShortageRisk
+                ? `Projected consumption (${expectedConsumption} units) exceeds available stock (${projectedTotalStock} units). Consider an order of +${potentialShortage} units.`
+                : `Optimal balance: ${projectedTotalStock} units are projected to be fully consumed within ~${Math.min(daysToExpiry, daysUntilStockout)} days prior to expiry.`}
             </p>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {isHighRisk && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {isHighRisk && orderQty > 0 && (
               <button
-                onClick={handleApplyRecommended}
+                onClick={handleApplyAiTarget}
                 className="btn"
                 style={{
                   backgroundColor: '#7C3AED',
                   color: '#FFFFFF',
-                  fontSize: 11.5,
-                  padding: '6px 10px',
-                  borderRadius: 6,
+                  fontSize: 12,
+                  padding: '7px 12px',
+                  borderRadius: 8,
                   justifyContent: 'center',
+                  fontWeight: 700,
                 }}
               >
-                Auto-Size to AI Target
+                <Sparkles size={14} /> Auto-Size to AI Target (~{Math.max(0, expectedConsumption - currentStock)} units)
               </button>
             )}
+
             <button
-              onClick={handleCommitOrder}
+              onClick={() => setShowCommitModal(true)}
+              disabled={orderQty <= 0}
               className="btn btn-teal"
-              style={{ fontSize: 11.5, padding: '6px 10px', borderRadius: 6, justifyContent: 'center' }}
+              style={{
+                fontSize: 12,
+                padding: '7px 12px',
+                borderRadius: 8,
+                justifyContent: 'center',
+                fontWeight: 700,
+                opacity: orderQty <= 0 ? 0.6 : 1,
+              }}
             >
-              <PackagePlus size={14} /> Commit to Live Stock
+              <PackagePlus size={14} /> Commit to Live Stock (+{orderQty})
             </button>
           </div>
         </div>
       </div>
 
-      {/* COMPARISON MATRIX (Current vs +100 vs +300 vs +500) */}
+      {/* SCENARIO COMPARISON MATRIX (Current Baseline vs +100 vs +300 vs +500) */}
       <div className="card" style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-              Order Increments Comparison Matrix (Current vs +100 vs +300 vs +500)
+              Scenario Comparison Matrix (Baseline vs +100 vs +300 vs +500)
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-              Comparative multi-scenario evaluation calculated by the simulation engine
+              Comparative evaluation calculated from live pharmacy inventory and velocity
             </p>
           </div>
-          <span className="chip badge-blue" style={{ fontSize: 10 }}>4 SCENARIOS COMPARED</span>
+          <span className="chip badge-blue" style={{ fontSize: 10.5 }}>4 SCENARIOS COMPARED</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
           {comparisonMatrix.map((item, idx) => {
             const isSelected = item.orderIncrement === orderQty;
-            const isDanger = item.riskLevel === 'High';
+            const isDanger = item.riskLevel === 'High' || item.riskLevel === 'Expired';
             return (
               <div
                 key={idx}
                 onClick={() => setOrderQty(item.orderIncrement)}
                 style={{
-                  padding: 14,
-                  borderRadius: 10,
+                  padding: 16,
+                  borderRadius: 12,
                   backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--bg-alt)',
                   border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <b style={{ fontSize: 13, color: 'var(--text)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <b style={{ fontSize: 13.5, color: 'var(--text)' }}>
                     {item.orderIncrement === 0 ? 'Current Baseline (+0)' : `+${item.orderIncrement} Units`}
                   </b>
                   <span
-                    className={`chip ${isDanger ? 'badge-red' : item.surplusAtExpiry > 0 ? 'badge-amber' : 'badge-green'}`}
-                    style={{ fontSize: 9.5 }}
+                    className={`chip ${isDanger ? 'badge-red' : item.projectedSurplus > 0 ? 'badge-amber' : 'badge-green'}`}
+                    style={{ fontSize: 10 }}
                   >
-                    {item.riskLevel}
+                    {item.riskLabel || item.riskLevel}
                   </span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--text-2)' }}>
-                  <div>Projected Stock: <b>{item.projectedStock} units</b></div>
-                  <div>Surplus Unsold: <b style={{ color: isDanger ? 'var(--danger)' : 'var(--text)' }}>{item.surplusAtExpiry} units</b></div>
-                  <div>Capital Risk: <b style={{ color: isDanger ? 'var(--danger)' : 'var(--text)' }}>₹ {item.wasteCost.toLocaleString('en-IN')}</b></div>
-                  <div>Utilization: <b>{item.utilizationPct}%</b></div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, color: 'var(--text-2)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Projected Stock:</span>
+                    <b>{item.projectedStock} units</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Expected Consumption:</span>
+                    <b>{item.expectedConsumption} units</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Projected Surplus:</span>
+                    <b style={{ color: isDanger ? 'var(--danger)' : item.projectedSurplus > 0 ? 'var(--warning)' : 'var(--text)' }}>
+                      {item.projectedSurplus} units
+                    </b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Capital at Risk:</span>
+                    <b style={{ color: isDanger ? 'var(--danger)' : item.projectedSurplus > 0 ? 'var(--warning)' : 'var(--text)' }}>
+                      ₹ {item.capitalAtRisk.toLocaleString('en-IN')}
+                    </b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Utilization:</span>
+                    <b>{item.utilizationPct}%</b>
+                  </div>
                 </div>
               </div>
             );
@@ -492,121 +844,366 @@ export default function WhatIfSimulator({
         </div>
       </div>
 
-      {/* Interactive Sliders & Variables */}
+      {/* FEFO MULTI-BATCH BREAKDOWN (When multiple batches exist) */}
+      {availableBatches.length > 1 && (
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+                FEFO Batch Breakdown: {selectedMedicineName}
+              </h3>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
+                Batches sorted by expiration order (First Expiry, First Out)
+              </p>
+            </div>
+            <span className="chip badge-teal" style={{ fontSize: 10.5 }}>FEFO COMPLIANCE</span>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ width: '100%', fontSize: 12.5 }}>
+              <thead>
+                <tr>
+                  <th>FEFO Priority</th>
+                  <th>Batch Number</th>
+                  <th>Expiry Date</th>
+                  <th>Days Remaining</th>
+                  <th>Current Stock</th>
+                  <th>Unit Cost</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {availableBatches.map((b, idx) => {
+                  const isCurrent = b.batch === selectedBatchCode;
+                  return (
+                    <tr key={idx} style={{ backgroundColor: isCurrent ? 'var(--primary-light)' : 'transparent' }}>
+                      <td>
+                        <span className={`chip ${idx === 0 ? 'badge-green' : 'badge-blue'}`} style={{ fontSize: 10.5 }}>
+                          #{idx + 1} {idx === 0 ? '(Primary FEFO)' : ''}
+                        </span>
+                      </td>
+                      <td><strong>{b.batch}</strong></td>
+                      <td>{b.expiry}</td>
+                      <td>
+                        <span style={{ color: b.daysToExpiry <= 30 ? 'var(--danger)' : 'var(--text)', fontWeight: 700 }}>
+                          {b.daysToExpiry > 0 ? `${b.daysToExpiry} days` : 'Expired'}
+                        </span>
+                      </td>
+                      <td>{b.quantity} units</td>
+                      <td>₹ {b.unitPrice}</td>
+                      <td>
+                        <span className={`chip ${b.status === 'Near Expiry' ? 'badge-amber' : b.status === 'Recalled' ? 'badge-red' : 'badge-green'}`} style={{ fontSize: 10 }}>
+                          {b.status}
+                        </span>
+                      </td>
+                      <td>
+                        {isCurrent ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>Active in Simulator</span>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedBatchCode(b.batch)}
+                            className="btn btn-secondary"
+                            style={{ fontSize: 11, padding: '3px 8px' }}
+                          >
+                            Simulate This Batch
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* INTERACTIVE VARIABLES CONTROL PANEL */}
       <div className="card" style={{ padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingBottom: 14,
+            borderBottom: '1px solid var(--border)',
+            marginBottom: 16,
+          }}
+        >
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
               Adjust Simulation Variables
             </h3>
-            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '2px 0 0' }}>
-              Drag sliders or type exact values to recalculate in real time
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
+              Modify hypothetical order quantities, dispensing demand, lead-times, or holding conditions
             </p>
           </div>
           <button
-            onClick={() => applyPreset('bulk-order')}
+            onClick={handleResetToBaseline}
             className="btn btn-ghost"
-            style={{ fontSize: 12, padding: '5px 8px' }}
+            style={{ fontSize: 12, padding: '5px 10px' }}
           >
-            <RefreshCw size={13} /> Reset
+            <RefreshCw size={13} /> Reset Variables
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+          {/* Proposed Order Quantity */}
           <div>
-            <label className="label">Target Medicine</label>
-            <input
-              className="input"
-              value={medicine}
-              onChange={e => setMedicine(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Current Stock</label>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>{currentStock} units</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="label" style={{ marginBottom: 0 }}>Proposed Order Quantity</label>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>+{orderQty} units</span>
             </div>
             <input
               className="input"
               type="number"
               min="0"
-              value={currentStock}
-              onChange={e => setCurrentStock(Math.max(0, Number(e.target.value)))}
-            />
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Proposed Order</label>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>{orderQty} units</span>
-            </div>
-            <input
-              className="input"
-              type="number"
-              min="0"
+              step="10"
               value={orderQty}
               onChange={e => setOrderQty(Math.max(0, Number(e.target.value)))}
             />
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Daily Dispense Rate</label>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>{dailyUsage} / day</span>
-            </div>
             <input
-              className="input"
-              type="number"
-              min="1"
-              value={dailyUsage}
-              onChange={e => setDailyUsage(Math.max(1, Number(e.target.value)))}
+              type="range"
+              min="0"
+              max="1000"
+              step="25"
+              value={orderQty}
+              onChange={e => setOrderQty(Number(e.target.value))}
+              style={{ width: '100%', marginTop: 8, accentColor: 'var(--primary)' }}
             />
           </div>
 
+          {/* Daily Dispensing Demand */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Days to Expiry</label>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>{daysToExpiry} days</span>
-            </div>
-            <input
-              className="input"
-              type="number"
-              min="1"
-              value={daysToExpiry}
-              onChange={e => setDaysToExpiry(Math.max(1, Number(e.target.value)))}
-            />
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Supplier Lead Time</label>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>{leadTimeDays} days</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="label" style={{ marginBottom: 0 }}>Daily Dispensing Rate</label>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>
+                {simulatedDailyDemand.toFixed(1)} / day ({baseDailyUsage} baseline)
+              </span>
             </div>
             <input
               className="input"
               type="number"
               min="0"
-              value={leadTimeDays}
-              onChange={e => setLeadTimeDays(Math.max(0, Number(e.target.value)))}
+              step="1"
+              value={baseDailyUsage}
+              onChange={e => setBaseDailyUsage(Math.max(0, Number(e.target.value)))}
             />
+            <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+              {[0, 10, 20, 50].map(pct => (
+                <button
+                  key={pct}
+                  onClick={() => setDispensingIncreasePct(pct)}
+                  className={`btn ${dispensingIncreasePct === pct ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: 10.5, padding: '3px 8px', flex: 1 }}
+                >
+                  {pct === 0 ? 'Current' : `+${pct}%`}
+                </button>
+              ))}
+            </div>
           </div>
 
+          {/* Supplier Delivery Delay */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Unit Cost (₹)</label>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>₹ {unitCost}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="label" style={{ marginBottom: 0 }}>Supplier Delivery Delay</label>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>{leadTimeDays} days</span>
             </div>
             <input
               className="input"
               type="number"
-              min="1"
-              value={unitCost}
-              onChange={e => setUnitCost(Math.max(1, Number(e.target.value)))}
+              min="0"
+              step="1"
+              value={leadTimeDays}
+              onChange={e => setLeadTimeDays(Math.max(0, Number(e.target.value)))}
             />
+            <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+              {[0, 7, 15, 30].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setLeadTimeDays(d)}
+                  className={`btn ${leadTimeDays === d ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: 10.5, padding: '3px 8px', flex: 1 }}
+                >
+                  {d}d Delay
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hold Batch Switch & Days to Expiry */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="label" style={{ marginBottom: 0 }}>Days to Expiry (Dynamic)</label>
+              <span style={{ fontSize: 12, fontWeight: 700, color: daysToExpiry <= 30 ? 'var(--danger)' : 'var(--primary)' }}>
+                {daysToExpiry} days
+              </span>
+            </div>
+            <input
+              className="input"
+              type="number"
+              min="0"
+              value={daysToExpiry}
+              onChange={e => setDaysToExpiry(Math.max(0, Number(e.target.value)))}
+            />
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                id="holdBatchCheck"
+                checked={holdBatch}
+                onChange={e => setHoldBatch(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: 'var(--danger)' }}
+              />
+              <label htmlFor="holdBatchCheck" style={{ fontSize: 12, fontWeight: 700, color: holdBatch ? 'var(--danger)' : 'var(--text)', cursor: 'pointer' }}>
+                Hold Expiry Batch (Divert Dispensing)
+              </label>
+            </div>
           </div>
         </div>
+
+        {/* Provenance note */}
+        {demandProvenance && (
+          <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 11.5, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Info size={13} color="var(--primary)" />
+            <span>Demand baseline: {demandProvenance}</span>
+          </div>
+        )}
       </div>
+
+      {/* COMMIT CONFIRMATION MODAL */}
+      {showCommitModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 150,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(6px)',
+            }}
+            onClick={() => setShowCommitModal(false)}
+          />
+
+          <div
+            className="card animate-scale-in"
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: 480,
+              background: 'var(--surface)',
+              borderRadius: 18,
+              border: '1.5px solid var(--border)',
+              padding: 24,
+              zIndex: 151,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <PackagePlus size={20} color="#10B981" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+                    Confirm Purchase Order Commit
+                  </h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
+                    This action will add the proposed stock to live Firestore inventory.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowCommitModal(false)} className="btn btn-ghost" style={{ padding: 4 }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: 'var(--bg-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 18,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                fontSize: 13,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Medicine:</span>
+                <b>{selectedMedicineName}</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Current Stock:</span>
+                <b>{currentStock} units</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Proposed Order:</span>
+                <b style={{ color: 'var(--primary)' }}>+{orderQty} units</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, borderTop: '1px dashed var(--border)' }}>
+                <span style={{ fontWeight: 700, color: 'var(--text)' }}>New Projected Stock:</span>
+                <b style={{ color: 'var(--primary)', fontSize: 14 }}>{currentStock + orderQty} units</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Unit Purchase Cost:</span>
+                <b>₹ {unitCost} / unit</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Total Purchase Value:</span>
+                <b>₹ {(orderQty * unitCost).toLocaleString('en-IN')}</b>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                onClick={() => setShowCommitModal(false)}
+                className="btn btn-secondary"
+                style={{ fontSize: 13, padding: '8px 16px' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmCommit}
+                disabled={isCommitting}
+                className="btn btn-teal"
+                style={{ fontSize: 13, padding: '8px 18px', fontWeight: 700 }}
+              >
+                {isCommitting ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" /> Committing to Firestore...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={14} /> Confirm & Commit to Live Stock
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

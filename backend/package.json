@@ -6,9 +6,10 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node tests/aiAndSms.test.js && node tests/invoiceExtraction.test.js && node tests/barcodeScanner.test.js && node tests/globalBarcodeLookup.test.js",
+    "test": "node tests/aiAndSms.test.js && node tests/invoiceExtraction.test.js && node tests/barcodeScanner.test.js && node tests/globalBarcodeLookup.test.js && node tests/whatIfSimulator.test.js",
     "test:invoice": "node tests/invoiceExtraction.test.js",
-    "test:barcode": "node tests/barcodeScanner.test.js && node tests/globalBarcodeLookup.test.js"
+    "test:barcode": "node tests/barcodeScanner.test.js && node tests/globalBarcodeLookup.test.js",
+    "test:simulator": "node tests/whatIfSimulator.test.js"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
