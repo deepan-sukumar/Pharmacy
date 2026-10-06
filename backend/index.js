@@ -3,7 +3,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const { db, isConnected, getFirebaseStatus, ensureConnected, testFirestoreConnectivity } = require('./firebase');
 const { handleAIQuery } = require('./services/aiService');
-const { runWhatIfSimulation, calculateScenario, compareOrderScenarios } = require('./services/simulationService');
+const { runWhatIfSimulation, calculateScenario, compareOrderScenarios, interpretSimulationQuestion, answerSimulationQuestion, setMemoryStore: setSimulationMemoryStore } = require('./services/simulationService');
 const { sendSms, sendManualSms, sendRecallNotificationToAffectedCustomers, processDeliveryStatusCallback, getSmsReports, checkSmsDeliveryStatus, syncAllPendingSmsStatuses, checkSmsLocalCredits } = require('./services/smsService');
 const { renderSmsTemplate, SMS_TEMPLATES } = require('./services/smsTemplates');
 const { runNotificationCycle, startScheduler } = require('./services/schedulerService');
@@ -198,6 +198,7 @@ let memoryStore = {
 };
 
 pharmacyTools.setMemoryStore(memoryStore);
+setSimulationMemoryStore(memoryStore);
 
 // -------------------------------------------------------------
 // IDEMPOTENT FIRESTORE SEEDER (Runs safely on startup)
@@ -1555,6 +1556,16 @@ app.post('/api/ai/simulate', async (req, res) => {
   try {
     const pharmacyId = getPharmacyId(req);
     const result = await runWhatIfSimulation(pharmacyId, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/ai/simulate/ask', async (req, res) => {
+  try {
+    const pharmacyId = getPharmacyId(req);
+    const result = await answerSimulationQuestion(pharmacyId, req.body);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });

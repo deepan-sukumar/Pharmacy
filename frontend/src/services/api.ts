@@ -381,6 +381,7 @@ export const api = {
 
   async simulateScenario(params: {
     medicine?: string;
+    batch?: string;
     batchId?: string;
     currentStock: number;
     orderQty: number;
@@ -388,8 +389,33 @@ export const api = {
     daysToExpiry: number;
     unitCost: number;
     leadTimeDays?: number;
+    holdBatch?: boolean;
+    demandChangePct?: number;
+    dispensingIncreasePct?: number;
   }) {
     const res = await fetch(`${API_BASE_URL}/ai/simulate`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  },
+
+  async askSimulatorQuestion(params: {
+    question: string;
+    medicine?: string;
+    batch?: string;
+    batchId?: string;
+    currentStock?: number;
+    orderQty?: number;
+    dailyUsage?: number;
+    daysToExpiry?: number;
+    unitCost?: number;
+    leadTimeDays?: number;
+    holdBatch?: boolean;
+    demandChangePct?: number;
+  }) {
+    const res = await fetch(`${API_BASE_URL}/ai/simulate/ask`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(params),
