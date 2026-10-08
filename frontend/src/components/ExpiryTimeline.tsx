@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   CalendarDays, AlertTriangle, AlertCircle, CheckCircle2,
-  ShieldAlert, Clock, ChevronRight, Info, Filter, ArrowUpRight
+  ShieldAlert, Clock, ChevronRight, Info, Filter, ArrowUpRight,
+  Search, SlidersHorizontal
 } from 'lucide-react';
 import type { Medicine } from '../data';
 
@@ -142,8 +143,27 @@ export function getBatchRisk(daysLeft: number, status?: string): {
   };
 }
 
+/**
+ * Deterministic FEFO & Risk Priority Scoring:
+ * 1. RECALLED / QUARANTINED: Score 1000
+ * 2. EXPIRED (<=0 days): Score 950
+ * 3. 0–10 DAYS (Patient Safety / Action Due): Score 900
+ * 4. 11–30 DAYS (Critical Near Expiry): Score 800
+ * 5. 31–90 DAYS (Near Expiry): Score 600
+ * 6. 91+ DAYS (Safe): Score 300
+ */
+export function calculateBatchPriority(daysLeft: number, status?: string): number {
+  const norm = String(status || '').toUpperCase();
+  if (norm === 'RECALLED' || norm === 'QUARANTINED') return 1000;
+  if (daysLeft <= 0 || norm === 'EXPIRED') return 950;
+  if (daysLeft <= 10) return 900;
+  if (daysLeft <= 30) return 800;
+  if (daysLeft <= 90 || norm.includes('NEAR')) return 600;
+  return 300;
+}
+
 interface PositionedBatch {
-  item: Medicine & { daysLeft: number; risk: ReturnType<typeof getBatchRisk> };
+  item: Medicine & { daysLeft: number; risk: ReturnType<typeof getBatchRisk>; priorityScore: number };
   laneIndex: number;
   cardLeft: number;
   cardRight: number;
@@ -158,6 +178,8 @@ export default function ExpiryTimeline({
   onNavigateExpiryTable,
 }: ExpiryTimelineProps) {
   const [activeFilter, setActiveFilter] = useState<'ALL' | RiskLevel>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [maxDisplayLimit, setMaxDisplayLimit] = useState<number>(12);
   const [hoveredBatch, setHoveredBatch] = useState<{
     medicine: Medicine;
     daysLeft: number;
@@ -211,61 +233,128 @@ export default function ExpiryTimeline({
     ];
   }, []);
 
-  // 1. Extend inventory with calculated daysLeft & risk data
+  // 1. Extend and deduplicate inventory with computed daysLeft, risk & priority score
   const enrichedBatches = useMemo(() => {
-    return (inventory || []).map(item => {
+    const seen = new Set<string>();
+    const list = [];
+
+    for (const item of inventory || []) {
+      const batchCode = String(item.batchNumber || item.batch || 'BATCH-001').trim();
+      const medName = String(item.medicineName || item.medicine || 'Medicine').trim();
+      const uniqueKey = `${batchCode}__${medName}`;
+
+      if (seen.has(uniqueKey)) continue;
+      seen.add(uniqueKey);
+
       const daysLeft = calculateDaysRemaining(
         item.expiryDate || item.expiryDisplay || item.expiry,
-        item.batchNumber || item.batch,
+        batchCode,
         item.status,
         (item as any).daysRemaining
       );
       const risk = getBatchRisk(daysLeft, item.status);
-      return {
+      const priorityScore = calculateBatchPriority(daysLeft, item.status);
+
+      list.push({
         ...item,
-        medicine: item.medicineName || item.medicine || 'Medicine',
-        batch: item.batchNumber || item.batch || 'BATCH-001',
+        medicine: medName,
+        batch: batchCode,
         expiry: item.expiryDisplay || item.expiryDate || item.expiry || 'Oct 2026',
         supplier: item.supplierName || item.supplier || 'MediSource Distributors',
         quantity: Number(item.availableQuantity !== undefined ? item.availableQuantity : (item.quantity || 0)),
         daysLeft,
         risk,
-      };
-    });
+        priorityScore,
+      });
+    }
+
+    return list;
   }, [inventory]);
 
-  // KPI Summary Counts
+  // Total dataset KPI counts (calculated from all 512 batches)
+  const totalCount = enrichedBatches.length;
   const expiredCount = enrichedBatches.filter(b => b.risk.level === 'EXPIRED').length;
   const recalledCount = enrichedBatches.filter(b => b.risk.level === 'RECALLED').length;
   const criticalCount = enrichedBatches.filter(b => b.risk.level === 'CRITICAL').length;
   const nearExpiryCount = enrichedBatches.filter(b => b.risk.level === 'NEAR EXPIRY').length;
   const safeCount = enrichedBatches.filter(b => b.risk.level === 'SAFE').length;
 
-  // Filtered batches for display
-  const displayBatches = useMemo(() => {
-    return enrichedBatches.filter(b => {
-      if (activeFilter === 'ALL') return true;
-      return b.risk.level === activeFilter;
-    });
-  }, [enrichedBatches, activeFilter]);
+  // -------------------------------------------------------------
+  // 2. DETERMINISTIC FEFO PRIORITY SELECTION (TOP 10-12 ITEMS)
+  // -------------------------------------------------------------
+  const visibleBatches = useMemo(() => {
+    let filtered = enrichedBatches;
 
-  // Sort batches strictly by FEFO order (earliest expiry first), then name, then batch
-  const sortedBatches = useMemo(() => {
-    return [...displayBatches].sort((a, b) => {
+    // Apply text search if entered
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(b =>
+        b.medicine.toLowerCase().includes(q) ||
+        b.batch.toLowerCase().includes(q) ||
+        b.supplier.toLowerCase().includes(q)
+      );
+    }
+
+    // Category Filter Selection
+    if (activeFilter !== 'ALL') {
+      const byCategory = filtered.filter(b => b.risk.level === activeFilter);
+      return byCategory
+        .sort((a, b) => {
+          if (a.daysLeft !== b.daysLeft) return a.daysLeft - b.daysLeft;
+          if (a.medicine !== b.medicine) return a.medicine.localeCompare(b.medicine);
+          return a.batch.localeCompare(b.batch);
+        })
+        .slice(0, maxDisplayLimit);
+    }
+
+    // Default 'FEFO Priority Overview':
+    // Priority batches (Recalled, Expired, Critical, Near Expiry) are prioritized first.
+    const riskBatches = filtered
+      .filter(b => b.priorityScore >= 600)
+      .sort((a, b) => {
+        if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
+        if (a.daysLeft !== b.daysLeft) return a.daysLeft - b.daysLeft;
+        if (a.medicine !== b.medicine) return a.medicine.localeCompare(b.medicine);
+        return a.batch.localeCompare(b.batch);
+      });
+
+    const safeBatches = filtered
+      .filter(b => b.priorityScore < 600)
+      .sort((a, b) => {
+        if (a.daysLeft !== b.daysLeft) return a.daysLeft - b.daysLeft;
+        if (a.medicine !== b.medicine) return a.medicine.localeCompare(b.medicine);
+        return a.batch.localeCompare(b.batch);
+      });
+
+    if (riskBatches.length >= maxDisplayLimit) {
+      return riskBatches.slice(0, maxDisplayLimit);
+    }
+
+    // Fill remaining slots with up to 3 representative earliest safe batches
+    const remainingSlots = maxDisplayLimit - riskBatches.length;
+    const safeSlotsToTake = Math.min(3, remainingSlots);
+    const selectedSafe = safeBatches.slice(0, safeSlotsToTake);
+
+    return [...riskBatches, ...selectedSafe];
+  }, [enrichedBatches, activeFilter, searchQuery, maxDisplayLimit]);
+
+  // Sort the final selected priority subset strictly in chronological FEFO order for timeline rendering
+  const sortedPriorityBatches = useMemo(() => {
+    return [...visibleBatches].sort((a, b) => {
       if (a.daysLeft !== b.daysLeft) return a.daysLeft - b.daysLeft;
       if (a.medicine !== b.medicine) return a.medicine.localeCompare(b.medicine);
       return a.batch.localeCompare(b.batch);
     });
-  }, [displayBatches]);
+  }, [visibleBatches]);
 
   // -------------------------------------------------------------
-  // 2. DETERMINISTIC COLLISION-AWARE LANE ASSIGNMENT ENGINE
+  // 3. COLLISION-AWARE LANE LAYOUT ENGINE FOR PRIORITY SUBSET
   // -------------------------------------------------------------
-  const { positionedBatches, totalTimelineHeight, laneCount } = useMemo(() => {
+  const { positionedBatches, totalTimelineHeight } = useMemo(() => {
     const cardWidth = Math.min(210, Math.max(175, Math.floor(containerWidth * 0.22)));
     const cardHeight = 50;
-    const cardGapX = 14; // Minimum horizontal spacing between cards in the same lane
-    const cardGapY = 12; // Vertical spacing between lanes
+    const cardGapX = 14;
+    const cardGapY = 12;
     const paddingLeft = 18;
     const paddingRight = 18;
     const paddingTop = 32;
@@ -273,28 +362,21 @@ export default function ExpiryTimeline({
 
     const availableTrackWidth = Math.max(100, containerWidth - paddingLeft - paddingRight);
     const maxScaleDays = 120;
-    const markerY = 14; // Position of markers on top axis track
+    const markerY = 14;
 
-    // Lanes storage: array of bounding intervals for each vertical lane
-    // lanes[laneIndex] = [ { left, right }, ... ]
     const lanes: Array<Array<{ left: number; right: number }>> = [];
     const results: PositionedBatch[] = [];
 
-    sortedBatches.forEach(item => {
-      // Calculate true chronological marker X position on timeline scale (0 to 120 days)
+    sortedPriorityBatches.forEach(item => {
       const ratio = item.daysLeft <= 0 ? 0 : Math.min(1, item.daysLeft / maxScaleDays);
       const markerX = paddingLeft + ratio * availableTrackWidth;
 
-      // Desired card center aligned with the marker
       let cardLeft = markerX - cardWidth / 2;
-
-      // CLAMPING: Strictly prevent left and right clipping
       const minLeft = paddingLeft;
       const maxLeft = containerWidth - cardWidth - paddingRight;
       cardLeft = Math.max(minLeft, Math.min(cardLeft, maxLeft));
       const cardRight = cardLeft + cardWidth;
 
-      // Find first available lane where this card's [cardLeft - gap, cardRight + gap] does NOT collide
       let assignedLane = -1;
       for (let l = 0; l < lanes.length; l++) {
         const laneIntervals = lanes[l];
@@ -312,7 +394,6 @@ export default function ExpiryTimeline({
         }
       }
 
-      // If all existing lanes have collisions at this X range, create a new vertical lane!
       if (assignedLane === -1) {
         assignedLane = lanes.length;
         lanes.push([{ left: cardLeft, right: cardRight }]);
@@ -337,9 +418,8 @@ export default function ExpiryTimeline({
     return {
       positionedBatches: results,
       totalTimelineHeight: dynamicHeight,
-      laneCount: activeLanes,
     };
-  }, [sortedBatches, containerWidth]);
+  }, [sortedPriorityBatches, containerWidth]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -354,8 +434,8 @@ export default function ExpiryTimeline({
         {[
           {
             key: 'ALL',
-            label: 'All Batches',
-            count: enrichedBatches.length,
+            label: 'FEFO Priority',
+            count: totalCount,
             tone: 'var(--primary)',
             bg: 'var(--bg-alt)',
             border: 'var(--border)',
@@ -463,46 +543,91 @@ export default function ExpiryTimeline({
           position: 'relative',
         }}
       >
-        {/* Timeline Header Info */}
+        {/* Timeline Header Controls Bar */}
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: 20,
+            marginBottom: 18,
             flexWrap: 'wrap',
-            gap: 10,
+            gap: 12,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CalendarDays size={18} color="var(--primary)" />
-            <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-              Dynamic FEFO Expiry Timeline
-            </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarDays size={18} color="var(--primary)" />
+              <h3 style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+                Dynamic FEFO Expiry Timeline
+              </h3>
+            </div>
             <span
               style={{
                 fontSize: 11,
-                color: 'var(--text-3)',
-                background: 'var(--bg-alt)',
-                padding: '2px 8px',
+                color: 'var(--primary)',
+                background: 'var(--primary-light)',
+                padding: '3px 10px',
                 borderRadius: 99,
-                fontWeight: 600,
-                border: '1px solid var(--border)',
+                fontWeight: 700,
+                border: '1px solid var(--primary-border, #99F6E4)',
               }}
             >
-              Collision-Free FEFO Horizon ({sortedBatches.length} Batches)
+              Top {sortedPriorityBatches.length} of {totalCount} Batches
             </span>
           </div>
 
-          {onNavigateExpiryTable && (
-            <button
-              onClick={onNavigateExpiryTable}
-              className="btn btn-ghost"
-              style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* Quick Medicine/Batch Search */}
+            <div style={{ position: 'relative', width: 170 }}>
+              <Search size={13} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-4)' }} />
+              <input
+                type="text"
+                placeholder="Filter batch..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '5px 8px 5px 26px',
+                  fontSize: 11.5,
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-alt)',
+                  color: 'var(--text)',
+                }}
+              />
+            </div>
+
+            {/* Max Items Selector */}
+            <select
+              value={maxDisplayLimit}
+              onChange={e => setMaxDisplayLimit(Number(e.target.value))}
+              style={{
+                padding: '5px 8px',
+                fontSize: 11.5,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-alt)',
+                color: 'var(--text)',
+                cursor: 'pointer',
+              }}
+              title="Change number of visible priority items"
             >
-              View Full Batch Table <ChevronRight size={14} />
-            </button>
-          )}
+              <option value={12}>Show 12</option>
+              <option value={20}>Show 20</option>
+              <option value={30}>Show 30</option>
+            </select>
+
+            {onNavigateExpiryTable && (
+              <button
+                onClick={onNavigateExpiryTable}
+                className="btn btn-ghost"
+                style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                View Full Batch Table <ChevronRight size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Timeline Horizon Scale & Grid Lines */}
@@ -619,7 +744,7 @@ export default function ExpiryTimeline({
               />
             ))}
 
-            {/* SVG Connector Lines from Top Track Markers to Cards */}
+            {/* SVG Connector Lines from Top Track Markers to Cards (Limited to Priority Subset) */}
             <svg
               style={{
                 position: 'absolute',
@@ -636,7 +761,6 @@ export default function ExpiryTimeline({
                 const cardAnchorY = cardTop;
                 return (
                   <g key={`conn-${item.batch}-${item.id || item.medicine}`}>
-                    {/* Top track marker dot */}
                     <circle
                       cx={markerX}
                       cy={markerY}
@@ -645,135 +769,150 @@ export default function ExpiryTimeline({
                       stroke="var(--surface)"
                       strokeWidth={1.5}
                     />
-                    {/* Clean connector line to card */}
                     <path
                       d={`M ${markerX} ${markerY} L ${markerX} ${markerY + 6} L ${cardMidX} ${cardAnchorY}`}
                       fill="none"
                       stroke={item.risk.dotColor}
                       strokeWidth={1.2}
                       strokeDasharray={item.risk.level === 'EXPIRED' ? '2 2' : 'none'}
-                      opacity={0.5}
+                      opacity={0.6}
                     />
                   </g>
                 );
               })}
             </svg>
 
-            {/* 3. COLLISION-FREE BATCH CARDS */}
-            {positionedBatches.map(({ item: b, cardLeft, cardTop }) => {
-              return (
-                <div
-                  key={`card-${b.batch}-${b.id || b.medicine}`}
-                  onClick={() => onSelectBatch?.(b)}
-                  onMouseEnter={e => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setHoveredBatch({
-                      medicine: b,
-                      daysLeft: b.daysLeft,
-                      risk: b.risk,
-                      x: rect.left + rect.width / 2,
-                      y: rect.top,
-                    });
-                  }}
-                  onMouseLeave={() => setHoveredBatch(null)}
-                  style={{
-                    position: 'absolute',
-                    left: cardLeft,
-                    top: cardTop,
-                    zIndex: 3,
-                    cursor: 'pointer',
-                    transition: 'box-shadow 0.15s ease, transform 0.15s ease',
-                  }}
-                >
-                  {/* Visual Node Card */}
+            {/* 3. COLLISION-FREE PRIORITY BATCH CARDS */}
+            {positionedBatches.length === 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: 'var(--text-3)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                No batches found matching the selected filter.
+              </div>
+            ) : (
+              positionedBatches.map(({ item: b, cardLeft, cardTop }) => {
+                return (
                   <div
+                    key={`card-${b.batch}-${b.id || b.medicine}`}
+                    onClick={() => onSelectBatch?.(b)}
+                    onMouseEnter={e => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setHoveredBatch({
+                        medicine: b,
+                        daysLeft: b.daysLeft,
+                        risk: b.risk,
+                        x: rect.left + rect.width / 2,
+                        y: rect.top,
+                      });
+                    }}
+                    onMouseLeave={() => setHoveredBatch(null)}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '5px 9px',
-                      borderRadius: 7,
-                      backgroundColor: b.risk.bg,
-                      border: `1.5px solid ${b.risk.border}`,
-                      boxShadow: 'var(--shadow-xs)',
-                      whiteSpace: 'nowrap',
-                      maxWidth: 215,
+                      position: 'absolute',
+                      left: cardLeft,
+                      top: cardTop,
+                      zIndex: 3,
+                      cursor: 'pointer',
+                      transition: 'box-shadow 0.15s ease, transform 0.15s ease',
                     }}
                   >
-                    <span
+                    {/* Visual Node Card */}
+                    <div
                       style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: b.risk.dotColor,
-                        flexShrink: 0,
-                        boxShadow: `0 0 0 2px ${b.risk.bg}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '5px 9px',
+                        borderRadius: 7,
+                        backgroundColor: b.risk.bg,
+                        border: `1.5px solid ${b.risk.border}`,
+                        boxShadow: 'var(--shadow-xs)',
+                        whiteSpace: 'nowrap',
+                        maxWidth: 215,
                       }}
-                    />
-
-                    <div style={{ overflow: 'hidden', flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span
-                          style={{
-                            fontSize: 11.5,
-                            fontWeight: 800,
-                            color: 'var(--text)',
-                            fontFamily: 'monospace',
-                          }}
-                        >
-                          {b.batch}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 8.5,
-                            fontWeight: 800,
-                            padding: '1px 4px',
-                            borderRadius: 3,
-                            backgroundColor: b.risk.border,
-                            color: b.risk.color,
-                            letterSpacing: '0.04em',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {b.risk.badgeLabel}
-                        </span>
-                      </div>
-                      <div
+                    >
+                      <span
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          marginTop: 1,
-                          fontSize: 10.5,
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          backgroundColor: b.risk.dotColor,
+                          flexShrink: 0,
+                          boxShadow: `0 0 0 2px ${b.risk.bg}`,
                         }}
-                      >
-                        <span
+                      />
+
+                      <div style={{ overflow: 'hidden', flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: 800,
+                              color: 'var(--text)',
+                              fontFamily: 'monospace',
+                            }}
+                          >
+                            {b.batch}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 8.5,
+                              fontWeight: 800,
+                              padding: '1px 4px',
+                              borderRadius: 3,
+                              backgroundColor: b.risk.border,
+                              color: b.risk.color,
+                              letterSpacing: '0.04em',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {b.risk.badgeLabel}
+                          </span>
+                        </div>
+                        <div
                           style={{
-                            color: 'var(--text-2)',
-                            fontWeight: 600,
-                            maxWidth: 95,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            marginTop: 1,
+                            fontSize: 10.5,
                           }}
-                          title={b.medicine}
                         >
-                          {b.medicine}
-                        </span>
-                        <span style={{ color: 'var(--text-muted)' }}>·</span>
-                        <span style={{ color: b.risk.color, fontWeight: 700, flexShrink: 0 }}>
-                          {b.daysLeft <= 0
-                            ? 'Expired'
-                            : b.status === 'Recalled' || b.status === 'RECALLED'
-                            ? 'Recalled'
-                            : `${b.daysLeft}d`}
-                        </span>
+                          <span
+                            style={{
+                              color: 'var(--text-2)',
+                              fontWeight: 600,
+                              maxWidth: 95,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={b.medicine}
+                          >
+                            {b.medicine}
+                          </span>
+                          <span style={{ color: 'var(--text-muted)' }}>·</span>
+                          <span style={{ color: b.risk.color, fontWeight: 700, flexShrink: 0 }}>
+                            {b.daysLeft <= 0
+                              ? 'Expired'
+                              : b.status === 'Recalled' || b.status === 'RECALLED'
+                              ? 'Recalled'
+                              : `${b.daysLeft}d`}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -835,17 +974,16 @@ export default function ExpiryTimeline({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <CalendarDays size={18} color="var(--primary)" />
             <h3 style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-              Expiry Milestones
+              Priority Expiry Milestones
             </h3>
           </div>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-light)', padding: '2px 8px', borderRadius: 99 }}>
-            FEFO Order
+            Top {sortedPriorityBatches.length} of {totalCount}
           </span>
         </div>
 
         {/* Vertical Timeline Spine */}
         <div style={{ position: 'relative', paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Vertical continuous line */}
           <div
             style={{
               position: 'absolute',
@@ -857,7 +995,7 @@ export default function ExpiryTimeline({
             }}
           />
 
-          {sortedBatches.map(b => (
+          {sortedPriorityBatches.map(b => (
             <div
               key={`mob-${b.batch}-${b.id || b.medicine}`}
               onClick={() => onSelectBatch?.(b)}
@@ -866,7 +1004,6 @@ export default function ExpiryTimeline({
                 cursor: 'pointer',
               }}
             >
-              {/* Spine Node Dot */}
               <div
                 style={{
                   position: 'absolute',
@@ -881,7 +1018,6 @@ export default function ExpiryTimeline({
                 }}
               />
 
-              {/* Mobile Timeline Item Card */}
               <div
                 style={{
                   background: b.risk.bg,
