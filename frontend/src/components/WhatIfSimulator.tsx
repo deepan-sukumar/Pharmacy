@@ -145,6 +145,7 @@ function runClientDeterministicSimulation(params: {
   // 1. BASELINE PROJECTION
   const baselineDaysToExpiry = Math.max(0, daysToExpiry);
   const baselineDemandBeforeExpiry = Math.round(baseDailyUsage * baselineDaysToExpiry);
+  const baselineExpectedDemand = baselineDemandBeforeExpiry;
   const baselineProjectedUsableConsumption = Math.min(currentStock, baselineDemandBeforeExpiry);
   const baselineExpectedConsumption = baselineProjectedUsableConsumption;
   const baselineProjectedSurplus = Math.max(0, currentStock - baselineDemandBeforeExpiry);
@@ -728,10 +729,12 @@ export default function WhatIfSimulator({
   };
 
   // Badge helpers
-  const getBadgeClass = (level: string) => {
-    if (level === 'Expired' || level === 'EXPIRED') return 'badge-dark';
-    if (level === 'High' || level === 'Likely Expiry' || level === 'Shortage' || level.includes('EXPIRY') || level.includes('STOCKOUT')) return 'badge-red';
-    if (level === 'Medium' || level.includes('MODERATE')) return 'badge-amber';
+  const getBadgeClass = (level: string = '') => {
+    if (!level) return 'badge-green';
+    const lvl = String(level).toUpperCase();
+    if (lvl === 'EXPIRED') return 'badge-dark';
+    if (lvl === 'HIGH' || lvl === 'LIKELY EXPIRY' || lvl === 'SHORTAGE' || lvl.includes('EXPIRY') || lvl.includes('STOCKOUT') || lvl.includes('HIGH') || lvl.includes('CRITICAL')) return 'badge-red';
+    if (lvl === 'MEDIUM' || lvl.includes('MODERATE') || lvl.includes('AMBER') || lvl.includes('HOLD')) return 'badge-amber';
     return 'badge-green';
   };
 
