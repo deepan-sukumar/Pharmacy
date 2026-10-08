@@ -213,46 +213,60 @@ export default function SmsReportsView({
     }>();
 
     safeInventory.forEach(med => {
-      if (!med || !med.batch) return;
-      const isRecalled = med.status === 'Recalled';
-      const days = parseDaysRemaining(med.expiry);
+      if (!med) return;
+      const bCode = (med.batch || (med as any).batchNumber || '').trim();
+      if (!bCode) return;
+      const isRecalled = med.status === 'Recalled' || (med as any).isRecalled || med.status === 'QUARANTINED';
+      const days = (med as any).daysRemaining !== undefined && (med as any).daysRemaining !== null ? Number((med as any).daysRemaining) : parseDaysRemaining(med.expiry || (med as any).expiryDate || (med as any).expiryDisplay);
       const isExpired = !isRecalled && (days < 0 || med.status === 'Expired');
       // Near Expiry monitoring rule: Expiry is in future/today AND <= 30 days remaining
       const isNearExpiry = !isRecalled && !isExpired && ((days >= 0 && days <= 30) || med.status === 'Near Expiry');
 
-      batchMap.set(med.batch, {
-        medicine: med.medicine,
-        batch: med.batch,
-        expiry: med.expiry,
-        formattedExpiry: formatReadableDate(med.expiry),
+      batchMap.set(bCode, {
+        medicine: med.medicine || (med as any).medicineName || 'Medicine',
+        batch: bCode,
+        expiry: med.expiry || (med as any).expiryDisplay || (med as any).expiryDate || 'N/A',
+        formattedExpiry: formatReadableDate(med.expiry || (med as any).expiryDisplay || (med as any).expiryDate),
         daysRemaining: isRecalled ? null : days,
         isRecalled,
         isNearExpiry,
         isExpired,
-        status: med.status
+        status: med.status || 'Available'
       });
     });
 
     // 2. Scan historical dispensing records and match exposed customers
     safeAudits.forEach(a => {
-      if (!a || !a.customer || a.customer === 'Walk-in Patient' || !a.batch) return;
+      if (!a) return;
+      const custName = (a.customer || (a as any).customerName || '').trim();
+      if (!custName || custName === 'Walk-in Patient') return;
+      const bCode = (a.batch || (a as any).batchNumber || '').trim();
+      if (!bCode) return;
 
-      const bInfo = batchMap.get(a.batch);
+      let bInfo = batchMap.get(bCode);
+      if (!bInfo) {
+        for (const [key, val] of batchMap.entries()) {
+          if (key.toLowerCase() === bCode.toLowerCase()) {
+            bInfo = val;
+            break;
+          }
+        }
+      }
       if (!bInfo) return;
 
       // EXCLUSION: If the batch is normal (>30 days left, not recalled), DO NOT INCLUDE!
       if (!bInfo.isRecalled && !bInfo.isNearExpiry) return;
 
-      const key = `${a.customer}-${a.batch}-${a.rxId || a.id}`;
+      const key = `${custName}-${bCode}-${a.rxId || a.id || (a as any).dispensingId}`;
       if (seenKeys.has(key)) return;
       seenKeys.add(key);
 
-      const custObj = safeCustomers.find(c => c.name.toLowerCase() === a.customer.toLowerCase());
+      const custObj = safeCustomers.find(c => (c.name || (c as any).customerName || '').toLowerCase() === custName.toLowerCase());
 
       // Check if action was already logged for this customer & batch
       const recentLog = logs.find(l =>
-        l.recipientName?.toLowerCase() === a.customer.toLowerCase() &&
-        (l.batchId === a.batch || (l.message && l.message.includes(a.batch)))
+        l.recipientName?.toLowerCase() === custName.toLowerCase() &&
+        (l.batchId === bCode || (l.message && l.message.includes(bCode)))
       );
 
       const isRecall = bInfo.isRecalled;
@@ -271,27 +285,27 @@ export default function SmsReportsView({
       }
 
       list.push({
-        id: `${a.id || Date.now()}-${list.length}`,
-        customerName: a.customer,
-        phone: custObj ? custObj.phone : (a.phone || '+91 93845 99028'),
+        id: `${a.id || (a as any).dispensingId || Date.now()}-${list.length}`,
+        customerName: custName,
+        phone: custObj ? custObj.phone : ((custObj as any)?.customerPhone || a.phone || (a as any).customerPhone || '+91 98450 48123'),
         email: custObj?.email,
-        preferredLang: (custObj as any)?.preferredLang || 'English',
-        communicationPreference: (((custObj as any)?.communicationPreference || 'SMS').toUpperCase()) as 'WHATSAPP' | 'SMS',
-        medicine: a.medicine || bInfo.medicine,
+        preferredLang: (custObj as any)?.preferredLang || (custObj as any)?.preferredLanguage || 'English',
+        communicationPreference: ((((custObj as any)?.communicationPreference || (custObj as any)?.preferredChannel || 'WHATSAPP').toUpperCase())) as 'WHATSAPP' | 'SMS',
+        medicine: a.medicine || (a as any).medicineName || bInfo.medicine,
         strength: '500mg',
         dosageForm: 'Oral Tablet',
-        batch: a.batch,
+        batch: bCode,
         expiry: bInfo.formattedExpiry,
         daysRemaining: bInfo.daysRemaining,
-        qtyDispensed: Number(a.quantity) || 10,
-        rxId: a.rxId || `RX-2026-${String(a.id || 100).padStart(5, '0')}`,
-        dispenseDate: formatReadableDate(a.date || a.timestamp),
+        qtyDispensed: Number(a.quantity || (a as any).dispensedQuantity) || 10,
+        rxId: a.rxId || (a as any).dispensingId || `RX-2026-${String(a.id || 100).padStart(5, '0')}`,
+        dispenseDate: formatReadableDate(a.date || a.timestamp || (a as any).auditTimestamp),
         reason: isRecall ? 'RECALL' : 'NEAR_EXPIRY',
         isCommunicationEligible: isEligible,
         monitoringWindow,
         recallReason: isRecall ? 'Packaging seal defect reported by manufacturer CDSCO bulletin' : undefined,
         status,
-        customerObj: custObj || { name: a.customer, phone: a.phone || '+91 93845 99028', communicationPreference: 'SMS' }
+        customerObj: custObj || { name: custName, phone: a.phone || (a as any).customerPhone || '+91 98450 48123', communicationPreference: 'WHATSAPP' }
       });
     });
 
