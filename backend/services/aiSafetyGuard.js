@@ -24,9 +24,11 @@ const EMERGENCY_ADVICE_MESSAGE =
 
 // Patterns that indicate clinical/diagnostic/prescriptive intent
 const CLINICAL_PATTERNS = [
-  /\b(what|which)\s+(medicine|tablet|drug|antibiotic|pill|syrup|dose|dosage)\s+(should|can|to)\s+(i|we|one|(?:the\s+)?patient|he|she|they)\s+(take|give|prescribe|use|have|consume)\b/i,
+  /\b(what|which)\s+(medicine|tablet|drug|antibiotic|pill|syrup|dose|dosage)\b.*\b(should|can|to)\s+(i|we|one|(?:the\s+)?patient|he|she|they)\s+(take|give|prescribe|use|have|consume)\b/i,
   /\b(what|which)\s+(is|are)\s+the\s+best\s+(medicine|treatment|cure|remedy|drug|antibiotic)\s+for\b/i,
   /\bhow\s+(much|many)\b.*\b(should|can)\s+(i|we|one|(?:the\s+)?patient|he|she|they)\s+(take|give|consume|prescribe)\b/i,
+  /\b(what|which)\s+(dosage|dose)\b.*\b(take|give|prescribe|use|have|consume)\b/i,
+  /\b(dosage|dose)\s+(of|for)\b.*\b(take|give|prescribe|patient)\b/i,
   /\b(diagnose|diagnosis|symptom\s+check|cure\s+for|treat\s+my|treat\s+the\s+patient)\b/i,
   /\b(fever|headache|cough|cold|infection|diabetes|hypertension|covid|malaria|dengue|pain|cancer|chest\s+pain|asthma|vomiting|diarrhea)\s+(treatment|cure|prescription|medication|tablet)\b/i,
   /\b(can\s+i|should\s+i)\s+(replace|substitute|switch)\s+.*\s+with\s+/i,

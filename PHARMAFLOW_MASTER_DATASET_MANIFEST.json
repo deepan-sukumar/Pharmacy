@@ -1,0 +1,31 @@
+{
+  "manifestVersion": "1.0.0",
+  "datasetId": "PHARMAFLOW-MASTER-DATASET-V1",
+  "primaryFile": "PHARMAFLOW_MASTER_DATASET_V1.json",
+  "sha256": "aed8bcaf6ae50c817e5556b7c875d30d95608fbff2d71ae8d8cb8ddb0d3d2d79",
+  "createdAt": "2026-10-08T12:00:00Z",
+  "referenceDate": "2026-10-08",
+  "workspaceId": "pharmaflow-main",
+  "systemOwner": "Deepak R",
+  "primaryPharmacistId": "PHARM-KA-2022-7212",
+  "collections": {
+    "medicines": 512,
+    "manufacturers": 214,
+    "batches": 328,
+    "recalls": 115,
+    "suppliers": 35,
+    "customers": 150,
+    "pharmacists": 25,
+    "inventory": 512,
+    "stockMovements": 2450,
+    "invoices": 150,
+    "invoiceItems": 520,
+    "dispensing": 2048,
+    "dispensingAudit": 2048,
+    "batchExposures": 48,
+    "patientSafetyCommunications": 250,
+    "supplierReturns": 52,
+    "sources": 12
+  },
+  "totalRecords": 9469
+}

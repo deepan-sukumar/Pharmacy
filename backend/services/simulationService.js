@@ -18,8 +18,9 @@
 
 const { parseExpiryToDays } = require('./pharmacyTools');
 const { db, isConnected } = require('../firebase');
+const masterDataset = require('../../PHARMAFLOW_MASTER_DATASET_V1.json');
 
-// In-memory fallback reference when Firestore credentials are not available
+// In-memory fallback reference when Firestore credentials are not available or quota exceeded
 let memoryStoreRef = null;
 function setMemoryStore(store) {
   memoryStoreRef = store;
@@ -81,8 +82,8 @@ function calculateScenario(params = {}) {
   const medicine = params.medicine || 'Selected Medicine';
   const batch = params.batch || params.batchId || 'Default Batch';
   const currentStock = Math.max(0, Number(params.currentStock) || 0);
-  const orderQty = Math.max(0, Number(params.orderQty) || 0);
-  const baseDailyUsage = Math.max(0, Number(params.dailyUsage) !== undefined && !isNaN(Number(params.dailyUsage)) ? Number(params.dailyUsage) : 5);
+  const orderQty = Math.max(0, Number(params.orderQty !== undefined ? params.orderQty : (params.orderQuantity !== undefined ? params.orderQuantity : 0)));
+  const baseDailyUsage = Math.max(0, Number(params.dailyUsage !== undefined && !isNaN(Number(params.dailyUsage)) ? params.dailyUsage : (params.dailyVelocity !== undefined && !isNaN(Number(params.dailyVelocity)) ? params.dailyVelocity : 5)));
   const daysToExpiry = Number(params.daysToExpiry) !== undefined && !isNaN(Number(params.daysToExpiry)) ? Number(params.daysToExpiry) : 45;
   const leadTimeDays = Math.max(0, Number(params.leadTimeDays) || 0);
   const unitCost = Math.max(0, Number(params.unitCost) !== undefined && !isNaN(Number(params.unitCost)) ? Number(params.unitCost) : 50);
@@ -99,12 +100,12 @@ function calculateScenario(params = {}) {
   // Demand change percentage (-80% to +150%)
   const demandChangePct = params.demandChangePct !== undefined
     ? Number(params.demandChangePct)
-    : (Number(params.dispensingIncreasePct) || 0);
+    : (params.demandShiftPercent !== undefined ? Number(params.demandShiftPercent) : (Number(params.dispensingIncreasePct) || 0));
   const dispensingIncreasePct = demandChangePct;
   const demandMultiplier = 1 + (demandChangePct / 100);
 
   // Scenario velocity during active dispensing (cannot be negative)
-  const normalScenarioVelocity = Math.max(0, baseDailyUsage * demandMultiplier);
+  const normalScenarioVelocity = Math.max(0, Math.round((baseDailyUsage * demandMultiplier) * 100) / 100);
   // Current active velocity at day 0
   const simulatedDailyDemand = (quarantineDays > 0) ? 0 : normalScenarioVelocity;
 
@@ -314,9 +315,34 @@ function calculateScenario(params = {}) {
     }
   }
 
+  // Daily simulation timeline for charts & verification
+  const timeline = [];
+  let currentSimStock = currentStock;
+  const horizon = Math.max(daysToExpiry, 30);
+  
+  for (let day = 0; day <= horizon; day++) {
+    timeline.push({
+      day,
+      stock: Math.max(0, Math.round(currentSimStock))
+    });
+    if (day === leadTimeDays && leadTimeDays > 0 && orderQty > 0 && orderArrivesBeforeExpiry) {
+      currentSimStock += orderQty;
+    }
+    if (day < horizon) {
+      const dailyDrop = (day < quarantineDays) ? 0 : normalScenarioVelocity;
+      currentSimStock = Math.max(0, currentSimStock - dailyDrop);
+    }
+  }
+
   return {
     medicine,
     batch,
+    projectedUtilization: stockUtilizationPct,
+    stockUtilizationPct,
+    projectedSurplusAtExpiry,
+    expiryCapitalAtRisk,
+    effectiveDailyDemand: normalScenarioVelocity,
+    timeline,
     actualData: {
       currentStock,
       unitCost,
@@ -374,6 +400,7 @@ function calculateScenario(params = {}) {
       riskClassification: riskLabel,
       explanation,
       recommendation,
+      timeline,
     }
   };
 }
@@ -430,7 +457,17 @@ function compareOrderScenarios(baseParams = {}) {
  * Resolves live pharmacy inventory & dispensing audit data from Firestore
  * to calculate factual baselines and run the What-If simulation.
  */
-async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}) {
+async function runWhatIfSimulation(pharmacyIdOrParams = 'pharmaflow-main', maybeParameters = {}) {
+  let pharmacyId = 'pharmaflow-main';
+  let parameters = {};
+  if (typeof pharmacyIdOrParams === 'object' && pharmacyIdOrParams !== null) {
+    parameters = pharmacyIdOrParams;
+    pharmacyId = parameters.workspaceId || parameters.pharmacyId || 'pharmaflow-main';
+  } else {
+    pharmacyId = pharmacyIdOrParams || 'pharmaflow-main';
+    parameters = maybeParameters || {};
+  }
+
   let stock = Number(parameters.currentStock);
   let cost = Number(parameters.unitCost);
   let days = Number(parameters.daysToExpiry);
@@ -445,9 +482,22 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
   // 1. Retrieve inventory items for this specific pharmacy tenant
   let inventoryItems = [];
   if (isConnected()) {
-    const snap = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
-    inventoryItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } else if (memoryStoreRef && Array.isArray(memoryStoreRef.inventory)) {
+    try {
+      const snap = await db.collection('inventory').where('workspaceId', '==', pharmacyId).get();
+      if (!snap.empty) {
+        inventoryItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } else {
+        const snap2 = await db.collection('inventory').where('pharmacyId', '==', pharmacyId).get();
+        inventoryItems = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
+      }
+    } catch (e) {
+      console.warn('Firestore read fallback on inventory in simulationService:', e.message);
+    }
+  }
+  if (inventoryItems.length === 0 && masterDataset && Array.isArray(masterDataset.inventory)) {
+    inventoryItems = masterDataset.inventory.filter(i => i.workspaceId === pharmacyId || i.pharmacyId === pharmacyId || pharmacyId === 'pharmaflow-main');
+  }
+  if (inventoryItems.length === 0 && memoryStoreRef && Array.isArray(memoryStoreRef.inventory)) {
     inventoryItems = memoryStoreRef.inventory.filter(i => i.pharmacyId === pharmacyId);
   }
 
@@ -513,9 +563,22 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
   if (isNaN(dailyUsage) || parameters.dailyUsage === undefined) {
     let audits = [];
     if (isConnected()) {
-      const snap = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
-      audits = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } else if (memoryStoreRef && Array.isArray(memoryStoreRef.audits)) {
+      try {
+        const snap = await db.collection('dispensingAudit').where('workspaceId', '==', pharmacyId).get();
+        if (!snap.empty) {
+          audits = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } else {
+          const snap2 = await db.collection('audits').where('pharmacyId', '==', pharmacyId).get();
+          audits = snap2.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+      } catch (e) {
+        console.warn('Firestore read fallback on audits in simulationService:', e.message);
+      }
+    }
+    if (audits.length === 0 && masterDataset && Array.isArray(masterDataset.dispensingAudit)) {
+      audits = masterDataset.dispensingAudit.filter(a => a.workspaceId === pharmacyId || a.pharmacyId === pharmacyId || pharmacyId === 'pharmaflow-main');
+    }
+    if (audits.length === 0 && memoryStoreRef && Array.isArray(memoryStoreRef.audits)) {
       audits = memoryStoreRef.audits.filter(a => a.pharmacyId === pharmacyId);
     }
 
@@ -594,6 +657,7 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
     confidence,
     suggestedAiOrder,
     multiBatchBreakdown,
+    simulation: singleResult.simulatedData,
     ...singleResult,
     multiScenarioComparison: comparison
   };
