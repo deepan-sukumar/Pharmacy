@@ -1765,12 +1765,27 @@ function Expiry({
         }
       />
       <div className="responsive-stats-grid">
-        <Stat label="Total Batches" value="246" icon={Boxes} tone="sage" />
-        <Stat label="Expiring in 30d" value="12" icon={Clock3} tone="amber" />
-        <Stat label="Expiring in 90d" value="28" icon={CalendarDays} tone="teal" />
-        <Stat label="Expired" value="3" icon={AlertCircle} tone="red" />
+        <Stat label="Total Batches" value={String(inventory.length || 0)} icon={Boxes} tone="sage" />
+        <Stat
+          label="Expiring in 30d"
+          value={String(inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining >= 0 && i.daysRemaining <= 30) || i.status === 'Near Expiry').length)}
+          icon={Clock3}
+          tone="amber"
+        />
+        <Stat
+          label="Expiring in 90d"
+          value={String(inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining > 30 && i.daysRemaining <= 90)).length)}
+          icon={CalendarDays}
+          tone="teal"
+        />
+        <Stat
+          label="Expired / Recalled"
+          value={String(inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining < 0) || i.status === 'Expired' || i.status === 'Recalled').length)}
+          icon={AlertCircle}
+          tone="red"
+        />
       </div>
-      {/* Redesigned Full-Featured Expiry Timeline Component with Live Proportional Positioning */}
+      {/* Dynamic Collision-Free FEFO Expiry Timeline Component with Live Grounding */}
       <div style={{ marginBottom: 20 }}>
         <ExpiryTimeline
           inventory={inventory}
@@ -1778,29 +1793,51 @@ function Expiry({
             showToast(`Selected ${b.medicine} (${b.batch}) · Expiry: ${b.expiry}`);
           }}
           onNavigateExpiryTable={() => {
-            showToast('Showing full FEFO batch priority table below');
+            const tableEl = document.getElementById('fefo-batch-priority-table');
+            if (tableEl) {
+              tableEl.scrollIntoView({ behavior: 'smooth' });
+            }
+            showToast('Showing full FEFO batch priority table');
           }}
         />
       </div>
 
       <div className="responsive-dashboard-grid">
         <Panel title="Expiry Risk Distribution Breakdown">
-          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-            <div style={{ width: 140, height: 140, borderRadius: '50%', background: 'conic-gradient(var(--danger) 0 4%, var(--warning) 4% 16%, var(--primary) 16% 30%, var(--border-strong) 30% 100%)', position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', background: 'var(--surface-raised)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>246</span>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>batches</span>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-              {[['Expired / Recalled', '4', 'var(--danger)'], ['Critical (<30d)', '12', 'var(--warning)'], ['Watch (<90d)', '34', 'var(--primary)'], ['Safe (>90d)', '196', 'var(--text-muted)']].map(([n, v, c]) => (
-                <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center', color: 'var(--text-2)' }}>
-                  <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }}/>{n}</span>
-                  <b style={{ color: 'var(--text)' }}>{v}</b>
+          {(() => {
+            const total = inventory.length || 1;
+            const expRec = inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining < 0) || i.status === 'Expired' || i.status === 'Recalled').length;
+            const crit = inventory.filter(i => i.daysRemaining !== undefined && i.daysRemaining >= 0 && i.daysRemaining <= 30).length;
+            const watch = inventory.filter(i => i.daysRemaining !== undefined && i.daysRemaining > 30 && i.daysRemaining <= 90).length;
+            const safe = Math.max(0, total - expRec - crit - watch);
+            const expPct = Math.round((expRec / total) * 100);
+            const critPct = expPct + Math.round((crit / total) * 100);
+            const watchPct = critPct + Math.round((watch / total) * 100);
+
+            return (
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+                <div style={{ width: 140, height: 140, borderRadius: '50%', background: `conic-gradient(var(--danger) 0 ${expPct}%, var(--warning) ${expPct}% ${critPct}%, var(--primary) ${critPct}% ${watchPct}%, var(--border-strong) ${watchPct}% 100%)`, position: 'relative' }}>
+                  <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', background: 'var(--surface-raised)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>{inventory.length}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>batches</span>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                  {[
+                    ['Expired / Recalled', String(expRec), 'var(--danger)'],
+                    ['Critical (<30d)', String(crit), 'var(--warning)'],
+                    ['Watch (<90d)', String(watch), 'var(--primary)'],
+                    ['Safe (>90d)', String(safe), 'var(--text-muted)']
+                  ].map(([n, v, c]) => (
+                    <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center', color: 'var(--text-2)' }}>
+                      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }}/>{n}</span>
+                      <b style={{ color: 'var(--text)' }}>{v}</b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </Panel>
 
         <Panel title="Regulatory Compliance & FEFO Protocol">
@@ -1835,74 +1872,107 @@ function Expiry({
           </div>
         </Panel>
       </div>
-      <Panel title="Priority Batches for FEFO Dispensing">
-        {/* Desktop Table View */}
-        <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead><tr style={{ background: 'var(--bg-alt)' }}>
-              {['Medicine', 'Batch', 'Expiry', 'Days Left', 'Risk', 'Action'].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
-            </tr></thead>
-            <tbody>{inventory.slice(0, 5).map((m, i) => (
-              <tr key={m.batch} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{m.medicine}</td>
-                <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 13, color: 'var(--text-2)' }}>{m.batch}</td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{m.expiry}</td>
-                <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{[12, 42, 68, 103, 150][i] || 90}</td>
-                <td style={{ padding: '14px 20px' }}><Badge status={m.status}/></td>
-                <td style={{ padding: '14px 20px', display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <button onClick={() => onNavigate?.('dispensing')} style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
-                    Dispense batch →
-                  </button>
-                  <button onClick={() => onNavigate?.('sms-reports')} style={{ fontSize: 11.5, color: 'var(--warning-dark, #d97706)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
-                    Safety Notify →
-                  </button>
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+      <div id="fefo-batch-priority-table">
+        <Panel title="Priority Batches for FEFO Dispensing">
+          {/* Desktop Table View */}
+          <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead><tr style={{ background: 'var(--bg-alt)' }}>
+                {['Medicine', 'Batch', 'Expiry', 'Stock', 'Days Left', 'Status', 'Action'].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
+              </tr></thead>
+              <tbody>{(() => {
+                const sorted = [...inventory].sort((a, b) => {
+                  const daysA = a.daysRemaining !== undefined ? a.daysRemaining : 90;
+                  const daysB = b.daysRemaining !== undefined ? b.daysRemaining : 90;
+                  return daysA - daysB;
+                });
+                return sorted.slice(0, 15).map((m) => {
+                  const days = m.daysRemaining !== undefined ? m.daysRemaining : 90;
+                  const isRecalled = m.status === 'Recalled' || m.status === 'RECALLED';
+                  const isExp = days < 0 || m.status === 'Expired' || m.status === 'EXPIRED';
+                  const isCrit = !isExp && !isRecalled && days <= 30;
 
-        {/* Mobile Cards View */}
-        <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
-          {inventory.slice(0, 5).map((m, i) => (
-            <div key={m.batch} className="mobile-entity-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                <div>
-                  <h4 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{m.medicine}</h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>{m.batch}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-4)' }}>·</span>
-                    <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Exp: {m.expiry}</span>
+                  return (
+                    <tr key={m.batch + m.medicine} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{m.medicine}</td>
+                      <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 13, color: 'var(--text-2)' }}>{m.batch}</td>
+                      <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{m.expiry}</td>
+                      <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: 13, color: 'var(--text-2)' }}>{m.quantity} units</td>
+                      <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 13, color: isExp ? 'var(--danger)' : isCrit ? 'var(--warning-dark)' : 'var(--text)' }}>
+                        {isExp ? 'Expired' : isRecalled ? 'Recalled' : `${days}d left`}
+                      </td>
+                      <td style={{ padding: '14px 20px' }}><Badge status={m.status}/></td>
+                      <td style={{ padding: '14px 20px', display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <button onClick={() => onNavigate?.('dispensing')} style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
+                          Dispense batch →
+                        </button>
+                        <button onClick={() => onNavigate?.('sms-reports')} style={{ fontSize: 11.5, color: 'var(--warning-dark, #d97706)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
+                          Safety Notify →
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}</tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View */}
+          <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
+            {(() => {
+              const sorted = [...inventory].sort((a, b) => {
+                const daysA = a.daysRemaining !== undefined ? a.daysRemaining : 90;
+                const daysB = b.daysRemaining !== undefined ? b.daysRemaining : 90;
+                return daysA - daysB;
+              });
+              return sorted.slice(0, 15).map((m) => {
+                const days = m.daysRemaining !== undefined ? m.daysRemaining : 90;
+                const isExp = days < 0 || m.status === 'Expired' || m.status === 'EXPIRED';
+
+                return (
+                  <div key={m.batch + m.medicine} className="mobile-entity-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div>
+                        <h4 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{m.medicine}</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>{m.batch}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-4)' }}>·</span>
+                          <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Exp: {m.expiry}</span>
+                        </div>
+                      </div>
+                      <Badge status={m.status} />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, padding: '8px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
+                      <span style={{ color: 'var(--text-3)' }}>Time Horizon:</span>
+                      <span style={{ fontWeight: 800, color: isExp ? 'var(--danger)' : 'var(--warning-dark)' }}>
+                        {isExp ? 'Expired' : `${days} days remaining`}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                      <button
+                        onClick={() => onNavigate?.('dispensing')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: 11.5, padding: '6px 12px' }}
+                      >
+                        Dispense
+                      </button>
+                      <button
+                        onClick={() => onNavigate?.('sms-reports')}
+                        className="btn btn-teal"
+                        style={{ fontSize: 11.5, padding: '6px 12px', fontWeight: 700 }}
+                      >
+                        Notify
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <Badge status={m.status} />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, padding: '8px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
-                <span style={{ color: 'var(--text-3)' }}>Days Remaining:</span>
-                <span style={{ fontWeight: 800, color: 'var(--warning-dark)' }}>{[12, 42, 68, 103, 150][i] || 90} days left</span>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                <button
-                  onClick={() => onNavigate?.('dispensing')}
-                  className="btn btn-secondary"
-                  style={{ fontSize: 11.5, padding: '6px 12px' }}
-                >
-                  Dispense
-                </button>
-                <button
-                  onClick={() => onNavigate?.('sms-reports')}
-                  className="btn btn-teal"
-                  style={{ fontSize: 11.5, padding: '6px 12px', fontWeight: 700 }}
-                >
-                  Safety Notify →
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Panel>
+                );
+              });
+            })()}
+          </div>
+        </Panel>
+      </div>
     </>
   );
 }
