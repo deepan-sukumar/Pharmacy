@@ -3,15 +3,17 @@
  * 
  * CORE PURPOSE:
  * "Based on the pharmacy's actual stock, expiry date and dispensing history,
- * will this medicine/batch be consumed before it expires, and what happens if future demand changes?"
+ * will this medicine/batch be consumed before it expires, and what happens if future demand changes or replenishment decisions are made?"
  * 
  * CRITICAL ARCHITECTURAL RULES:
- * 1. PROJECTION SANDBOX: Calculations are deterministic numerical models executed server-side.
- * 2. READ-ONLY GUARANTEE: Simulations MUST NEVER modify actual inventory or audit logs in Firestore.
+ * 1. ONE AUTHORITATIVE DETERMINISTIC ENGINE: All baseline, scenario, order matrix, financial,
+ *    and AI decision-support calculations MUST use the exact same calculation formulas.
+ * 2. READ-ONLY GUARANTEE: Simulations MUST NEVER modify actual inventory, batches, or audit logs in Firestore.
  * 3. EXPLICIT SEPARATION: Distinguishes ACTUAL CURRENT DATA vs SIMULATED PROJECTIONS.
- * 4. DYNAMIC DATES: Uses real current date dynamically (never hardcoded dates or fixed day counts).
- * 5. DATA-DRIVEN VELOCITY: Derives daily demand from real historical dispensing records per pharmacyId.
- * 6. TENANT ISOLATION: Strict isolation by pharmacyId.
+ * 4. TIME-BASED LEAD TIME: Orders with lead time > 0 do not become available on day 0.
+ * 5. DYNAMIC DATES: Real current calendar dates (never hardcoded dates or fixed day counts).
+ * 6. DATA-DRIVEN VELOCITY: Derives daily demand from real historical dispensing audit records per pharmacyId.
+ * 7. TENANT ISOLATION: Strict isolation by authenticated pharmacyId.
  */
 
 const { parseExpiryToDays } = require('./pharmacyTools');
@@ -64,145 +66,252 @@ function getFutureCalendarDate(daysFromNow) {
 }
 
 /**
- * Calculates a single What-If scenario projection deterministically.
+ * Formats a currency amount in Indian Rupees (INR)
  */
-function calculateScenario(params) {
+function formatINR(amount) {
+  if (amount === null || amount === undefined || isNaN(amount)) return '₹0';
+  return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
+}
+
+/**
+ * Calculates a single What-If scenario projection deterministically.
+ * ONE AUTHORITATIVE ENGINE FOR ALL SIMULATION CALCULATIONS.
+ */
+function calculateScenario(params = {}) {
   const medicine = params.medicine || 'Selected Medicine';
   const batch = params.batch || params.batchId || 'Default Batch';
   const currentStock = Math.max(0, Number(params.currentStock) || 0);
   const orderQty = Math.max(0, Number(params.orderQty) || 0);
-  const baseDailyUsage = Math.max(0, Number(params.dailyUsage) || 0);
-  const daysToExpiry = Number(params.daysToExpiry) !== undefined ? Number(params.daysToExpiry) : 45;
+  const baseDailyUsage = Math.max(0, Number(params.dailyUsage) !== undefined && !isNaN(Number(params.dailyUsage)) ? Number(params.dailyUsage) : 5);
+  const daysToExpiry = Number(params.daysToExpiry) !== undefined && !isNaN(Number(params.daysToExpiry)) ? Number(params.daysToExpiry) : 45;
   const leadTimeDays = Math.max(0, Number(params.leadTimeDays) || 0);
-  const unitCost = Math.max(0, Number(params.unitCost) || 50);
-  const holdBatch = Boolean(params.holdBatch);
+  const unitCost = Math.max(0, Number(params.unitCost) !== undefined && !isNaN(Number(params.unitCost)) ? Number(params.unitCost) : 50);
   
-  // Support both demandChangePct and dispensingIncreasePct for backwards-compatibility
+  // Quarantine / Hold: can be a boolean holdBatch or explicit quarantineDays
+  let quarantineDays = 0;
+  if (params.quarantineDays !== undefined && !isNaN(Number(params.quarantineDays))) {
+    quarantineDays = Math.max(0, Number(params.quarantineDays));
+  } else if (params.holdBatch) {
+    quarantineDays = 999999; // Indefinite hold
+  }
+  const isHold = quarantineDays > 0 || Boolean(params.holdBatch);
+
+  // Demand change percentage (-80% to +150%)
   const demandChangePct = params.demandChangePct !== undefined
     ? Number(params.demandChangePct)
     : (Number(params.dispensingIncreasePct) || 0);
   const dispensingIncreasePct = demandChangePct;
-
-  // 1. Calculate effective simulated daily demand
-  // If batch is held/quarantined, simulated dispensing rate for this batch is 0
   const demandMultiplier = 1 + (demandChangePct / 100);
-  const simulatedDailyDemand = holdBatch ? 0 : Math.max(0, baseDailyUsage * demandMultiplier);
 
-  // 2. BASELINE CONSUMPTION & EXPIRY PROJECTION (Actual Current Stock without proposed order or scenario changes)
-  const baselineUsableDays = Math.max(0, daysToExpiry);
-  const baselineExpectedConsumption = Math.round(baseDailyUsage * baselineUsableDays);
-  const baselineProjectedUsableConsumption = Math.min(currentStock, baselineExpectedConsumption);
-  const baselineProjectedSurplus = Math.max(0, currentStock - baselineExpectedConsumption);
+  // Scenario velocity during active dispensing (cannot be negative)
+  const normalScenarioVelocity = Math.max(0, baseDailyUsage * demandMultiplier);
+  // Current active velocity at day 0
+  const simulatedDailyDemand = (quarantineDays > 0) ? 0 : normalScenarioVelocity;
+
+  // =========================================================================
+  // 1. BASELINE PROJECTION (Current On-Hand Stock without order or changes)
+  // =========================================================================
+  const baselineDaysToExpiry = Math.max(0, daysToExpiry);
+  const baselineExpectedDemand = Math.round(baseDailyUsage * baselineDaysToExpiry);
+  const baselineProjectedUsableConsumption = Math.min(currentStock, baselineExpectedDemand);
+  const baselineExpectedConsumption = baselineProjectedUsableConsumption;
+  const baselineProjectedSurplus = Math.max(0, currentStock - baselineExpectedDemand);
   const baselineCapitalAtRisk = baselineProjectedSurplus * unitCost;
-  const baselineShortage = Math.max(0, baselineExpectedConsumption - currentStock);
-  const baselineStockoutDays = (baseDailyUsage > 0 && currentStock < baselineExpectedConsumption)
+  const baselineShortage = Math.max(0, baselineExpectedDemand - currentStock);
+  const baselineStockoutDays = baseDailyUsage > 0
     ? Math.floor(currentStock / baseDailyUsage)
     : null;
-  const baselineStockoutDate = baselineStockoutDays !== null ? getFutureCalendarDate(baselineStockoutDays) : null;
+  const baselineStockoutDate = baselineStockoutDays !== null
+    ? getFutureCalendarDate(baselineStockoutDays)
+    : null;
+  const baselineUtilizationPct = currentStock > 0
+    ? Math.min(100, Math.round((baselineProjectedUsableConsumption / currentStock) * 100))
+    : 100;
 
   // Baseline Risk Classification
   let baselineRiskLevel = 'Low Risk';
-  let baselineRiskLabel = 'Low Risk';
+  let baselineRiskLabel = 'LOW RISK';
   let baselineExplanation = '';
 
   if (daysToExpiry <= 0) {
     baselineRiskLevel = 'Expired';
-    baselineRiskLabel = 'Batch Expired';
+    baselineRiskLabel = 'EXPIRED';
     baselineExplanation = `Batch has passed its expiration date with ${currentStock} units remaining unsold. Immediate quarantine required.`;
   } else if (baselineProjectedSurplus > currentStock * 0.5 && baselineProjectedSurplus >= 30) {
     baselineRiskLevel = 'Likely Expiry';
-    baselineRiskLabel = 'Likely Expiry (Substantial Wastage)';
-    baselineExplanation = `At current dispensing velocity (${baseDailyUsage.toFixed(1)}/day), ${baselineExpectedConsumption} of ${currentStock} units will be consumed over ${daysToExpiry} days, leaving ${baselineProjectedSurplus} units (₹ ${baselineCapitalAtRisk.toLocaleString('en-IN')}) to expire unused.`;
+    baselineRiskLabel = 'HIGH EXPIRY RISK';
+    baselineExplanation = `At current dispensing velocity (${baseDailyUsage.toFixed(1)}/day), ${baselineExpectedConsumption} of ${currentStock} units are projected to be consumed over ${daysToExpiry} days, leaving ${baselineProjectedSurplus} units (${formatINR(baselineCapitalAtRisk)}) to expire unused.`;
   } else if (baselineProjectedSurplus > currentStock * 0.2 || baselineProjectedSurplus >= 15) {
     baselineRiskLevel = 'High';
-    baselineRiskLabel = 'High Expiry Risk';
-    baselineExplanation = `Dispensing velocity of ${baseDailyUsage.toFixed(1)} units/day is insufficient to consume all ${currentStock} units within ${daysToExpiry} days. ${baselineProjectedSurplus} units (₹ ${baselineCapitalAtRisk.toLocaleString('en-IN')}) projected to expire unused.`;
+    baselineRiskLabel = 'HIGH EXPIRY RISK';
+    baselineExplanation = `Dispensing velocity of ${baseDailyUsage.toFixed(1)} units/day is insufficient to consume all ${currentStock} units within ${daysToExpiry} days. ${baselineProjectedSurplus} units (${formatINR(baselineCapitalAtRisk)}) projected to expire unused.`;
   } else if (baselineProjectedSurplus > 0 || (daysToExpiry <= 15 && currentStock > baselineExpectedConsumption * 0.8)) {
     baselineRiskLevel = 'Medium';
-    baselineRiskLabel = 'Moderate Risk';
-    baselineExplanation = `Moderate surplus of ${baselineProjectedSurplus} units (₹ ${baselineCapitalAtRisk.toLocaleString('en-IN')}) projected at expiry date under current velocity.`;
+    baselineRiskLabel = 'MODERATE RISK';
+    baselineExplanation = `Moderate surplus of ${baselineProjectedSurplus} units (${formatINR(baselineCapitalAtRisk)}) projected at expiry date under current velocity.`;
   } else if (baselineShortage > 0) {
     baselineRiskLevel = 'Shortage';
-    baselineRiskLabel = 'Stockout Risk';
-    baselineExplanation = `Projected demand (${baselineExpectedConsumption} units) will deplete current stock (${currentStock} units) in ~${baselineStockoutDays} days (est. ${baselineStockoutDate}), prior to batch expiry.`;
+    baselineRiskLabel = 'STOCKOUT RISK';
+    baselineExplanation = `Projected demand (${baselineExpectedDemand} units) will deplete current stock (${currentStock} units) in ~${baselineStockoutDays} days (est. ${baselineStockoutDate}), prior to batch expiry.`;
   } else {
     baselineRiskLevel = 'Safe';
-    baselineRiskLabel = 'Low Risk';
-    baselineExplanation = `Current stock (${currentStock} units) is projected to be fully consumed within ~${Math.min(daysToExpiry, baseDailyUsage > 0 ? Math.floor(currentStock / baseDailyUsage) : daysToExpiry)} days, well before the batch expiry date.`;
+    baselineRiskLabel = 'LOW RISK';
+    baselineExplanation = `Current stock (${currentStock} units) is projected to be fully consumed within ~${Math.min(daysToExpiry, baselineStockoutDays || daysToExpiry)} days, well before the batch expiry date.`;
   }
 
-  // 3. WHAT-IF SCENARIO PROJECTION (Current Stock + Proposed Order Quantity under modified parameters)
+  // =========================================================================
+  // 2. TIME-BASED WHAT-IF SCENARIO PROJECTION
+  // =========================================================================
+  // Total physical units available across the full horizon
   const projectedTotalStock = currentStock + orderQty;
-  // Lead time delay reduces the usable consumption window for incoming orders
-  const effectiveWindowDays = Math.max(0, daysToExpiry - leadTimeDays);
-  const projectedDemandInWindow = Math.round(simulatedDailyDemand * effectiveWindowDays);
-  
-  // Projected surplus unsold at batch expiration date
-  const projectedSurplusAtExpiry = Math.max(0, projectedTotalStock - projectedDemandInWindow);
-  // Potential stockout shortage if demand exceeds available stock
-  const potentialShortage = Math.max(0, projectedDemandInWindow - projectedTotalStock);
+  const effectiveLeadTime = Math.min(daysToExpiry > 0 ? daysToExpiry : 0, leadTimeDays);
 
-  // Financial calculations based on actual Unit Purchase Cost
-  const capitalAtRisk = projectedSurplusAtExpiry * unitCost;
-  const stockoutExposure = potentialShortage * unitCost;
+  // Consumption during lead time [0, effectiveLeadTime]:
+  const activeLeadDays = Math.max(0, effectiveLeadTime - quarantineDays);
+  const leadDemand = normalScenarioVelocity * activeLeadDays;
+  const consumptionInLead = Math.min(currentStock, leadDemand);
+  const stockRemainingBeforeArrival = Math.max(0, currentStock - leadDemand);
+  const leadShortage = Math.max(0, leadDemand - currentStock);
+
+  // At t = leadTimeDays:
+  // If order arrives before expiry, it supplements the stock:
+  const orderArrivesBeforeExpiry = orderQty > 0 && leadTimeDays < daysToExpiry;
+  const availableAfterArrival = stockRemainingBeforeArrival + (orderArrivesBeforeExpiry ? orderQty : 0);
+
+  // Post-arrival consumption window [effectiveLeadTime, daysToExpiry]:
+  const activePostArrivalDays = Math.max(0, daysToExpiry - Math.max(effectiveLeadTime, quarantineDays));
+  const postDemand = normalScenarioVelocity * activePostArrivalDays;
+  const consumptionPostArrival = Math.min(availableAfterArrival, postDemand);
+  const postShortage = Math.max(0, postDemand - availableAfterArrival);
+
+  // Totals over the Expiry Horizon [0, daysToExpiry]:
+  const effectiveWindowDays = Math.max(0, daysToExpiry - leadTimeDays);
+  const totalProjectedDemandInWindow = Math.round(leadDemand + postDemand);
+  const projectedDemandInWindow = totalProjectedDemandInWindow;
+  const projectedConsumptionActual = Math.round(consumptionInLead + consumptionPostArrival);
   
-  // Stock utilization percentage
-  const projectedConsumptionActual = Math.min(projectedTotalStock, projectedDemandInWindow);
+  // Surplus remaining at expiry date:
+  let projectedSurplusAtExpiry = 0;
+  if (daysToExpiry <= 0) {
+    projectedSurplusAtExpiry = currentStock;
+  } else if (isHold && quarantineDays >= 999999) {
+    projectedSurplusAtExpiry = projectedTotalStock;
+  } else {
+    projectedSurplusAtExpiry = Math.max(0, availableAfterArrival - postDemand);
+  }
+  const projectedSurplus = projectedSurplusAtExpiry;
+  const potentialShortage = Math.round(leadShortage + postShortage);
+
+  // Financial calculations:
+  const expiryCapitalAtRisk = projectedSurplusAtExpiry * unitCost;
+  const capitalAtRisk = expiryCapitalAtRisk; // For compatibility
+  const potentialWasteCost = expiryCapitalAtRisk;
+  const stockoutExposure = potentialShortage * unitCost;
+  const orderValue = orderQty * unitCost;
+
+  // Stock utilization percentage (capped at 100%):
   const stockUtilizationPct = projectedTotalStock > 0
-    ? Math.min(100, Math.round((projectedConsumptionActual / projectedTotalStock) * 100))
+    ? Math.min(100, Math.max(0, Math.round((projectedConsumptionActual / projectedTotalStock) * 100)))
     : 100;
 
-  // Stockout estimate in days & exact date
-  const daysUntilStockout = simulatedDailyDemand > 0
-    ? Math.floor(projectedTotalStock / simulatedDailyDemand)
-    : 999;
-  const estimatedStockoutDate = (simulatedDailyDemand > 0 && projectedTotalStock < projectedDemandInWindow)
-    ? getFutureCalendarDate(daysUntilStockout)
-    : null;
+  // Stockout Timing (When does all stock run out?):
+  let daysUntilStockout = null;
+  let estimatedStockoutDate = null;
 
-  // 4. SCENARIO RISK CATEGORIZATION & OPERATIONAL DECISION SUPPORT
+  if (normalScenarioVelocity > 0 && !isHold) {
+    const t1 = currentStock / normalScenarioVelocity;
+    if (orderQty === 0) {
+      daysUntilStockout = Math.floor(t1);
+    } else {
+      if (leadTimeDays >= t1) {
+        // Runs out during lead time before replenishment arrives
+        daysUntilStockout = Math.floor(t1);
+      } else {
+        // Replenishment arrives before stockout
+        const totalDuration = projectedTotalStock / normalScenarioVelocity;
+        daysUntilStockout = Math.floor(totalDuration);
+      }
+    }
+    estimatedStockoutDate = getFutureCalendarDate(daysUntilStockout);
+  } else if (isHold && quarantineDays < 999999 && normalScenarioVelocity > 0) {
+    const t1 = quarantineDays + (currentStock / normalScenarioVelocity);
+    if (orderQty === 0) {
+      daysUntilStockout = Math.floor(t1);
+    } else {
+      if (leadTimeDays >= t1) {
+        daysUntilStockout = Math.floor(t1);
+      } else {
+        const totalDuration = quarantineDays + (projectedTotalStock / normalScenarioVelocity);
+        daysUntilStockout = Math.floor(totalDuration);
+      }
+    }
+    estimatedStockoutDate = getFutureCalendarDate(daysUntilStockout);
+  }
+
+  // =========================================================================
+  // 3. SCENARIO RISK CATEGORIZATION & OPERATIONAL DECISION SUPPORT
+  // =========================================================================
   let riskLevel = 'Safe';
-  let riskLabel = 'Low Risk';
+  let riskLabel = 'LOW RISK';
   let explanation = '';
   let recommendation = '';
 
   if (daysToExpiry <= 0) {
     riskLevel = 'Expired';
-    riskLabel = 'Batch Expired';
+    riskLabel = 'EXPIRED';
     explanation = `Batch has expired with ${currentStock} units remaining unsold in inventory.`;
     recommendation = `⚠️ Quarantine remaining ${currentStock} units immediately and process supplier return. Do not dispense.`;
-  } else if (holdBatch) {
+  } else if (isHold && quarantineDays >= 999999) {
     riskLevel = 'High';
-    riskLabel = 'High Expiry Risk (Batch Held)';
+    riskLabel = 'HIGH EXPIRY RISK (QUARANTINED)';
     explanation = `Batch is placed under quarantine hold, reducing dispensing velocity to 0 units/day. All ${projectedTotalStock} units will remain in storage until expiry.`;
-    recommendation = `⚠️ Holding this batch stops dispensing velocity. All ${projectedTotalStock} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) are projected to expire unused unless cleared for dispensing or returned.`;
+    recommendation = `⚠️ Holding this batch stops dispensing velocity. All ${projectedTotalStock} units (${formatINR(capitalAtRisk)}) are projected to expire unused unless cleared for dispensing or returned.`;
+  } else if (quarantineDays > 0) {
+    riskLevel = 'Medium';
+    riskLabel = 'MODERATE RISK (HOLD ACTIVE)';
+    explanation = `Batch is held for ${quarantineDays} days (0 dispensing during hold). Normal dispensing (${normalScenarioVelocity.toFixed(1)}/day) resumes thereafter. Projected consumption before expiry is ${projectedConsumptionActual} units.`;
+    recommendation = `Review quarantine release schedule to ensure stock is returned to active dispensing before expiry.`;
   } else if (projectedSurplusAtExpiry > projectedTotalStock * 0.5 && projectedSurplusAtExpiry >= 30) {
     riskLevel = 'High';
-    riskLabel = 'Likely Expiry (Substantial Wastage)';
-    const optimalOrder = Math.max(0, projectedDemandInWindow - currentStock);
-    explanation = `At simulated demand of ${simulatedDailyDemand.toFixed(1)} units/day, expected consumption across the remaining ${effectiveWindowDays} days is ${projectedDemandInWindow} units. With total available stock of ${projectedTotalStock} units, ${projectedSurplusAtExpiry} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) will remain unsold at expiry.`;
-    recommendation = `🔴 Substantial Expiry Risk: Projected surplus of ${projectedSurplusAtExpiry} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}). ${orderQty > 0 ? `Cancel/reduce proposed reorder to ~${optimalOrder} units.` : 'Prioritize front-of-shelf FEFO dispensing immediately.'}`;
-  } else if (projectedSurplusAtExpiry > projectedTotalStock * 0.25 || projectedSurplusAtExpiry > 50) {
+    riskLabel = 'HIGH EXPIRY RISK (SUBSTANTIAL WASTAGE)';
+    const optimalOrder = Math.max(0, totalProjectedDemandInWindow - currentStock);
+    explanation = `At simulated demand of ${normalScenarioVelocity.toFixed(1)} units/day, expected consumption across the remaining ${daysToExpiry} days is ${totalProjectedDemandInWindow} units. With total stock of ${projectedTotalStock} units, ${projectedSurplusAtExpiry} units (${formatINR(capitalAtRisk)}) will remain unsold at expiry.`;
+    recommendation = `🔴 Substantial Expiry Risk: Projected surplus of ${projectedSurplusAtExpiry} units (${formatINR(capitalAtRisk)}). ${orderQty > 0 ? `Cancel/reduce proposed reorder to ~${optimalOrder} units.` : 'Prioritize front-of-shelf FEFO dispensing immediately.'}`;
+  } else if (projectedSurplusAtExpiry > projectedTotalStock * 0.25 || projectedSurplusAtExpiry >= 15) {
     riskLevel = 'High';
-    riskLabel = 'High Projected Expiry Risk';
-    const optimalOrder = Math.max(0, projectedDemandInWindow - currentStock);
-    explanation = `At simulated demand of ${simulatedDailyDemand.toFixed(1)} units/day, expected consumption across ${effectiveWindowDays} usable days is ${projectedDemandInWindow} units. Total stock of ${projectedTotalStock} units creates a surplus of ${projectedSurplusAtExpiry} units.`;
-    recommendation = `⚠️ High Expiry Risk: Projected surplus of ${projectedSurplusAtExpiry} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) expiring unsold. ${orderQty > 0 ? `Reduce proposed reorder to ~${optimalOrder} units.` : 'Maintain strict FEFO dispensing priority.'}`;
+    riskLabel = 'HIGH EXPIRY RISK';
+    const optimalOrder = Math.max(0, totalProjectedDemandInWindow - currentStock);
+    explanation = `At simulated demand of ${normalScenarioVelocity.toFixed(1)} units/day, expected consumption across ${daysToExpiry} days is ${totalProjectedDemandInWindow} units. Total stock of ${projectedTotalStock} units creates a projected surplus of ${projectedSurplusAtExpiry} units.`;
+    recommendation = `⚠️ High Expiry Risk: Projected surplus of ${projectedSurplusAtExpiry} units (${formatINR(capitalAtRisk)}) expiring unsold. ${orderQty > 0 ? `Reduce proposed reorder to ~${optimalOrder} units.` : 'Maintain strict FEFO dispensing priority.'}`;
   } else if (projectedSurplusAtExpiry > 0) {
     riskLevel = 'Medium';
-    riskLabel = 'Moderate Projected Surplus';
-    explanation = `Minor surplus of ${projectedSurplusAtExpiry} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) projected at expiry date under simulated velocity (${simulatedDailyDemand.toFixed(1)}/day).`;
-    recommendation = `⚠️ Moderate Surplus: Projected surplus of ${projectedSurplusAtExpiry} units at expiry (₹ ${capitalAtRisk.toLocaleString('en-IN')}). Maintain strict FEFO dispensing priority.`;
+    riskLabel = 'MODERATE RISK (SURPLUS)';
+    explanation = `Moderate surplus of ${projectedSurplusAtExpiry} units (${formatINR(capitalAtRisk)}) projected at expiry date under simulated velocity (${normalScenarioVelocity.toFixed(1)}/day).`;
+    recommendation = `⚠️ Moderate Surplus: Projected surplus of ${projectedSurplusAtExpiry} units at expiry (${formatINR(capitalAtRisk)}). Maintain strict FEFO dispensing priority.`;
   } else if (potentialShortage > 0) {
     riskLevel = 'Shortage';
-    riskLabel = 'Potential Shortage';
-    explanation = `Projected demand (${projectedDemandInWindow} units) exceeds stock (${projectedTotalStock} units). Stockout expected in ~${daysUntilStockout} days (est. ${estimatedStockoutDate}), prior to batch expiry.`;
-    recommendation = `📦 Shortage Warning: Projected demand (${projectedDemandInWindow} units) exceeds stock (${projectedTotalStock} units). Projected shortage of ${potentialShortage} units before batch expiry. Consider reordering +${potentialShortage} units.`;
+    riskLabel = 'STOCKOUT RISK';
+    if (leadShortage > 0 && leadTimeDays > 0) {
+      explanation = `Lead-time gap: Initial stock (${currentStock} units) will run out in ~${Math.floor(currentStock / normalScenarioVelocity)} days before replenishment arrives on day ${leadTimeDays}, causing ${leadShortage} units of unmet demand during lead time.`;
+      recommendation = `📦 Lead-Time Shortage: Request expedited supplier dispatch or reallocate ${leadShortage} units from sibling batches to prevent stockout before order arrival.`;
+    } else {
+      explanation = `Projected demand (${totalProjectedDemandInWindow} units) exceeds total stock (${projectedTotalStock} units). Stockout expected in ~${daysUntilStockout} days (est. ${estimatedStockoutDate}), prior to batch expiry.`;
+      recommendation = `📦 Shortage Warning: Projected demand (${totalProjectedDemandInWindow} units) exceeds stock (${projectedTotalStock} units). Projected shortage of ${potentialShortage} units before batch expiry. Consider reordering +${potentialShortage} units.`;
+    }
   } else {
     riskLevel = 'Safe';
-    riskLabel = 'Optimal Balance';
-    explanation = `Simulated demand of ${simulatedDailyDemand.toFixed(1)} units/day will fully consume available stock (${projectedTotalStock} units) in ~${Math.min(daysToExpiry, daysUntilStockout)} days, prior to the batch expiry date.`;
-    recommendation = `✅ Optimal Scenario: ${projectedTotalStock} units are projected to be fully consumed within ~${Math.min(daysToExpiry, daysUntilStockout)} days prior to expiry date. Zero capital at risk.`;
+    riskLabel = 'LOW RISK (OPTIMAL BALANCE)';
+    explanation = `Simulated demand of ${normalScenarioVelocity.toFixed(1)} units/day will fully consume available stock (${projectedTotalStock} units) in ~${Math.min(daysToExpiry, daysUntilStockout || daysToExpiry)} days, safely prior to the batch expiry date (${daysToExpiry} days away).`;
+    recommendation = `✅ Optimal Scenario: ${projectedTotalStock} units are projected to be fully consumed within ~${Math.min(daysToExpiry, daysUntilStockout || daysToExpiry)} days prior to expiry date. Zero capital at risk of expiration.`;
+  }
+
+  // Refine explanation with lead-time details when lead time is involved
+  if (leadTimeDays > 0 && orderQty > 0 && daysToExpiry > 0) {
+    if (leadTimeDays >= daysToExpiry) {
+      explanation += ` Note: Supplier lead time (${leadTimeDays} days) exceeds batch expiry (${daysToExpiry} days). Incoming order will arrive after this batch has expired.`;
+    } else {
+      explanation += ` (${orderQty} additional units arrive on day ${leadTimeDays}; ${Math.round(leadDemand)} units projected to be consumed during lead time, leaving ${stockRemainingBeforeArrival} units before arrival).`;
+    }
   }
 
   return {
@@ -213,6 +322,7 @@ function calculateScenario(params) {
       unitCost,
       dailyUsage: baseDailyUsage,
       daysToExpiry,
+      baselineExpectedDemand,
       baselineExpectedConsumption,
       baselineProjectedUsableConsumption,
       baselineProjectedSurplus,
@@ -220,31 +330,48 @@ function calculateScenario(params) {
       baselineShortage,
       baselineStockoutDays,
       baselineStockoutDate,
+      baselineUtilizationPct,
       baselineRiskLevel,
       baselineRiskLabel,
       baselineExplanation,
     },
     simulatedData: {
       orderQty,
+      orderQuantity: orderQty,
       leadTimeDays,
-      holdBatch,
+      supplierLeadTimeDays: leadTimeDays,
+      holdBatch: isHold,
+      quarantineDays,
       demandChangePct,
       dispensingIncreasePct,
-      simulatedDailyDemand,
+      simulatedDailyDemand: (isHold && quarantineDays >= 999999) ? 0 : normalScenarioVelocity,
+      normalScenarioVelocity,
       projectedTotalStock,
       effectiveWindowDays,
-      projectedDemandInWindow,
+      projectedDemandInWindow: totalProjectedDemandInWindow,
+      projectedDemand: totalProjectedDemandInWindow,
       projectedConsumptionActual,
+      projectedConsumption: projectedConsumptionActual,
       projectedSurplusAtExpiry,
+      projectedSurplus: projectedSurplusAtExpiry,
+      projectedExpiryQuantity: projectedSurplusAtExpiry,
+      leadShortage,
+      postShortage,
       potentialShortage,
-      capitalAtRisk,
-      potentialWasteCost: capitalAtRisk,
+      capitalAtRisk: expiryCapitalAtRisk,
+      expiryCapitalAtRisk,
+      potentialWasteCost: expiryCapitalAtRisk,
       stockoutExposure,
+      orderValue,
       daysUntilStockout,
+      projectedStockoutDays: daysUntilStockout,
       estimatedStockoutDate,
+      projectedStockoutDate: estimatedStockoutDate,
       stockUtilizationPct,
+      stockUtilization: stockUtilizationPct,
       riskLevel,
       riskLabel,
+      riskClassification: riskLabel,
       explanation,
       recommendation,
     }
@@ -253,27 +380,38 @@ function calculateScenario(params) {
 
 /**
  * Runs a multi-scenario comparison matrix: Baseline (+0) vs +100 vs +300 vs +500
+ * ALL SCENARIOS EVALUATED THROUGH THE EXACT SAME DETERMINISTIC ENGINE.
  */
-function compareOrderScenarios(baseParams) {
+function compareOrderScenarios(baseParams = {}) {
   const increments = [0, 100, 300, 500];
   const scenarios = increments.map(qty => {
     const res = calculateScenario({
       ...baseParams,
       orderQty: qty
     });
+    const s = res.simulatedData;
     return {
       orderIncrement: qty,
-      projectedStock: res.simulatedData.projectedTotalStock,
-      expectedConsumption: res.simulatedData.projectedDemandInWindow,
-      projectedSurplus: res.simulatedData.projectedSurplusAtExpiry,
-      surplusAtExpiry: res.simulatedData.projectedSurplusAtExpiry,
-      potentialShortage: res.simulatedData.potentialShortage,
-      capitalAtRisk: res.simulatedData.capitalAtRisk,
-      wasteCost: res.simulatedData.capitalAtRisk,
-      utilizationPct: res.simulatedData.stockUtilizationPct,
-      riskLevel: res.simulatedData.riskLevel,
-      riskLabel: res.simulatedData.riskLabel,
-      recommendation: res.simulatedData.recommendation
+      orderQty: qty,
+      projectedStock: s.projectedTotalStock,
+      expectedConsumption: s.projectedDemandInWindow,
+      projectedConsumption: s.projectedConsumptionActual,
+      projectedSurplus: s.projectedSurplusAtExpiry,
+      surplusAtExpiry: s.projectedSurplusAtExpiry,
+      potentialShortage: s.potentialShortage,
+      capitalAtRisk: s.expiryCapitalAtRisk,
+      expiryCapitalAtRisk: s.expiryCapitalAtRisk,
+      wasteCost: s.expiryCapitalAtRisk,
+      stockoutExposure: s.stockoutExposure,
+      daysUntilStockout: s.daysUntilStockout,
+      estimatedStockoutDate: s.estimatedStockoutDate,
+      utilizationPct: s.stockUtilizationPct,
+      stockUtilizationPct: s.stockUtilizationPct,
+      riskLevel: s.riskLevel,
+      riskLabel: s.riskLabel,
+      riskClassification: s.riskLabel,
+      explanation: s.explanation,
+      recommendation: s.recommendation
     };
   });
 
@@ -340,16 +478,17 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
         const bStock = Number(b.quantity) || 0;
         const bCost = Number(b.unitPrice) || cost;
         const bRate = !isNaN(dailyUsage) && dailyUsage > 0 ? dailyUsage : 5;
-        const bExpectedDemand = Math.round(bRate * Math.max(0, bDays));
-        const bSurplus = Math.max(0, bStock - bExpectedDemand);
-        const bCapitalAtRisk = bSurplus * bCost;
         
-        let bRisk = 'Safe';
-        if (bDays <= 0) bRisk = 'Expired';
-        else if (bSurplus > bStock * 0.5 && bSurplus >= 30) bRisk = 'Likely Expiry';
-        else if (bSurplus > bStock * 0.25 || bSurplus >= 15) bRisk = 'High';
-        else if (bSurplus > 0) bRisk = 'Medium';
-        else if (bStock < bExpectedDemand) bRisk = 'Shortage';
+        // Use identical simulation formula for each sibling batch
+        const bSim = calculateScenario({
+          medicine: b.medicine,
+          batch: b.batch,
+          currentStock: bStock,
+          dailyUsage: bRate,
+          daysToExpiry: bDays,
+          unitCost: bCost,
+          orderQty: 0
+        });
 
         return {
           id: b.id,
@@ -359,10 +498,11 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
           quantity: bStock,
           unitPrice: bCost,
           status: b.status || 'Available',
-          projectedConsumption: Math.min(bStock, bExpectedDemand),
-          projectedSurplus: bSurplus,
-          capitalAtRisk: bCapitalAtRisk,
-          riskLevel: bRisk,
+          projectedConsumption: bSim.simulatedData.projectedConsumptionActual,
+          projectedSurplus: bSim.simulatedData.projectedSurplusAtExpiry,
+          capitalAtRisk: bSim.simulatedData.expiryCapitalAtRisk,
+          riskLevel: bSim.simulatedData.riskLevel,
+          riskLabel: bSim.simulatedData.riskLabel,
           isCurrentSelected: b.batch === matchedItem.batch
         };
       }).sort((a, b) => a.daysToExpiry - b.daysToExpiry); // Sort by FEFO (earliest expiry first)
@@ -402,16 +542,16 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
         daySpan = Math.max(1, Math.ceil((maxTime - minTime) / (1000 * 60 * 60 * 24)));
       }
       
-      const calculatedRate = Math.max(1, Math.round(totalDispensed / daySpan));
-      dailyUsage = calculatedRate;
+      const calculatedRate = Number((totalDispensed / daySpan).toFixed(1));
+      dailyUsage = calculatedRate > 0 ? calculatedRate : 0;
       hasSufficientData = true;
       confidence = matchingAudits.length >= 5 ? 'High' : 'Moderate';
       demandProvenance = `Calculated from ${totalDispensed} units dispensed across ${matchingAudits.length} prescriptions over ${daySpan} days (~${dailyUsage} units/day)`;
     } else {
-      dailyUsage = 5; // Standard fallback
+      dailyUsage = 5; // Standard fallback assumption
       hasSufficientData = false;
-      confidence = 'Low';
-      demandProvenance = 'Limited historical dispensing records for this batch in this pharmacy. Using baseline estimate (~5 units/day) with low confidence — adjust demand parameter manually for scenario testing.';
+      confidence = 'Insufficient Data';
+      demandProvenance = 'Insufficient historical dispensing data for a reliable projection. (Assumed simulation rate: 5.0 units/day - adjust demand parameter manually for scenario testing)';
     }
   } else {
     hasSufficientData = true;
@@ -429,6 +569,7 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
     daysToExpiry: !isNaN(days) ? days : 25,
     unitCost: !isNaN(cost) ? cost : 50,
     holdBatch: Boolean(parameters.holdBatch),
+    quarantineDays: Number(parameters.quarantineDays) || 0,
     demandChangePct: parameters.demandChangePct !== undefined
       ? Number(parameters.demandChangePct)
       : (Number(parameters.dispensingIncreasePct) || 0),
@@ -440,7 +581,7 @@ async function runWhatIfSimulation(pharmacyId = 'DEMO_PHARMACY', parameters = {}
   const singleResult = calculateScenario(baseParams);
   const comparison = compareOrderScenarios(baseParams);
 
-  // Suggested optimal AI target order size
+  // Suggested optimal target order size
   const effectiveWindow = Math.max(0, baseParams.daysToExpiry - baseParams.leadTimeDays);
   const expectedDemandInWindow = Math.round(singleResult.simulatedData.simulatedDailyDemand * effectiveWindow);
   const suggestedAiOrder = Math.max(0, expectedDemandInWindow - baseParams.currentStock);
@@ -486,7 +627,7 @@ function interpretSimulationQuestion(question = '', currentContext = {}) {
     params.dispensingIncreasePct = params.demandChangePct;
   }
 
-  // 2. Detect Reorder Quantity (e.g. "what if I reorder 50 units", "reorder 100", "order +50")
+  // 2. Detect Reorder Quantity (e.g. "what if I reorder 50 units", "reorder 100", "order +50", "order 300 units")
   const reorderMatch = q.match(/(?:reorder|order|buy|procure|purchase|add)\s*(?:\+)?\s*(\d+)\s*(?:units?|boxes?|packs?|more)?/i);
   if (reorderMatch) {
     queryType = 'REORDER_CHANGE';
@@ -496,15 +637,17 @@ function interpretSimulationQuestion(question = '', currentContext = {}) {
   // 3. Detect Quarantine / Hold (e.g. "quarantine for 5 days", "what if batch is held", "hold for 3 days")
   if (q.includes('quarantine') || q.includes('hold') || q.includes('block')) {
     queryType = 'QUARANTINE_HOLD';
-    params.holdBatch = true;
-    const holdDaysMatch = q.match(/(?:quarantine|hold|held|delay)\s*(?:for)?\s*(\d+)\s*days?/i);
+    const holdDaysMatch = q.match(/(?:quarantine[a-z]*|hold|held|delay|delayed)\s*(?:for)?\s*(\d+)\s*days?/i);
     if (holdDaysMatch) {
-      params.leadTimeDays = Number(holdDaysMatch[1]);
+      params.quarantineDays = Number(holdDaysMatch[1]);
+      params.holdBatch = true;
+    } else {
+      params.holdBatch = true;
     }
   }
 
-  // 4. Detect Supplier Lead Time (e.g. "supplier delayed by 5 days", "lead time 4 days")
-  const leadTimeMatch = q.match(/(?:lead\s*time|supplier\s*delay|delayed\s*by)\s*(\d+)\s*days?/i);
+  // 4. Detect Supplier Lead Time (e.g. "supplier delayed by 5 days", "lead time 10 days", "supplier takes 10 days")
+  const leadTimeMatch = q.match(/(?:lead\s*time|supplier\s*delay|delayed\s*by|supplier\s*takes)\s*(\d+)\s*days?/i);
   if (leadTimeMatch) {
     queryType = 'LEAD_TIME_CHANGE';
     params.leadTimeDays = Number(leadTimeMatch[1]);
@@ -563,13 +706,13 @@ async function answerSimulationQuestion(pharmacyId = 'DEMO_PHARMACY', payload = 
     case 'EXPIRY_CHECK':
       if (daysLeft <= 0) {
         directAnswer = `Batch ${batch} of ${med} has already passed its expiration date with ${act.currentStock} units in inventory.`;
-        detailedExplanation = `The batch expired with ${act.currentStock} units remaining unsold (₹ ${(act.currentStock * unitCost).toLocaleString('en-IN')} total capital at risk). Immediate quarantine is required.`;
+        detailedExplanation = `The batch expired with ${act.currentStock} units remaining unsold (${formatINR(act.currentStock * unitCost)} total capital at risk). Immediate quarantine is required.`;
       } else if (simData.projectedSurplusAtExpiry > 0) {
         directAnswer = `No, approximately ${simData.projectedSurplusAtExpiry} units of ${med} (Batch ${batch}) are projected to remain unused when it expires in ${daysLeft} days.`;
-        detailedExplanation = `At the current dispensing velocity of ${act.dailyUsage.toFixed(1)} units/day, only ${simData.projectedDemandInWindow} of ${simData.projectedTotalStock} units are expected to be consumed over the remaining ${simData.effectiveWindowDays} days. Potential expiry wastage value is ₹ ${simData.capitalAtRisk.toLocaleString('en-IN')}.`;
+        detailedExplanation = `At the current dispensing velocity of ${act.dailyUsage.toFixed(1)} units/day, only ${simData.projectedConsumptionActual} of ${simData.projectedTotalStock} units are expected to be consumed over the remaining ${daysLeft} days. Potential expiry wastage value is ${formatINR(simData.expiryCapitalAtRisk)}.`;
       } else {
         directAnswer = `Yes, Batch ${batch} of ${med} is projected to be fully consumed before its expiry in ${daysLeft} days.`;
-        detailedExplanation = `At current dispensing velocity of ${act.dailyUsage.toFixed(1)} units/day, all ${simData.projectedTotalStock} units will be dispensed within approximately ${Math.min(daysLeft, simData.daysUntilStockout)} days. Zero capital is at risk of expiration.`;
+        detailedExplanation = `At current dispensing velocity of ${act.dailyUsage.toFixed(1)} units/day, all ${simData.projectedTotalStock} units are projected to be dispensed within approximately ${Math.min(daysLeft, simData.daysUntilStockout || daysLeft)} days. Zero capital is at risk of expiration.`;
       }
       break;
 
@@ -578,10 +721,10 @@ async function answerSimulationQuestion(pharmacyId = 'DEMO_PHARMACY', payload = 
       const direction = pct >= 0 ? `increased by ${pct}%` : `decreased by ${Math.abs(pct)}%`;
       if (simData.projectedSurplusAtExpiry > 0) {
         directAnswer = `With demand ${direction} (${simData.simulatedDailyDemand.toFixed(1)} units/day), approximately ${simData.projectedSurplusAtExpiry} units are projected to remain when Batch ${batch} expires.`;
-        detailedExplanation = `This represents ₹ ${simData.capitalAtRisk.toLocaleString('en-IN')} of potential expiry capital at risk. Risk status shifts from ${act.baselineRiskLabel} to ${simData.riskLabel}.`;
+        detailedExplanation = `This represents ${formatINR(simData.expiryCapitalAtRisk)} of potential expiry capital at risk. Risk status shifts from ${act.baselineRiskLabel} to ${simData.riskLabel}.`;
       } else if (simData.potentialShortage > 0) {
         directAnswer = `With demand ${direction} (${simData.simulatedDailyDemand.toFixed(1)} units/day), stock will be fully consumed before expiry, but a shortage of ${simData.potentialShortage} units is expected in ~${simData.daysUntilStockout} days.`;
-        detailedExplanation = `Estimated stockout date is ${simData.estimatedStockoutDate}. Stockout revenue exposure is ₹ ${simData.stockoutExposure.toLocaleString('en-IN')}.`;
+        detailedExplanation = `Estimated stockout date is ${simData.estimatedStockoutDate}. Stockout exposure (estimated unmet demand) is ${formatINR(simData.stockoutExposure)}.`;
       } else {
         directAnswer = `With demand ${direction} (${simData.simulatedDailyDemand.toFixed(1)} units/day), all ${simData.projectedTotalStock} units will be safely consumed before expiry.`;
         detailedExplanation = `Stock is projected to be fully utilized with 0 surplus units remaining at expiry.`;
@@ -592,25 +735,25 @@ async function answerSimulationQuestion(pharmacyId = 'DEMO_PHARMACY', payload = 
     case 'EXPIRED_QTY_QUERY':
       if (simData.projectedSurplusAtExpiry > 0) {
         directAnswer = `Approximately ${simData.projectedSurplusAtExpiry} units of ${med} (Batch ${batch}) are projected to expire unused.`;
-        detailedExplanation = `Based on a daily dispensing rate of ${simData.simulatedDailyDemand.toFixed(1)} units/day over ${simData.effectiveWindowDays} days, ${simData.projectedDemandInWindow} of ${simData.projectedTotalStock} units will be dispensed, leaving ${simData.projectedSurplusAtExpiry} units at expiration.`;
+        detailedExplanation = `Based on a daily dispensing rate of ${simData.simulatedDailyDemand.toFixed(1)} units/day, ${simData.projectedConsumptionActual} of ${simData.projectedTotalStock} units will be dispensed, leaving ${simData.projectedSurplusAtExpiry} units at expiration in ${daysLeft} days.`;
       } else {
         directAnswer = `0 units are projected to expire unused for Batch ${batch}.`;
-        detailedExplanation = `All ${simData.projectedTotalStock} units are expected to be dispensed within ${Math.min(daysLeft, simData.daysUntilStockout)} days, prior to the batch expiry date.`;
+        detailedExplanation = `All ${simData.projectedTotalStock} units are expected to be dispensed within ${Math.min(daysLeft, simData.daysUntilStockout || daysLeft)} days, prior to the batch expiry date.`;
       }
       break;
 
     case 'FINANCIAL_RISK_QUERY':
-      directAnswer = `Potential expiry capital at risk is ₹ ${simData.capitalAtRisk.toLocaleString('en-IN')}.`;
-      detailedExplanation = `This is calculated from ${simData.projectedSurplusAtExpiry} projected surplus units at unit purchase cost of ₹ ${unitCost}. Separate stockout exposure is ₹ ${simData.stockoutExposure.toLocaleString('en-IN')} (${simData.potentialShortage} units of unsatisfied demand).`;
+      directAnswer = `Potential expiry capital at risk is ${formatINR(simData.expiryCapitalAtRisk)}.`;
+      detailedExplanation = `This is calculated from ${simData.projectedSurplusAtExpiry} projected surplus units at unit purchase cost of ₹ ${unitCost}. Separate estimated stockout exposure is ${formatINR(simData.stockoutExposure)} (${simData.potentialShortage} units of unsatisfied demand).`;
       break;
 
     case 'STOCKOUT_QUERY':
-      if (simData.potentialShortage > 0) {
+      if (simData.potentialShortage > 0 || (simData.daysUntilStockout !== null && simData.daysUntilStockout < daysLeft)) {
         directAnswer = `Stock is projected to run out in ~${simData.daysUntilStockout} days (estimated ${simData.estimatedStockoutDate}), prior to batch expiry.`;
-        detailedExplanation = `Projected demand (${simData.projectedDemandInWindow} units) exceeds available stock (${simData.projectedTotalStock} units), resulting in a potential shortage of ${simData.potentialShortage} units.`;
+        detailedExplanation = `Projected demand exceeds available stock (${simData.projectedTotalStock} units), resulting in a potential shortage of ${simData.potentialShortage} units before batch expiry.`;
       } else {
         directAnswer = `Stock is not projected to run out before expiry.`;
-        detailedExplanation = `Available stock (${simData.projectedTotalStock} units) is sufficient to meet projected demand (${simData.projectedDemandInWindow} units) through the entire remaining ${simData.effectiveWindowDays} days.`;
+        detailedExplanation = `Available stock (${simData.projectedTotalStock} units) is sufficient to meet projected demand through the entire remaining ${daysLeft} days.`;
       }
       break;
 
@@ -621,7 +764,7 @@ async function answerSimulationQuestion(pharmacyId = 'DEMO_PHARMACY', payload = 
         const primary = batches[0];
         const highestRisk = [...batches].sort((a, b) => (b.capitalAtRisk || 0) - (a.capitalAtRisk || 0))[0];
         directAnswer = `Under FEFO (First-Expired, First-Out), Batch ${primary.batch} should be prioritized for immediate dispensing.`;
-        detailedExplanation = `Batch ${primary.batch} expires first (${primary.expiry}, ${primary.daysToExpiry} days left, ${primary.quantity} units). Highest expiry capital at risk is Batch ${highestRisk.batch} (₹ ${(highestRisk.capitalAtRisk || 0).toLocaleString('en-IN')}).`;
+        detailedExplanation = `Batch ${primary.batch} expires first (${primary.expiry}, ${primary.daysToExpiry} days left, ${primary.quantity} units). Highest expiry capital at risk is Batch ${highestRisk.batch} (${formatINR(highestRisk.capitalAtRisk || 0)}).`;
         operationalRecommendation = `Ensure Batch ${primary.batch} is positioned at the front of dispensing shelves.`;
       } else {
         directAnswer = `Batch ${batch} is currently the primary active batch for ${med}.`;
@@ -631,18 +774,23 @@ async function answerSimulationQuestion(pharmacyId = 'DEMO_PHARMACY', payload = 
     }
 
     case 'QUARANTINE_HOLD':
-      directAnswer = `Quarantining Batch ${batch} stops active dispensing (0 units/day).`;
-      detailedExplanation = `With dispensing velocity halted, all ${simData.projectedTotalStock} units (₹ ${simData.capitalAtRisk.toLocaleString('en-IN')}) will remain in storage until expiry in ${daysLeft} days unless the hold is lifted or stock is returned to supplier.`;
+      if (simData.quarantineDays > 0 && simData.quarantineDays < 999999) {
+        directAnswer = `Quarantining Batch ${batch} for ${simData.quarantineDays} days stops active dispensing during the hold period.`;
+        detailedExplanation = `After ${simData.quarantineDays} days, normal dispensing of ${simData.simulatedDailyDemand.toFixed(1)} units/day resumes. Total projected consumption before expiry is ${simData.projectedConsumptionActual} units.`;
+      } else {
+        directAnswer = `Quarantining Batch ${batch} stops active dispensing (0 units/day).`;
+        detailedExplanation = `With dispensing velocity halted, all ${simData.projectedTotalStock} units (${formatINR(simData.expiryCapitalAtRisk)}) will remain in storage until expiry in ${daysLeft} days unless the hold is lifted or stock is returned to supplier.`;
+      }
       break;
 
     case 'REORDER_CHANGE':
-      directAnswer = `Adding +${simData.orderQty} units brings total stock to ${simData.projectedTotalStock} units.`;
-      detailedExplanation = `Projected consumption is ${simData.projectedDemandInWindow} units across ${simData.effectiveWindowDays} days. Resulting surplus at expiry is ${simData.projectedSurplusAtExpiry} units (₹ ${simData.capitalAtRisk.toLocaleString('en-IN')} capital at risk).`;
+      directAnswer = `Adding +${simData.orderQty} units brings total simulated stock to ${simData.projectedTotalStock} units.`;
+      detailedExplanation = `Projected consumption is ${simData.projectedConsumptionActual} units across ${daysLeft} days. Resulting surplus at expiry is ${simData.projectedSurplusAtExpiry} units (${formatINR(simData.expiryCapitalAtRisk)} capital at risk).`;
       break;
 
     default:
-      directAnswer = `Based on current dispensing velocity of ${act.dailyUsage.toFixed(1)} units/day, ${simData.projectedSurplusAtExpiry > 0 ? `${simData.projectedSurplusAtExpiry} units are projected to remain at expiry.` : 'stock is projected to be fully consumed before expiry.'}`;
-      detailedExplanation = `Available stock: ${simData.projectedTotalStock} units. Projected consumption: ${simData.projectedDemandInWindow} units over ${simData.effectiveWindowDays} days. Potential expiry capital at risk: ₹ ${simData.capitalAtRisk.toLocaleString('en-IN')}.`;
+      directAnswer = `Based on dispensing velocity of ${act.dailyUsage.toFixed(1)} units/day, ${simData.projectedSurplusAtExpiry > 0 ? `${simData.projectedSurplusAtExpiry} units are projected to remain at expiry.` : 'stock is projected to be fully consumed before expiry.'}`;
+      detailedExplanation = `Available stock: ${simData.projectedTotalStock} units. Projected consumption: ${simData.projectedConsumptionActual} units over ${daysLeft} days. Potential expiry capital at risk: ${formatINR(simData.expiryCapitalAtRisk)}.`;
       break;
   }
 
@@ -668,5 +816,3 @@ module.exports = {
   interpretSimulationQuestion,
   answerSimulationQuestion
 };
-
-

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Medicine } from '../data';
 import {
-  SlidersHorizontal, RefreshCw, AlertTriangle, ArrowRight, ShieldCheck,
-  TrendingUp, TrendingDown, Clock3, BrainCircuit, CheckCircle2, ChevronRight,
-  PackagePlus, Sparkles, DollarSign, Info, Eye, Boxes, X, Layers, AlertCircle,
-  Truck, ArrowUpRight, Scale, Search, ShieldAlert, Calendar, HelpCircle, Activity
+  RefreshCw, Clock3, BrainCircuit, CheckCircle2,
+  PackagePlus, Sparkles, Info, Boxes, X,
+  Search, Calendar, HelpCircle
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -16,14 +15,25 @@ interface WhatIfSimulatorProps {
 
 interface ScenarioComparisonItem {
   orderIncrement: number;
+  orderQty: number;
   projectedStock: number;
   expectedConsumption: number;
+  projectedConsumption: number;
   projectedSurplus: number;
+  surplusAtExpiry: number;
   potentialShortage: number;
   capitalAtRisk: number;
+  expiryCapitalAtRisk: number;
+  wasteCost: number;
+  stockoutExposure: number;
+  daysUntilStockout: number | null;
+  estimatedStockoutDate: string | null;
   utilizationPct: number;
+  stockUtilizationPct: number;
   riskLevel: string;
-  riskLabel?: string;
+  riskLabel: string;
+  riskClassification: string;
+  explanation: string;
   recommendation: string;
 }
 
@@ -39,7 +49,16 @@ interface BatchBreakdownItem {
   projectedSurplus?: number;
   capitalAtRisk?: number;
   riskLevel?: string;
+  riskLabel?: string;
   isCurrentSelected?: boolean;
+}
+
+// Formats an integer day offset from today into an Indian standard calendar date string
+function formatFutureCalendarDate(daysFromNow: number | null | undefined): string | null {
+  if (daysFromNow === null || daysFromNow === undefined || isNaN(daysFromNow)) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + Math.round(daysFromNow));
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 // Dynamic helper to calculate days to expiry from real current date
@@ -79,10 +98,291 @@ function calculateDaysToExpiry(expiryStr: string): number {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
-function formatFutureCalendarDate(daysFromNow: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + Math.round(daysFromNow));
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+function formatINR(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined || isNaN(amount)) return '₹0';
+  return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
+}
+
+/**
+ * CLIENT-SIDE DETERMINISTIC ENGINE MIRROR
+ * Identical mathematical formulas to backend simulationService.js.
+ */
+function runClientDeterministicSimulation(params: {
+  medicine: string;
+  batch: string;
+  currentStock: number;
+  orderQty: number;
+  dailyUsage: number;
+  daysToExpiry: number;
+  unitCost: number;
+  leadTimeDays: number;
+  holdBatch: boolean;
+  quarantineDays?: number;
+  demandChangePct: number;
+}) {
+  const medicine = params.medicine || 'Selected Medicine';
+  const batch = params.batch || 'Default Batch';
+  const currentStock = Math.max(0, Number(params.currentStock) || 0);
+  const orderQty = Math.max(0, Number(params.orderQty) || 0);
+  const baseDailyUsage = Math.max(0, Number(params.dailyUsage) || 0);
+  const daysToExpiry = Number(params.daysToExpiry) !== undefined && !isNaN(Number(params.daysToExpiry)) ? Number(params.daysToExpiry) : 45;
+  const leadTimeDays = Math.max(0, Number(params.leadTimeDays) || 0);
+  const unitCost = Math.max(0, Number(params.unitCost) || 50);
+  
+  let quarantineDays = 0;
+  if (params.quarantineDays !== undefined && !isNaN(Number(params.quarantineDays))) {
+    quarantineDays = Math.max(0, Number(params.quarantineDays));
+  } else if (params.holdBatch) {
+    quarantineDays = 999999;
+  }
+  const isHold = quarantineDays > 0 || Boolean(params.holdBatch);
+
+  const demandChangePct = Number(params.demandChangePct) || 0;
+  const demandMultiplier = 1 + (demandChangePct / 100);
+  const normalScenarioVelocity = Math.max(0, baseDailyUsage * demandMultiplier);
+  const simulatedDailyDemand = (quarantineDays > 0) ? 0 : normalScenarioVelocity;
+
+  // 1. BASELINE PROJECTION
+  const baselineDaysToExpiry = Math.max(0, daysToExpiry);
+  const baselineDemandBeforeExpiry = Math.round(baseDailyUsage * baselineDaysToExpiry);
+  const baselineProjectedUsableConsumption = Math.min(currentStock, baselineDemandBeforeExpiry);
+  const baselineExpectedConsumption = baselineProjectedUsableConsumption;
+  const baselineProjectedSurplus = Math.max(0, currentStock - baselineDemandBeforeExpiry);
+  const baselineCapitalAtRisk = baselineProjectedSurplus * unitCost;
+  const baselineShortage = Math.max(0, baselineDemandBeforeExpiry - currentStock);
+  const baselineStockoutDays = baseDailyUsage > 0
+    ? Math.floor(currentStock / baseDailyUsage)
+    : null;
+  const baselineStockoutDate = baselineStockoutDays !== null
+    ? formatFutureCalendarDate(baselineStockoutDays)
+    : null;
+  const baselineUtilizationPct = currentStock > 0
+    ? Math.min(100, Math.round((baselineProjectedUsableConsumption / currentStock) * 100))
+    : 100;
+
+  let baselineRiskLevel = 'Low Risk';
+  let baselineRiskLabel = 'LOW RISK';
+  let baselineExplanation = '';
+
+  if (daysToExpiry <= 0) {
+    baselineRiskLevel = 'Expired';
+    baselineRiskLabel = 'EXPIRED';
+    baselineExplanation = `Batch has passed its expiration date with ${currentStock} units remaining unsold. Immediate quarantine required.`;
+  } else if (baselineProjectedSurplus > currentStock * 0.5 && baselineProjectedSurplus >= 30) {
+    baselineRiskLevel = 'Likely Expiry';
+    baselineRiskLabel = 'HIGH EXPIRY RISK';
+    baselineExplanation = `At current dispensing velocity (${baseDailyUsage.toFixed(1)}/day), ${baselineExpectedConsumption} of ${currentStock} units are projected to be consumed over ${daysToExpiry} days, leaving ${baselineProjectedSurplus} units (${formatINR(baselineCapitalAtRisk)}) to expire unused.`;
+  } else if (baselineProjectedSurplus > currentStock * 0.2 || baselineProjectedSurplus >= 15) {
+    baselineRiskLevel = 'High';
+    baselineRiskLabel = 'HIGH EXPIRY RISK';
+    baselineExplanation = `Dispensing velocity of ${baseDailyUsage.toFixed(1)} units/day is insufficient to consume all ${currentStock} units within ${daysToExpiry} days. ${baselineProjectedSurplus} units (${formatINR(baselineCapitalAtRisk)}) projected to expire unused.`;
+  } else if (baselineProjectedSurplus > 0 || (daysToExpiry <= 15 && currentStock > baselineExpectedConsumption * 0.8)) {
+    baselineRiskLevel = 'Medium';
+    baselineRiskLabel = 'MODERATE RISK';
+    baselineExplanation = `Moderate surplus of ${baselineProjectedSurplus} units (${formatINR(baselineCapitalAtRisk)}) projected at expiry date under current velocity.`;
+  } else if (baselineShortage > 0) {
+    baselineRiskLevel = 'Shortage';
+    baselineRiskLabel = 'STOCKOUT RISK';
+    baselineExplanation = `Projected demand (${baselineDemandBeforeExpiry} units) will deplete current stock (${currentStock} units) in ~${baselineStockoutDays} days (est. ${baselineStockoutDate}), prior to batch expiry.`;
+  } else {
+    baselineRiskLevel = 'Safe';
+    baselineRiskLabel = 'LOW RISK';
+    baselineExplanation = `Current stock (${currentStock} units) is projected to be fully consumed within ~${Math.min(daysToExpiry, baselineStockoutDays || daysToExpiry)} days, well before the batch expiry date.`;
+  }
+
+  // 2. TIME-BASED WHAT-IF PROJECTION
+  const projectedTotalStock = currentStock + orderQty;
+  const effectiveLeadTime = Math.min(daysToExpiry > 0 ? daysToExpiry : 0, leadTimeDays);
+
+  const activeLeadDays = Math.max(0, effectiveLeadTime - quarantineDays);
+  const leadDemand = normalScenarioVelocity * activeLeadDays;
+  const consumptionInLead = Math.min(currentStock, leadDemand);
+  const stockRemainingBeforeArrival = Math.max(0, currentStock - leadDemand);
+  const leadShortage = Math.max(0, leadDemand - currentStock);
+
+  const orderArrivesBeforeExpiry = orderQty > 0 && leadTimeDays < daysToExpiry;
+  const availableAfterArrival = stockRemainingBeforeArrival + (orderArrivesBeforeExpiry ? orderQty : 0);
+
+  const activePostArrivalDays = Math.max(0, daysToExpiry - Math.max(effectiveLeadTime, quarantineDays));
+  const postDemand = normalScenarioVelocity * activePostArrivalDays;
+  const consumptionPostArrival = Math.min(availableAfterArrival, postDemand);
+  const postShortage = Math.max(0, postDemand - availableAfterArrival);
+
+  const effectiveWindowDays = Math.max(0, daysToExpiry - leadTimeDays);
+  const totalProjectedDemandInWindow = Math.round(leadDemand + postDemand);
+  const projectedConsumptionActual = Math.round(consumptionInLead + consumptionPostArrival);
+  
+  let projectedSurplusAtExpiry = 0;
+  if (daysToExpiry <= 0) {
+    projectedSurplusAtExpiry = currentStock;
+  } else if (isHold && quarantineDays >= 999999) {
+    projectedSurplusAtExpiry = projectedTotalStock;
+  } else {
+    projectedSurplusAtExpiry = Math.max(0, availableAfterArrival - postDemand);
+  }
+  const potentialShortage = Math.round(leadShortage + postShortage);
+
+  const expiryCapitalAtRisk = projectedSurplusAtExpiry * unitCost;
+  const stockoutExposure = potentialShortage * unitCost;
+  const orderValue = orderQty * unitCost;
+
+  const stockUtilizationPct = projectedTotalStock > 0
+    ? Math.min(100, Math.max(0, Math.round((projectedConsumptionActual / projectedTotalStock) * 100)))
+    : 100;
+
+  let daysUntilStockout: number | null = null;
+  let estimatedStockoutDate: string | null = null;
+
+  if (normalScenarioVelocity > 0 && !isHold) {
+    const t1 = currentStock / normalScenarioVelocity;
+    if (orderQty === 0) {
+      daysUntilStockout = Math.floor(t1);
+    } else {
+      if (leadTimeDays >= t1) {
+        daysUntilStockout = Math.floor(t1);
+      } else {
+        const totalDuration = projectedTotalStock / normalScenarioVelocity;
+        daysUntilStockout = Math.floor(totalDuration);
+      }
+    }
+    estimatedStockoutDate = formatFutureCalendarDate(daysUntilStockout);
+  } else if (isHold && quarantineDays < 999999 && normalScenarioVelocity > 0) {
+    const t1 = quarantineDays + (currentStock / normalScenarioVelocity);
+    if (orderQty === 0) {
+      daysUntilStockout = Math.floor(t1);
+    } else {
+      if (leadTimeDays >= t1) {
+        daysUntilStockout = Math.floor(t1);
+      } else {
+        const totalDuration = quarantineDays + (projectedTotalStock / normalScenarioVelocity);
+        daysUntilStockout = Math.floor(totalDuration);
+      }
+    }
+    estimatedStockoutDate = formatFutureCalendarDate(daysUntilStockout);
+  }
+
+  // 3. RISK CLASSIFICATION & EXPLANATION
+  let riskLevel = 'Safe';
+  let riskLabel = 'LOW RISK';
+  let explanation = '';
+  let recommendation = '';
+
+  if (daysToExpiry <= 0) {
+    riskLevel = 'Expired';
+    riskLabel = 'EXPIRED';
+    explanation = `Batch has expired with ${currentStock} units remaining unsold in inventory.`;
+    recommendation = `⚠️ Quarantine remaining ${currentStock} units immediately and process supplier return. Do not dispense.`;
+  } else if (isHold && quarantineDays >= 999999) {
+    riskLevel = 'High';
+    riskLabel = 'HIGH EXPIRY RISK (QUARANTINED)';
+    explanation = `Batch is placed under quarantine hold, reducing dispensing velocity to 0 units/day. All ${projectedTotalStock} units will remain in storage until expiry.`;
+    recommendation = `⚠️ Holding this batch stops dispensing velocity. All ${projectedTotalStock} units (${formatINR(expiryCapitalAtRisk)}) are projected to expire unused unless cleared for dispensing or returned.`;
+  } else if (quarantineDays > 0) {
+    riskLevel = 'Medium';
+    riskLabel = 'MODERATE RISK (HOLD ACTIVE)';
+    explanation = `Batch is held for ${quarantineDays} days (0 dispensing during hold). Normal dispensing (${normalScenarioVelocity.toFixed(1)}/day) resumes thereafter. Projected consumption before expiry is ${projectedConsumptionActual} units.`;
+    recommendation = `Review quarantine release schedule to ensure stock is returned to active dispensing before expiry.`;
+  } else if (projectedSurplusAtExpiry > projectedTotalStock * 0.5 && projectedSurplusAtExpiry >= 30) {
+    riskLevel = 'High';
+    riskLabel = 'HIGH EXPIRY RISK (SUBSTANTIAL WASTAGE)';
+    const optimalOrder = Math.max(0, totalProjectedDemandInWindow - currentStock);
+    explanation = `At simulated demand of ${normalScenarioVelocity.toFixed(1)} units/day, expected consumption across the remaining ${daysToExpiry} days is ${totalProjectedDemandInWindow} units. With total stock of ${projectedTotalStock} units, ${projectedSurplusAtExpiry} units (${formatINR(expiryCapitalAtRisk)}) will remain unsold at expiry.`;
+    recommendation = `🔴 Substantial Expiry Risk: Projected surplus of ${projectedSurplusAtExpiry} units (${formatINR(expiryCapitalAtRisk)}). ${orderQty > 0 ? `Cancel/reduce proposed reorder to ~${optimalOrder} units.` : 'Prioritize front-of-shelf FEFO dispensing immediately.'}`;
+  } else if (projectedSurplusAtExpiry > projectedTotalStock * 0.25 || projectedSurplusAtExpiry >= 15) {
+    riskLevel = 'High';
+    riskLabel = 'HIGH EXPIRY RISK';
+    const optimalOrder = Math.max(0, totalProjectedDemandInWindow - currentStock);
+    explanation = `At simulated demand of ${normalScenarioVelocity.toFixed(1)} units/day, expected consumption across ${daysToExpiry} days is ${totalProjectedDemandInWindow} units. Total stock of ${projectedTotalStock} units creates a projected surplus of ${projectedSurplusAtExpiry} units.`;
+    recommendation = `⚠️ High Expiry Risk: Projected surplus of ${projectedSurplusAtExpiry} units (${formatINR(expiryCapitalAtRisk)}) expiring unsold. ${orderQty > 0 ? `Reduce proposed reorder to ~${optimalOrder} units.` : 'Maintain strict FEFO dispensing priority.'}`;
+  } else if (projectedSurplusAtExpiry > 0) {
+    riskLevel = 'Medium';
+    riskLabel = 'MODERATE RISK (SURPLUS)';
+    explanation = `Moderate surplus of ${projectedSurplusAtExpiry} units (${formatINR(expiryCapitalAtRisk)}) projected at expiry date under simulated velocity (${normalScenarioVelocity.toFixed(1)}/day).`;
+    recommendation = `⚠️ Moderate Surplus: Projected surplus of ${projectedSurplusAtExpiry} units at expiry (${formatINR(expiryCapitalAtRisk)}). Maintain strict FEFO dispensing priority.`;
+  } else if (potentialShortage > 0) {
+    riskLevel = 'Shortage';
+    riskLabel = 'STOCKOUT RISK';
+    if (leadShortage > 0 && leadTimeDays > 0) {
+      explanation = `Lead-time gap: Initial stock (${currentStock} units) will run out in ~${Math.floor(currentStock / normalScenarioVelocity)} days before replenishment arrives on day ${leadTimeDays}, causing ${leadShortage} units of unmet demand during lead time.`;
+      recommendation = `📦 Lead-Time Shortage: Request expedited supplier dispatch or reallocate ${leadShortage} units from sibling batches to prevent stockout before order arrival.`;
+    } else {
+      explanation = `Projected demand (${totalProjectedDemandInWindow} units) exceeds total stock (${projectedTotalStock} units). Stockout expected in ~${daysUntilStockout} days (est. ${estimatedStockoutDate}), prior to batch expiry.`;
+      recommendation = `📦 Shortage Warning: Projected demand (${totalProjectedDemandInWindow} units) exceeds stock (${projectedTotalStock} units). Projected shortage of ${potentialShortage} units before batch expiry. Consider reordering +${potentialShortage} units.`;
+    }
+  } else {
+    riskLevel = 'Safe';
+    riskLabel = 'LOW RISK (OPTIMAL BALANCE)';
+    explanation = `Simulated demand of ${normalScenarioVelocity.toFixed(1)} units/day will fully consume available stock (${projectedTotalStock} units) in ~${Math.min(daysToExpiry, daysUntilStockout || daysToExpiry)} days, safely prior to the batch expiry date (${daysToExpiry} days away).`;
+    recommendation = `✅ Optimal Scenario: ${projectedTotalStock} units are projected to be fully consumed within ~${Math.min(daysToExpiry, daysUntilStockout || daysToExpiry)} days prior to expiry date. Zero capital at risk of expiration.`;
+  }
+
+  if (leadTimeDays > 0 && orderQty > 0 && daysToExpiry > 0) {
+    if (leadTimeDays >= daysToExpiry) {
+      explanation += ` Note: Supplier lead time (${leadTimeDays} days) exceeds batch expiry (${daysToExpiry} days). Incoming order will arrive after this batch has expired.`;
+    } else {
+      explanation += ` (${orderQty} additional units arrive on day ${leadTimeDays}; ${Math.round(leadDemand)} units projected to be consumed during lead time, leaving ${stockRemainingBeforeArrival} units before arrival).`;
+    }
+  }
+
+  return {
+    medicine,
+    batch,
+    actualData: {
+      currentStock,
+      unitCost,
+      dailyUsage: baseDailyUsage,
+      daysToExpiry,
+      baselineExpectedDemand,
+      baselineExpectedConsumption,
+      baselineProjectedUsableConsumption,
+      baselineProjectedSurplus,
+      baselineCapitalAtRisk,
+      baselineShortage,
+      baselineStockoutDays,
+      baselineStockoutDate,
+      baselineUtilizationPct,
+      baselineRiskLevel,
+      baselineRiskLabel,
+      baselineExplanation,
+    },
+    simulatedData: {
+      orderQty,
+      orderQuantity: orderQty,
+      leadTimeDays,
+      supplierLeadTimeDays: leadTimeDays,
+      holdBatch: isHold,
+      quarantineDays,
+      demandChangePct,
+      dispensingIncreasePct: demandChangePct,
+      simulatedDailyDemand: normalScenarioVelocity,
+      projectedTotalStock,
+      effectiveWindowDays,
+      projectedDemandInWindow: totalProjectedDemandInWindow,
+      projectedDemand: totalProjectedDemandInWindow,
+      projectedConsumptionActual,
+      projectedConsumption: projectedConsumptionActual,
+      projectedSurplusAtExpiry,
+      projectedSurplus: projectedSurplusAtExpiry,
+      projectedExpiryQuantity: projectedSurplusAtExpiry,
+      potentialShortage,
+      capitalAtRisk: expiryCapitalAtRisk,
+      expiryCapitalAtRisk,
+      potentialWasteCost: expiryCapitalAtRisk,
+      stockoutExposure,
+      orderValue,
+      daysUntilStockout,
+      projectedStockoutDays: daysUntilStockout,
+      estimatedStockoutDate,
+      projectedStockoutDate: estimatedStockoutDate,
+      stockUtilizationPct,
+      stockUtilization: stockUtilizationPct,
+      riskLevel,
+      riskLabel,
+      riskClassification: riskLabel,
+      explanation,
+      recommendation,
+    }
+  };
 }
 
 export default function WhatIfSimulator({
@@ -105,7 +405,6 @@ export default function WhatIfSimulator({
   // Selected Medicine & Batch State
   const [selectedMedicineName, setSelectedMedicineName] = useState<string>('');
   const [selectedBatchCode, setSelectedBatchCode] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Actual Baseline Parameters from live Firestore
   const [currentStock, setCurrentStock] = useState<number>(45);
@@ -122,16 +421,8 @@ export default function WhatIfSimulator({
   const [orderQty, setOrderQty] = useState<number>(0);
   const [leadTimeDays, setLeadTimeDays] = useState<number>(0);
   const [holdBatch, setHoldBatch] = useState<boolean>(false);
-  const [scenarioPreset, setScenarioPreset] = useState<string>('baseline');
 
-  // Backend Sync & Multi-Scenario Data
-  const [comparisonMatrix, setComparisonMatrix] = useState<ScenarioComparisonItem[]>([]);
-  const [multiBatchList, setMultiBatchList] = useState<BatchBreakdownItem[]>([]);
-  const [suggestedAiTarget, setSuggestedAiTarget] = useState<number>(0);
-  const [backendResult, setBackendResult] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-
-  // Commit Modal
+  // Commit Modal State
   const [showCommitModal, setShowCommitModal] = useState<boolean>(false);
   const [isCommitting, setIsCommitting] = useState<boolean>(false);
 
@@ -149,63 +440,13 @@ export default function WhatIfSimulator({
     'When will this stock run out?',
     'Which batch should I prioritize?',
     'What happens if this batch is quarantined for 5 days?',
-    'What happens if I reorder 50 units?',
+    'What if the supplier takes 10 days?',
+    'What happens if I reorder 100 units?',
   ];
-
-  const handleAskQuestion = async (customQ?: string) => {
-    const q = (customQ !== undefined ? customQ : questionInput).trim();
-    if (!q) {
-      showToast('Please enter a question to ask the simulator.');
-      return;
-    }
-    setQuestionInput(q);
-    setIsAskingQuestion(true);
-    try {
-      const res = await api.askSimulatorQuestion({
-        question: q,
-        medicine: selectedMedicineName,
-        batch: selectedBatchCode,
-        currentStock,
-        orderQty,
-        dailyUsage: baseDailyUsage,
-        daysToExpiry,
-        unitCost,
-        leadTimeDays,
-        holdBatch,
-        demandChangePct,
-      });
-
-      if (res) {
-        setQuestionResponse(res);
-        // Automatically sync interpreted parameters into simulator controls if modified
-        if (res.interpretedParameters) {
-          if (res.interpretedParameters.demandChangePct !== undefined) {
-            setDemandChangePct(res.interpretedParameters.demandChangePct);
-          }
-          if (res.interpretedParameters.orderQty !== undefined) {
-            setOrderQty(res.interpretedParameters.orderQty);
-          }
-          if (res.interpretedParameters.holdBatch !== undefined) {
-            setHoldBatch(Boolean(res.interpretedParameters.holdBatch));
-          }
-          if (res.interpretedParameters.leadTimeDays !== undefined) {
-            setLeadTimeDays(res.interpretedParameters.leadTimeDays);
-          }
-        }
-        showToast('Question analyzed against live inventory & dispensing velocity.');
-      }
-    } catch (err: any) {
-      console.error('Failed to ask question:', err);
-      showToast(`Error: ${err.message || 'Simulation question failed.'}`);
-    } finally {
-      setIsAskingQuestion(false);
-    }
-  };
 
   // Initialize selected medicine from inventory
   useEffect(() => {
     if (uniqueMedicines.length > 0 && !selectedMedicineName) {
-      // Find one with near expiry or first item
       const candidate = uniqueMedicines.find(m => m.status === 'Near Expiry') || uniqueMedicines[0];
       setSelectedMedicineName(candidate.medicine || (candidate as any).medicineName || 'Vitamin D3 60K');
       setSelectedBatchCode(candidate.batch || (candidate as any).batchNumber || 'VD102');
@@ -246,16 +487,14 @@ export default function WhatIfSimulator({
     }
   }, [selectedMedicineName, selectedBatchCode, availableBatches]);
 
-  // Run backend calculation engine for full simulation and multi-batch breakdown
+  // Fetch backend velocity provenance & audits
   useEffect(() => {
     let isMounted = true;
-    async function fetchBackendSimulation() {
-      setLoading(true);
+    async function fetchProvenance() {
       try {
         const res = await api.simulateScenario({
           medicine: selectedMedicineName,
           batch: selectedBatchCode,
-          batchId: selectedBatchCode,
           currentStock,
           orderQty,
           dailyUsage: baseDailyUsage,
@@ -264,39 +503,41 @@ export default function WhatIfSimulator({
           leadTimeDays,
           holdBatch,
           demandChangePct,
-          dispensingIncreasePct: demandChangePct,
-        } as any);
+        });
 
         if (isMounted && res) {
-          setBackendResult(res);
-          if (res.multiScenarioComparison?.comparisonMatrix) {
-            setComparisonMatrix(res.multiScenarioComparison.comparisonMatrix);
-          }
-          if (res.demandProvenance) {
-            setDemandProvenance(res.demandProvenance);
-          }
-          if (res.hasSufficientData !== undefined) {
-            setHasSufficientData(res.hasSufficientData);
-          }
-          if (res.confidence) {
-            setConfidence(res.confidence);
-          }
-          if (res.suggestedAiOrder !== undefined) {
-            setSuggestedAiTarget(res.suggestedAiOrder);
-          }
-          if (res.multiBatchBreakdown && res.multiBatchBreakdown.length > 0) {
-            setMultiBatchList(res.multiBatchBreakdown);
+          if (res.demandProvenance) setDemandProvenance(res.demandProvenance);
+          if (res.hasSufficientData !== undefined) setHasSufficientData(res.hasSufficientData);
+          if (res.confidence) setConfidence(res.confidence);
+          if (res.actualData?.dailyUsage !== undefined && baseDailyUsage === 5) {
+            setBaseDailyUsage(res.actualData.dailyUsage);
           }
         }
       } catch (err) {
-        console.error('Simulation calculation engine error:', err);
-      } finally {
-        if (isMounted) setLoading(false);
+        console.error('Failed to sync backend simulation:', err);
       }
     }
 
-    fetchBackendSimulation();
+    fetchProvenance();
     return () => { isMounted = false; };
+  }, [selectedMedicineName, selectedBatchCode]);
+
+  // =========================================================================
+  // SINGLE AUTHORITATIVE DETERMINISTIC CALCULATION FOR SELECTED SCENARIO
+  // =========================================================================
+  const activeScenarioResult = useMemo(() => {
+    return runClientDeterministicSimulation({
+      medicine: selectedMedicineName,
+      batch: selectedBatchCode,
+      currentStock,
+      orderQty,
+      dailyUsage: baseDailyUsage,
+      daysToExpiry,
+      unitCost,
+      leadTimeDays,
+      holdBatch,
+      demandChangePct,
+    });
   }, [
     selectedMedicineName,
     selectedBatchCode,
@@ -310,145 +551,138 @@ export default function WhatIfSimulator({
     demandChangePct
   ]);
 
-  // Deterministic Computations (Exact mathematical models)
-  const demandMultiplier = 1 + (demandChangePct / 100);
-  const simulatedDailyDemand = holdBatch ? 0 : Math.max(0, baseDailyUsage * demandMultiplier);
+  const act = activeScenarioResult.actualData;
+  const sim = activeScenarioResult.simulatedData;
 
-  // 1. BASELINE CALCULATIONS (Current Stock Only)
-  const baselineUsableDays = Math.max(0, daysToExpiry);
-  const baselineExpectedConsumption = Math.round(baseDailyUsage * baselineUsableDays);
-  const baselineUsableConsumption = Math.min(currentStock, baselineExpectedConsumption);
-  const baselineSurplus = Math.max(0, currentStock - baselineExpectedConsumption);
-  const baselineCapitalAtRisk = baselineSurplus * unitCost;
-  const baselineShortage = Math.max(0, baselineExpectedConsumption - currentStock);
-  const baselineStockoutDays = (baseDailyUsage > 0 && currentStock < baselineExpectedConsumption)
-    ? Math.floor(currentStock / baseDailyUsage)
-    : null;
-  const baselineStockoutDate = baselineStockoutDays !== null ? formatFutureCalendarDate(baselineStockoutDays) : null;
+  // =========================================================================
+  // ORDER MATRIX (+0, +100, +300, +500) DRIVEN BY SAME DETERMINISTIC ENGINE
+  // =========================================================================
+  const comparisonMatrix: ScenarioComparisonItem[] = useMemo(() => {
+    const increments = [0, 100, 300, 500];
+    return increments.map(qty => {
+      const res = runClientDeterministicSimulation({
+        medicine: selectedMedicineName,
+        batch: selectedBatchCode,
+        currentStock,
+        orderQty: qty,
+        dailyUsage: baseDailyUsage,
+        daysToExpiry,
+        unitCost,
+        leadTimeDays,
+        holdBatch,
+        demandChangePct,
+      });
+      const s = res.simulatedData;
+      return {
+        orderIncrement: qty,
+        orderQty: qty,
+        projectedStock: s.projectedTotalStock,
+        expectedConsumption: s.projectedDemandInWindow,
+        projectedConsumption: s.projectedConsumptionActual,
+        projectedSurplus: s.projectedSurplusAtExpiry,
+        surplusAtExpiry: s.projectedSurplusAtExpiry,
+        potentialShortage: s.potentialShortage,
+        capitalAtRisk: s.expiryCapitalAtRisk,
+        expiryCapitalAtRisk: s.expiryCapitalAtRisk,
+        wasteCost: s.expiryCapitalAtRisk,
+        stockoutExposure: s.stockoutExposure,
+        daysUntilStockout: s.daysUntilStockout,
+        estimatedStockoutDate: s.estimatedStockoutDate,
+        utilizationPct: s.stockUtilizationPct,
+        stockUtilizationPct: s.stockUtilizationPct,
+        riskLevel: s.riskLevel,
+        riskLabel: s.riskLabel,
+        riskClassification: s.riskLabel,
+        explanation: s.explanation,
+        recommendation: s.recommendation
+      };
+    });
+  }, [
+    selectedMedicineName,
+    selectedBatchCode,
+    currentStock,
+    baseDailyUsage,
+    daysToExpiry,
+    unitCost,
+    leadTimeDays,
+    holdBatch,
+    demandChangePct
+  ]);
 
-  // 2. WHAT-IF SCENARIO PROJECTIONS
-  const projectedTotalStock = currentStock + orderQty;
-  const effectiveWindowDays = Math.max(0, daysToExpiry - leadTimeDays);
-  const expectedConsumption = Math.round(simulatedDailyDemand * effectiveWindowDays);
-  const projectedSurplus = Math.max(0, projectedTotalStock - expectedConsumption);
-  const potentialShortage = Math.max(0, expectedConsumption - projectedTotalStock);
-  const capitalAtRisk = projectedSurplus * unitCost;
-  const stockoutExposure = potentialShortage * unitCost;
+  // Sibling Batches with FEFO Analysis
+  const multiBatchList: BatchBreakdownItem[] = useMemo(() => {
+    return availableBatches.map(b => {
+      const bRes = runClientDeterministicSimulation({
+        medicine: selectedMedicineName,
+        batch: b.batch,
+        currentStock: b.quantity,
+        orderQty: 0,
+        dailyUsage: baseDailyUsage,
+        daysToExpiry: b.daysToExpiry,
+        unitCost: b.unitPrice,
+        leadTimeDays: 0,
+        holdBatch: false,
+        demandChangePct: 0,
+      });
+      return {
+        ...b,
+        projectedConsumption: bRes.simulatedData.projectedConsumptionActual,
+        projectedSurplus: bRes.simulatedData.projectedSurplusAtExpiry,
+        capitalAtRisk: bRes.simulatedData.expiryCapitalAtRisk,
+        riskLevel: bRes.simulatedData.riskLevel,
+        riskLabel: bRes.simulatedData.riskLabel,
+        isCurrentSelected: b.batch === selectedBatchCode
+      };
+    });
+  }, [availableBatches, selectedMedicineName, selectedBatchCode, baseDailyUsage]);
 
-  const projectedConsumptionActual = Math.min(projectedTotalStock, expectedConsumption);
-  const stockUtilizationPct = projectedTotalStock > 0
-    ? Math.min(100, Math.round((projectedConsumptionActual / projectedTotalStock) * 100))
-    : 100;
+  // Handle Ask the Simulator
+  const handleAskQuestion = async (customQ?: string) => {
+    const q = (customQ !== undefined ? customQ : questionInput).trim();
+    if (!q) {
+      showToast('Please enter a question to ask the simulator.');
+      return;
+    }
+    setQuestionInput(q);
+    setIsAskingQuestion(true);
+    try {
+      const res = await api.askSimulatorQuestion({
+        question: q,
+        medicine: selectedMedicineName,
+        batch: selectedBatchCode,
+        currentStock,
+        orderQty,
+        dailyUsage: baseDailyUsage,
+        daysToExpiry,
+        unitCost,
+        leadTimeDays,
+        holdBatch,
+        demandChangePct,
+      });
 
-  const daysUntilStockout = simulatedDailyDemand > 0
-    ? Math.floor(projectedTotalStock / simulatedDailyDemand)
-    : 999;
-  const estimatedStockoutDate = (simulatedDailyDemand > 0 && projectedTotalStock < expectedConsumption)
-    ? formatFutureCalendarDate(daysUntilStockout)
-    : null;
-
-  // Risk Classification Engine
-  // Baseline Risk
-  let baselineRiskLevel = 'Low Risk';
-  let baselineRiskClass = 'badge-green';
-  if (daysToExpiry <= 0) {
-    baselineRiskLevel = 'Expired';
-    baselineRiskClass = 'badge-dark';
-  } else if (baselineSurplus > currentStock * 0.5 && baselineSurplus >= 30) {
-    baselineRiskLevel = 'Likely Expiry';
-    baselineRiskClass = 'badge-red';
-  } else if (baselineSurplus > currentStock * 0.2 || baselineSurplus >= 15) {
-    baselineRiskLevel = 'High Expiry Risk';
-    baselineRiskClass = 'badge-orange';
-  } else if (baselineSurplus > 0 || (daysToExpiry <= 15 && currentStock > baselineExpectedConsumption * 0.8)) {
-    baselineRiskLevel = 'Moderate Risk';
-    baselineRiskClass = 'badge-amber';
-  } else if (baselineShortage > 0) {
-    baselineRiskLevel = 'Stockout Risk';
-    baselineRiskClass = 'badge-red';
-  }
-
-  // Scenario Risk
-  let scenarioRiskLevel = 'Low Risk';
-  let scenarioRiskClass = 'badge-green';
-  let riskExplanation = '';
-  let pharmacistRecommendation = '';
-
-  if (daysToExpiry <= 0) {
-    scenarioRiskLevel = 'Expired';
-    scenarioRiskClass = 'badge-dark';
-    riskExplanation = `Batch expired with ${currentStock} units remaining in inventory.`;
-    pharmacistRecommendation = `Quarantine remaining ${currentStock} units immediately and process supplier return. Do not dispense.`;
-  } else if (holdBatch) {
-    scenarioRiskLevel = 'High Expiry Risk';
-    scenarioRiskClass = 'badge-red';
-    riskExplanation = `Batch is under quarantine hold. Dispensing velocity is reduced to 0 units/day; all ${projectedTotalStock} units remain exposed to expiry.`;
-    pharmacistRecommendation = `Batch is held. All ${projectedTotalStock} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) will expire unused unless quarantine is lifted or stock is returned.`;
-  } else if (projectedSurplus > projectedTotalStock * 0.5 && projectedSurplus >= 30) {
-    scenarioRiskLevel = 'Likely Expiry';
-    scenarioRiskClass = 'badge-red';
-    riskExplanation = `Simulated dispensing rate (${simulatedDailyDemand.toFixed(1)}/day) will consume only ${expectedConsumption} of ${projectedTotalStock} units over ${effectiveWindowDays} days, leaving ${projectedSurplus} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) unsold at expiry.`;
-    pharmacistRecommendation = `High expiry exposure: Projected surplus of ${projectedSurplus} units. Prioritize front-of-shelf FEFO dispensing immediately${orderQty > 0 ? ` and cancel/reduce proposed reorder to ~${Math.max(0, expectedConsumption - currentStock)} units.` : '.'}`;
-  } else if (projectedSurplus > projectedTotalStock * 0.25 || projectedSurplus >= 15) {
-    scenarioRiskLevel = 'High Expiry Risk';
-    scenarioRiskClass = 'badge-orange';
-    riskExplanation = `Current dispensing velocity of ${simulatedDailyDemand.toFixed(1)} units/day is insufficient to clear ${projectedTotalStock} units within the remaining ${effectiveWindowDays} days. Projected surplus of ${projectedSurplus} units.`;
-    pharmacistRecommendation = `Elevated expiry risk: Maintain strict FEFO dispensing priority. ${orderQty > 0 ? `Reduce proposed order to ~${Math.max(0, expectedConsumption - currentStock)} units.` : 'Monitor dispensing trend closely.'}`;
-  } else if (projectedSurplus > 0) {
-    scenarioRiskLevel = 'Moderate Risk';
-    scenarioRiskClass = 'badge-amber';
-    riskExplanation = `Moderate surplus of ${projectedSurplus} units (₹ ${capitalAtRisk.toLocaleString('en-IN')}) projected at expiry date under simulated velocity (${simulatedDailyDemand.toFixed(1)}/day).`;
-    pharmacistRecommendation = `Moderate surplus: Projected ${projectedSurplus} units at expiry. Maintain FEFO priority to maximize stock clearance.`;
-  } else if (potentialShortage > 0) {
-    scenarioRiskLevel = 'Stockout Risk';
-    scenarioRiskClass = 'badge-red';
-    riskExplanation = `Projected demand (${expectedConsumption} units) exceeds total stock (${projectedTotalStock} units). Stock will run out in ~${daysUntilStockout} days (est. ${estimatedStockoutDate}), before the batch expiry date.`;
-    pharmacistRecommendation = `Stockout risk: Projected shortage of ${potentialShortage} units before batch expiry. Consider placing a purchase order for +${potentialShortage} units to maintain service continuity.`;
-  } else {
-    scenarioRiskLevel = 'Low Risk';
-    scenarioRiskClass = 'badge-green';
-    riskExplanation = `Simulated demand of ${simulatedDailyDemand.toFixed(1)} units/day will fully consume available stock (${projectedTotalStock} units) in ~${Math.min(daysToExpiry, daysUntilStockout)} days, safely before the expiry date.`;
-    pharmacistRecommendation = `Optimal balance: ${projectedTotalStock} units are projected to be consumed prior to expiry. Zero capital at risk.`;
-  }
-
-  // Preset Handlers
-  const handleApplyPreset = (type: string) => {
-    setScenarioPreset(type);
-    if (type === 'baseline') {
-      setDemandChangePct(0);
-      setOrderQty(0);
-      setLeadTimeDays(0);
-      setHoldBatch(false);
-      showToast('Restored Actual Baseline');
-    } else if (type === 'demand-down-50') {
-      setDemandChangePct(-50);
-      setOrderQty(0);
-      setHoldBatch(false);
-      showToast('Scenario Loaded: -50% Demand Drop (Severe Slowdown)');
-    } else if (type === 'demand-down-30') {
-      setDemandChangePct(-30);
-      setOrderQty(0);
-      setHoldBatch(false);
-      showToast('Scenario Loaded: -30% Demand Slowdown');
-    } else if (type === 'demand-up-30') {
-      setDemandChangePct(30);
-      setHoldBatch(false);
-      showToast('Scenario Loaded: +30% Demand Surge');
-    } else if (type === 'demand-up-50') {
-      setDemandChangePct(50);
-      setHoldBatch(false);
-      showToast('Scenario Loaded: +50% Demand Peak');
-    } else if (type === 'hold-batch') {
-      setHoldBatch(true);
-      showToast('Scenario Loaded: Quarantine / Hold Batch (0 Dispensing)');
-    } else if (type === 'reorder-100') {
-      setOrderQty(100);
-      setHoldBatch(false);
-      showToast('Scenario Loaded: Additional Reorder +100 Units');
-    } else if (type === 'reorder-300') {
-      setOrderQty(300);
-      setHoldBatch(false);
-      showToast('Scenario Loaded: Additional Reorder +300 Units');
+      if (res) {
+        setQuestionResponse(res);
+        if (res.interpretedParameters) {
+          if (res.interpretedParameters.demandChangePct !== undefined) {
+            setDemandChangePct(res.interpretedParameters.demandChangePct);
+          }
+          if (res.interpretedParameters.orderQty !== undefined) {
+            setOrderQty(res.interpretedParameters.orderQty);
+          }
+          if (res.interpretedParameters.holdBatch !== undefined) {
+            setHoldBatch(Boolean(res.interpretedParameters.holdBatch));
+          }
+          if (res.interpretedParameters.leadTimeDays !== undefined) {
+            setLeadTimeDays(res.interpretedParameters.leadTimeDays);
+          }
+        }
+        showToast('Question evaluated using authoritative deterministic simulation.');
+      }
+    } catch (err: any) {
+      console.error('Failed to ask question:', err);
+      showToast(`Error: ${err.message || 'Simulation question failed.'}`);
+    } finally {
+      setIsAskingQuestion(false);
     }
   };
 
@@ -458,18 +692,10 @@ export default function WhatIfSimulator({
     setOrderQty(0);
     setLeadTimeDays(0);
     setHoldBatch(false);
-    setScenarioPreset('baseline');
     showToast('Simulator reset to actual live pharmacy baseline.');
   };
 
-  // Auto-Size to AI Target
-  const handleApplyAiTarget = () => {
-    const optimal = Math.max(0, expectedConsumption - currentStock);
-    setOrderQty(optimal);
-    showToast(`Order quantity auto-sized to optimal target: ${optimal} units`);
-  };
-
-  // Commit to Live Stock
+  // Commit proposed order to live Firestore inventory
   const handleConfirmCommit = async () => {
     if (orderQty <= 0) {
       showToast('Please specify an order quantity greater than 0.');
@@ -501,17 +727,22 @@ export default function WhatIfSimulator({
     }
   };
 
-  // Expiry badge helper
-  const getExpiryBadge = (days: number) => {
-    if (days <= 0) return { label: 'Expired', cls: 'badge-dark', color: '#1F2937' };
-    if (days === 0) return { label: 'Expires Today', cls: 'badge-red', color: 'var(--danger)' };
-    if (days === 1) return { label: '1 Day Left', cls: 'badge-red', color: 'var(--danger)' };
-    if (days <= 10) return { label: `${days}d Left (Critical)`, cls: 'badge-red', color: 'var(--danger)' };
-    if (days <= 30) return { label: `${days}d Left (Near Expiry)`, cls: 'badge-amber', color: '#D97706' };
-    return { label: `${days}d Left`, cls: 'badge-green', color: '#10B981' };
+  // Badge helpers
+  const getBadgeClass = (level: string) => {
+    if (level === 'Expired' || level === 'EXPIRED') return 'badge-dark';
+    if (level === 'High' || level === 'Likely Expiry' || level === 'Shortage' || level.includes('EXPIRY') || level.includes('STOCKOUT')) return 'badge-red';
+    if (level === 'Medium' || level.includes('MODERATE')) return 'badge-amber';
+    return 'badge-green';
   };
 
-  const currentExpiryBadge = getExpiryBadge(daysToExpiry);
+  const currentExpiryBadge = useMemo(() => {
+    if (daysToExpiry <= 0) return { label: 'Expired', cls: 'badge-dark' };
+    if (daysToExpiry === 0) return { label: 'Expires Today', cls: 'badge-red' };
+    if (daysToExpiry === 1) return { label: '1 Day Left', cls: 'badge-red' };
+    if (daysToExpiry <= 10) return { label: `${daysToExpiry}d Left (Critical)`, cls: 'badge-red' };
+    if (daysToExpiry <= 30) return { label: `${daysToExpiry}d Left (Near Expiry)`, cls: 'badge-amber' };
+    return { label: `${daysToExpiry}d Left`, cls: 'badge-green' };
+  }, [daysToExpiry]);
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -560,11 +791,11 @@ export default function WhatIfSimulator({
                   border: '1px solid var(--primary-border)',
                 }}
               >
-                PROJECTION SANDBOX · READ-ONLY
+                PROJECTION SANDBOX · DETERMINISTIC · READ-ONLY
               </span>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '3px 0 0' }}>
-              Predicts whether medicine batches will be consumed before expiry and tests hypothetical demand shifts without altering live inventory.
+              Predicts whether medicine batches will be consumed before expiry and tests hypothetical demand shifts, supplier delays, or reorders without altering live inventory.
             </p>
           </div>
         </div>
@@ -577,7 +808,7 @@ export default function WhatIfSimulator({
             style={{ fontSize: 12, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}
             title="Reset to live inventory baseline"
           >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Reset to Baseline
+            <RefreshCw size={13} /> Reset to Baseline
           </button>
         </div>
       </div>
@@ -610,7 +841,7 @@ export default function WhatIfSimulator({
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-          {/* Medicine Selector with Search */}
+          {/* Medicine Selector */}
           <div>
             <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-3)', display: 'block', marginBottom: 5 }}>
               Medicine Name:
@@ -728,7 +959,7 @@ export default function WhatIfSimulator({
         <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Info size={13} color={hasSufficientData ? 'var(--primary)' : '#F59E0B'} />
           <span>
-            <b>Dispensing Provenance:</b> {demandProvenance} ({confidence} confidence)
+            <b>Dispensing Provenance:</b> {demandProvenance || 'Derived from historical tenant dispensing audit logs.'} ({confidence} confidence)
           </span>
         </div>
       </div>
@@ -798,6 +1029,7 @@ export default function WhatIfSimulator({
               style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }}
             />
           </div>
+
           <button
             type="submit"
             disabled={isAskingQuestion || !questionInput.trim()}
@@ -928,52 +1160,73 @@ export default function WhatIfSimulator({
           {/* Quick Presets */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
-              onClick={() => handleApplyPreset('demand-down-50')}
+              onClick={() => {
+                setDemandChangePct(-50);
+                setOrderQty(0);
+                setHoldBatch(false);
+                showToast('Scenario: -50% Demand Slowdown');
+              }}
               className={`btn ${demandChangePct === -50 ? 'btn-primary' : 'btn-secondary'}`}
               style={{ fontSize: 11, padding: '4px 8px' }}
             >
               -50% Demand
             </button>
             <button
-              onClick={() => handleApplyPreset('demand-down-30')}
+              onClick={() => {
+                setDemandChangePct(-30);
+                setOrderQty(0);
+                setHoldBatch(false);
+                showToast('Scenario: -30% Demand Slowdown');
+              }}
               className={`btn ${demandChangePct === -30 ? 'btn-primary' : 'btn-secondary'}`}
               style={{ fontSize: 11, padding: '4px 8px' }}
             >
               -30% Demand
             </button>
             <button
-              onClick={() => handleApplyPreset('baseline')}
+              onClick={handleResetToBaseline}
               className={`btn ${demandChangePct === 0 && orderQty === 0 && !holdBatch && leadTimeDays === 0 ? 'btn-primary' : 'btn-secondary'}`}
               style={{ fontSize: 11, padding: '4px 8px' }}
             >
               Baseline (0%)
             </button>
             <button
-              onClick={() => handleApplyPreset('demand-up-30')}
-              className={`btn ${demandChangePct === 30 ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => {
+                setDemandChangePct(20);
+                setHoldBatch(false);
+                showToast('Scenario: +20% Demand Surge');
+              }}
+              className={`btn ${demandChangePct === 20 ? 'btn-primary' : 'btn-secondary'}`}
               style={{ fontSize: 11, padding: '4px 8px' }}
             >
-              +30% Demand
+              +20% Demand
             </button>
             <button
-              onClick={() => handleApplyPreset('demand-up-50')}
+              onClick={() => {
+                setDemandChangePct(50);
+                setHoldBatch(false);
+                showToast('Scenario: +50% Demand Peak');
+              }}
               className={`btn ${demandChangePct === 50 ? 'btn-primary' : 'btn-secondary'}`}
               style={{ fontSize: 11, padding: '4px 8px' }}
             >
               +50% Demand
             </button>
             <button
-              onClick={() => handleApplyPreset('hold-batch')}
+              onClick={() => {
+                setHoldBatch(!holdBatch);
+                showToast(holdBatch ? 'Quarantine Lifted' : 'Batch Quarantined (0 Dispensing)');
+              }}
               className={`btn ${holdBatch ? 'btn-primary' : 'btn-secondary'}`}
               style={{ fontSize: 11, padding: '4px 8px' }}
             >
-              Hold Batch
+              {holdBatch ? 'Release Hold' : 'Hold Batch'}
             </button>
           </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-          {/* Demand Change % Slider & Input */}
+          {/* Demand Change % Slider */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <label className="label" style={{ marginBottom: 0 }}>Demand Shift (%)</label>
@@ -992,15 +1245,15 @@ export default function WhatIfSimulator({
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
               <span>-80%</span>
-              <span>0% Baseline ({baseDailyUsage}/d)</span>
+              <span>0% Baseline ({baseDailyUsage.toFixed(1)}/d)</span>
               <span>+150%</span>
             </div>
           </div>
 
-          {/* Additional Stock / Reorder Qty (Secondary Scenario) */}
+          {/* Additional Reorder Qty */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Additional Reorder Stock</label>
+              <label className="label" style={{ marginBottom: 0 }}>Proposed Reorder Quantity</label>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>+{orderQty} units</span>
             </div>
             <input
@@ -1029,7 +1282,7 @@ export default function WhatIfSimulator({
           {/* Supplier Lead Time Delay */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <label className="label" style={{ marginBottom: 0 }}>Supplier Lead Time Delay</label>
+              <label className="label" style={{ marginBottom: 0 }}>Supplier Lead Time (Days)</label>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{leadTimeDays} days delay</span>
             </div>
             <input
@@ -1086,7 +1339,7 @@ export default function WhatIfSimulator({
         </div>
       </div>
 
-      {/* 5. SIDE-BY-SIDE BEFORE vs WHAT-IF COMPARISON */}
+      {/* 6. SIDE-BY-SIDE BASELINE vs WHAT-IF PROJECTION */}
       <div
         style={{
           display: 'grid',
@@ -1113,49 +1366,49 @@ export default function WhatIfSimulator({
                   BASELINE PROJECTION
                 </span>
                 <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-                  Expected outcome under current dispensing velocity
+                  Expected outcome under current dispensing behaviour
                 </p>
               </div>
-              <span className={`chip ${baselineRiskClass}`} style={{ fontSize: 11, fontWeight: 700 }}>
-                {baselineRiskLevel}
+              <span className={`chip ${getBadgeClass(act.baselineRiskLevel)}`} style={{ fontSize: 11, fontWeight: 700 }}>
+                {act.baselineRiskLabel}
               </span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Current Batch Stock:</span>
-                <b>{currentStock} units</b>
+                <b>{act.currentStock} units</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Days to Expiry:</span>
-                <b>{daysToExpiry} days ({expiryDateStr})</b>
+                <b>{act.daysToExpiry} days ({expiryDateStr})</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Current Dispensing Velocity:</span>
-                <b>{baseDailyUsage.toFixed(1)} units / day</b>
+                <b>{act.dailyUsage.toFixed(1)} units / day</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Projected Consumption Before Expiry:</span>
-                <b>{baselineUsableConsumption} units</b>
+                <b>{act.baselineProjectedUsableConsumption} units</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, borderTop: '1px dashed var(--border)' }}>
                 <span style={{ color: 'var(--text-3)' }}>Projected Expiry Wastage:</span>
-                <b style={{ color: baselineSurplus > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
-                  {baselineSurplus} units
+                <b style={{ color: act.baselineProjectedSurplus > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
+                  {act.baselineProjectedSurplus} units
                 </b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Capital at Risk (Wastage Value):</span>
-                <b style={{ color: baselineSurplus > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
-                  ₹ {baselineCapitalAtRisk.toLocaleString('en-IN')}
+                <span style={{ color: 'var(--text-3)' }}>Expiry Capital at Risk:</span>
+                <b style={{ color: act.baselineProjectedSurplus > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
+                  {formatINR(act.baselineCapitalAtRisk)}
                 </b>
               </div>
-              {baselineShortage > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#F59E0B' }}>Est. Stockout Date:</span>
-                  <b style={{ color: '#F59E0B' }}>{baselineStockoutDate} (~{baselineStockoutDays}d)</b>
-                </div>
-              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Estimated Stockout Date:</span>
+                <b style={{ color: act.baselineShortage > 0 ? '#F59E0B' : 'var(--text)' }}>
+                  {act.baselineStockoutDate ? `${act.baselineStockoutDate} (~${act.baselineStockoutDays}d)` : 'No Stockout Before Expiry'}
+                </b>
+              </div>
             </div>
           </div>
 
@@ -1170,7 +1423,7 @@ export default function WhatIfSimulator({
               border: '1px solid var(--border)',
             }}
           >
-            <b>Baseline Trend:</b> {baselineSurplus === 0 ? 'Stock will be fully consumed before expiry.' : `${baselineSurplus} units projected to expire unused unless velocity increases.`}
+            <b>Baseline Trend:</b> {act.baselineProjectedSurplus === 0 ? 'Stock is projected to be fully consumed before expiry.' : `${act.baselineProjectedSurplus} units projected to remain unused at expiry.`}
           </div>
         </div>
 
@@ -1179,7 +1432,7 @@ export default function WhatIfSimulator({
           className="card"
           style={{
             padding: 20,
-            borderLeft: `4px solid ${scenarioRiskLevel === 'Low Risk' ? 'var(--success)' : scenarioRiskLevel === 'Moderate Risk' ? 'var(--warning)' : 'var(--danger)'}`,
+            borderLeft: `4px solid ${sim.riskLevel === 'Safe' ? 'var(--success)' : sim.riskLevel === 'Medium' ? 'var(--warning)' : 'var(--danger)'}`,
             backgroundColor: 'var(--surface)',
             display: 'flex',
             flexDirection: 'column',
@@ -1196,48 +1449,48 @@ export default function WhatIfSimulator({
                   Outcome under selected hypothetical assumptions
                 </p>
               </div>
-              <span className={`chip ${scenarioRiskClass}`} style={{ fontSize: 11, fontWeight: 700 }}>
-                {scenarioRiskLevel}
+              <span className={`chip ${getBadgeClass(sim.riskLevel)}`} style={{ fontSize: 11, fontWeight: 700 }}>
+                {sim.riskLabel}
               </span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Simulated Available Stock:</span>
-                <b>{projectedTotalStock} units {orderQty > 0 ? `(+${orderQty} order)` : ''}</b>
+                <b>{sim.projectedTotalStock} units {orderQty > 0 ? `(+${orderQty} order)` : ''}</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Effective Window:</span>
-                <b>{effectiveWindowDays} days {leadTimeDays > 0 ? `(-${leadTimeDays}d lead time)` : ''}</b>
+                <span style={{ color: 'var(--text-3)' }}>Supplier Lead Time:</span>
+                <b>{leadTimeDays} days delay {leadTimeDays > 0 ? `(Arrival: Day ${leadTimeDays})` : '(Immediate)'}</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Simulated Velocity:</span>
                 <b style={{ color: demandChangePct !== 0 ? 'var(--primary)' : 'var(--text)' }}>
-                  {simulatedDailyDemand.toFixed(1)} units / day {demandChangePct !== 0 ? `(${demandChangePct > 0 ? '+' : ''}${demandChangePct}%)` : ''}
+                  {sim.simulatedDailyDemand.toFixed(1)} units / day {demandChangePct !== 0 ? `(${demandChangePct > 0 ? '+' : ''}${demandChangePct}%)` : ''}
                 </b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Projected Scenario Consumption:</span>
-                <b>{projectedConsumptionActual} units</b>
+                <b>{sim.projectedConsumptionActual} units</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, borderTop: '1px dashed var(--border)' }}>
                 <span style={{ color: 'var(--text-3)' }}>Projected Expiry Wastage:</span>
-                <b style={{ color: projectedSurplus > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
-                  {projectedSurplus} units
+                <b style={{ color: sim.projectedSurplusAtExpiry > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
+                  {sim.projectedSurplusAtExpiry} units
                 </b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-3)' }}>Capital at Risk (Wastage Value):</span>
-                <b style={{ color: projectedSurplus > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
-                  ₹ {capitalAtRisk.toLocaleString('en-IN')}
+                <span style={{ color: 'var(--text-3)' }}>Expiry Capital at Risk:</span>
+                <b style={{ color: sim.projectedSurplusAtExpiry > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 14 }}>
+                  {formatINR(sim.expiryCapitalAtRisk)}
                 </b>
               </div>
-              {potentialShortage > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#F59E0B' }}>Est. Stockout Date:</span>
-                  <b style={{ color: '#F59E0B' }}>{estimatedStockoutDate} (~{daysUntilStockout}d)</b>
-                </div>
-              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-3)' }}>Estimated Stockout Date:</span>
+                <b style={{ color: sim.potentialShortage > 0 ? '#F59E0B' : 'var(--text)' }}>
+                  {sim.estimatedStockoutDate ? `${sim.estimatedStockoutDate} (~${sim.daysUntilStockout}d)` : 'No Stockout Projected'}
+                </b>
+              </div>
             </div>
           </div>
 
@@ -1252,12 +1505,12 @@ export default function WhatIfSimulator({
               border: '1px solid var(--primary-border)',
             }}
           >
-            <b>Scenario Shift:</b> {projectedSurplus !== baselineSurplus ? `Wastage changes from ${baselineSurplus} → ${projectedSurplus} units (Δ ${projectedSurplus - baselineSurplus > 0 ? '+' : ''}${projectedSurplus - baselineSurplus} units).` : 'Wastage matches baseline.'}
+            <b>Scenario Shift:</b> {sim.projectedSurplusAtExpiry !== act.baselineProjectedSurplus ? `Wastage changes from ${act.baselineProjectedSurplus} → ${sim.projectedSurplusAtExpiry} units (Δ ${sim.projectedSurplusAtExpiry - act.baselineProjectedSurplus > 0 ? '+' : ''}${sim.projectedSurplusAtExpiry - act.baselineProjectedSurplus} units).` : 'Wastage matches baseline.'}
           </div>
         </div>
       </div>
 
-      {/* 6. DYNAMIC PHARMACIST INSIGHT & DECISION SUPPORT */}
+      {/* 7. PHARMACIST DECISION SUPPORT & RISK ANALYSIS */}
       <div
         className="card"
         style={{
@@ -1285,7 +1538,7 @@ export default function WhatIfSimulator({
               Pharmacist Decision Support & Risk Analysis
             </h3>
             <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-              Deterministic numerical analysis of risk drivers & recommended actions
+              Deterministic numerical analysis of risk drivers & recommended actions for selected scenario (+{orderQty} units)
             </span>
           </div>
         </div>
@@ -1304,7 +1557,7 @@ export default function WhatIfSimulator({
               Why this risk status exists:
             </span>
             <p style={{ fontSize: 13, color: 'var(--text)', margin: 0, lineHeight: 1.5 }}>
-              {riskExplanation}
+              {sim.explanation}
             </p>
           </div>
 
@@ -1321,11 +1574,11 @@ export default function WhatIfSimulator({
               Operational Recommendation:
             </span>
             <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0, lineHeight: 1.5 }}>
-              {pharmacistRecommendation}
+              {sim.recommendation}
             </p>
           </div>
 
-          {/* Financial Separation Card */}
+          {/* Financial Breakdown Cards */}
           <div
             style={{
               display: 'grid',
@@ -1336,26 +1589,34 @@ export default function WhatIfSimulator({
           >
             <div style={{ padding: '10px 14px', borderRadius: 8, backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
               <span style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 700, display: 'block' }}>Expiry Wastage Exposure</span>
-              <strong style={{ fontSize: 16, color: 'var(--danger)' }}>₹ {capitalAtRisk.toLocaleString('en-IN')}</strong>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginTop: 2 }}>{projectedSurplus} units unsold at unit cost ₹{unitCost}</span>
+              <strong style={{ fontSize: 16, color: 'var(--danger)' }}>{formatINR(sim.expiryCapitalAtRisk)}</strong>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginTop: 2 }}>
+                {sim.projectedSurplusAtExpiry} units potentially unused at unit cost ₹{unitCost}
+              </span>
             </div>
 
             <div style={{ padding: '10px 14px', borderRadius: 8, backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-              <span style={{ fontSize: 11, color: '#D97706', fontWeight: 700, display: 'block' }}>Stockout Revenue Exposure</span>
-              <strong style={{ fontSize: 16, color: '#D97706' }}>₹ {stockoutExposure.toLocaleString('en-IN')}</strong>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginTop: 2 }}>{potentialShortage} units unsatisfied demand</span>
+              <span style={{ fontSize: 11, color: '#D97706', fontWeight: 700, display: 'block' }}>Estimated Stockout Exposure</span>
+              <strong style={{ fontSize: 16, color: '#D97706' }}>
+                {sim.potentialShortage > 0 ? formatINR(sim.stockoutExposure) : '₹0'}
+              </strong>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginTop: 2 }}>
+                {sim.potentialShortage} units unsatisfied demand
+              </span>
             </div>
 
             <div style={{ padding: '10px 14px', borderRadius: 8, backgroundColor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
               <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700, display: 'block' }}>Stock Utilization</span>
-              <strong style={{ fontSize: 16, color: 'var(--primary)' }}>{stockUtilizationPct}%</strong>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginTop: 2 }}>{projectedConsumptionActual} of {projectedTotalStock} units utilized</span>
+              <strong style={{ fontSize: 16, color: 'var(--primary)' }}>{sim.stockUtilizationPct}%</strong>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginTop: 2 }}>
+                {sim.projectedConsumptionActual} of {sim.projectedTotalStock} units utilized
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 7. FEFO MULTI-BATCH BREAKDOWN TABLE */}
+      {/* 8. FEFO MULTI-BATCH BREAKDOWN TABLE */}
       {availableBatches.length > 1 && (
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -1385,7 +1646,7 @@ export default function WhatIfSimulator({
                 </tr>
               </thead>
               <tbody>
-                {availableBatches.map((b, idx) => {
+                {multiBatchList.map((b, idx) => {
                   const isCurrent = b.batch === selectedBatchCode;
                   return (
                     <tr key={idx} style={{ backgroundColor: isCurrent ? 'var(--primary-light)' : 'transparent' }}>
@@ -1430,7 +1691,7 @@ export default function WhatIfSimulator({
         </div>
       )}
 
-      {/* 8. SECONDARY: REORDER & MULTI-SCENARIO COMPARISON MATRIX */}
+      {/* 9. REORDER & MULTI-SCENARIO COMPARISON MATRIX (+0, +100, +300, +500) */}
       <div className="card" style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
@@ -1438,10 +1699,10 @@ export default function WhatIfSimulator({
               <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
                 Multi-Scenario Order Matrix (+0 vs +100 vs +300 vs +500)
               </h3>
-              <span className="chip badge-blue" style={{ fontSize: 10 }}>SECONDARY SCENARIOS</span>
+              <span className="chip badge-blue" style={{ fontSize: 10 }}>SYNCHRONIZED ENGINE</span>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-              Compare financial and expiry risks across varying proposed purchase order quantities
+              Compare stock availability, stockout timing, and expiry risks across varying purchase order quantities. Click any card to synchronize simulator views.
             </p>
           </div>
         </div>
@@ -1468,7 +1729,7 @@ export default function WhatIfSimulator({
                     {item.orderIncrement === 0 ? 'Baseline (+0)' : `+${item.orderIncrement} Units`}
                   </b>
                   <span
-                    className={`chip ${isDanger ? 'badge-red' : item.projectedSurplus > 0 ? 'badge-amber' : 'badge-green'}`}
+                    className={`chip ${getBadgeClass(item.riskLevel)}`}
                     style={{ fontSize: 10 }}
                   >
                     {item.riskLabel || item.riskLevel}
@@ -1481,24 +1742,28 @@ export default function WhatIfSimulator({
                     <b>{item.projectedStock} units</b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Expected Consumption:</span>
-                    <b>{item.expectedConsumption} units</b>
+                    <span>Projected Consumption:</span>
+                    <b>{item.projectedConsumption} units</b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Projected Surplus:</span>
+                    <span>Projected Expiry Wastage:</span>
                     <b style={{ color: isDanger ? 'var(--danger)' : item.projectedSurplus > 0 ? 'var(--warning)' : 'var(--text)' }}>
                       {item.projectedSurplus} units
                     </b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Capital at Risk:</span>
+                    <span>Expiry Capital at Risk:</span>
                     <b style={{ color: isDanger ? 'var(--danger)' : item.projectedSurplus > 0 ? 'var(--warning)' : 'var(--text)' }}>
-                      ₹ {item.capitalAtRisk.toLocaleString('en-IN')}
+                      {formatINR(item.expiryCapitalAtRisk)}
                     </b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Utilization:</span>
-                    <b>{item.utilizationPct}%</b>
+                    <span>Stockout Date:</span>
+                    <b>{item.estimatedStockoutDate ? `${item.estimatedStockoutDate} (~${item.daysUntilStockout}d)` : 'No Stockout'}</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Stock Utilization:</span>
+                    <b>{item.stockUtilizationPct}%</b>
                   </div>
                 </div>
               </div>
@@ -1621,7 +1886,7 @@ export default function WhatIfSimulator({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-3)' }}>Total Purchase Value:</span>
-                <b>₹ {(orderQty * unitCost).toLocaleString('en-IN')}</b>
+                <b>{formatINR(orderQty * unitCost)}</b>
               </div>
             </div>
 
