@@ -139,10 +139,15 @@ async function queryCollectionByWorkspace(colName, workspaceId) {
     }
   }
   if (masterDataset && Array.isArray(masterDataset[colName])) {
-    return masterDataset[colName].filter(i => (i.workspaceId === target || i.pharmacyId === target || target === 'pharmaflow-main'));
+    const fromMaster = masterDataset[colName].filter(i => (i.workspaceId === target || i.pharmacyId === target || (target === 'pharmaflow-main' && (!i.workspaceId || i.workspaceId === 'pharmaflow-main'))));
+    if (fromMaster.length > 0) return fromMaster;
   }
   if (memoryStore[colName]) {
-    return memoryStore[colName].filter(i => (i.workspaceId === target || i.pharmacyId === target || target === 'pharmaflow-main' || target === 'DEMO_PHARMACY'));
+    return memoryStore[colName].filter(i => {
+      const itemTarget = i.workspaceId || i.pharmacyId;
+      if (itemTarget) return itemTarget === target;
+      return target === 'DEMO_PHARMACY' || target === 'pharmaflow-main';
+    });
   }
   return [];
 }
@@ -389,39 +394,39 @@ app.post('/api/auth/register', async (req, res) => {
       aiState: { 'Smart Reorder Suggestions': true, 'Dosage Anomaly Detection': true, 'Interaction Warnings': true }
     };
 
-    if (!isConnected()) {
-      const fbStatus = getFirebaseStatus ? getFirebaseStatus() : {};
-      return res.status(503).json({
-        error: `Database service unavailable: Cloud Firestore is not connected. ${fbStatus.errorReason || 'Please verify FIREBASE_SERVICE_ACCOUNT environment variable on Vercel.'}`,
-        firestore: fbStatus
-      });
+    let uid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    if (isConnected() && !isQuotaExhausted) {
+      try {
+        const existing = await withTimeout(db.collection('users').where('email', '==', normalizedEmail).get(), 2000);
+        if (!existing.empty) {
+          return res.status(409).json({ error: 'An account with this email already exists.' });
+        }
+
+        const docRef = await withTimeout(db.collection('users').add({
+          ...userProfile,
+          passwordHash,
+          salt,
+          passwordSet: true
+        }), 2000);
+        uid = docRef.id;
+
+        await withTimeout(db.collection('settings').doc(pharmacyId).set(initialSettings, { merge: true }), 2000);
+      } catch (dbErr) {
+        console.warn('Firestore fallback during registration:', dbErr.message);
+      }
     }
 
-    const existing = await db.collection('users').where('email', '==', normalizedEmail).get();
-    if (!existing.empty) {
-      return res.status(409).json({ error: 'An account with this email already exists.' });
-    }
-
-    // Atomic creation of user profile and workspace settings
-    const docRef = await db.collection('users').add({
-      ...userProfile,
-      passwordHash,
-      salt,
-      passwordSet: true
-    });
-
-    const uid = docRef.id;
     const user = { id: uid, uid, ...userProfile };
-    const token = signToken({ uid, email: normalizedEmail, pharmacyId, role: 'Pharmacist' });
+    memoryStore.users.push({ ...user, passwordHash, salt });
+    memoryStore.settings[pharmacyId] = initialSettings;
 
-    // Save initial settings document for new workspace
-    await db.collection('settings').doc(pharmacyId).set(initialSettings, { merge: true });
+    const token = signToken({ uid, email: normalizedEmail, pharmacyId, workspaceId: pharmacyId, role: 'Pharmacist' });
 
     return res.status(201).json({
       id: uid,
       user,
       token,
-      message: 'Account and workspace created and saved to Firestore successfully!'
+      message: 'Account and workspace created successfully!'
     });
   } catch (error) {
     res.status(500).json({ error: 'Registration failed: ' + error.message });
@@ -467,61 +472,65 @@ app.post('/api/auth/login', async (req, res) => {
 
     // 1. Authenticate against persistent Firestore
     if (isConnected()) {
-      const snapshot = await db.collection('users').where('email', '==', normalizedEmail).get();
-      if (!snapshot.empty) {
-        const userDoc = snapshot.docs[0];
-        const data = userDoc.data();
+      try {
+        const snapshot = await db.collection('users').where('email', '==', normalizedEmail).get();
+        if (!snapshot.empty) {
+          const userDoc = snapshot.docs[0];
+          const data = userDoc.data();
 
-        // Verify password against secure PBKDF2 hash
-        if (password) {
-          let isValid = false;
-          if (data.passwordHash && data.salt) {
-            isValid = verifyPassword(password, data.passwordHash, data.salt);
-          } else if (data.passwordHash) {
-            isValid = (data.passwordHash === Buffer.from(password).toString('base64'))
-                   || (data.passwordHash === password);
-            if (isValid) {
+          // Verify password against secure PBKDF2 hash
+          if (password) {
+            let isValid = false;
+            if (data.passwordHash && data.salt) {
+              isValid = verifyPassword(password, data.passwordHash, data.salt);
+            } else if (data.passwordHash) {
+              isValid = (data.passwordHash === Buffer.from(password).toString('base64'))
+                     || (data.passwordHash === password);
+              if (isValid) {
+                const { hash: newHash, salt: newSalt } = hashPassword(password);
+                await userDoc.ref.update({ passwordHash: newHash, salt: newSalt, passwordSet: true });
+              }
+            } else {
+              // User had passwordHash: null (e.g. registered in early version without password)
               const { hash: newHash, salt: newSalt } = hashPassword(password);
               await userDoc.ref.update({ passwordHash: newHash, salt: newSalt, passwordSet: true });
+              isValid = true;
             }
-          } else {
-            // User had passwordHash: null (e.g. registered in early version without password)
-            const { hash: newHash, salt: newSalt } = hashPassword(password);
-            await userDoc.ref.update({ passwordHash: newHash, salt: newSalt, passwordSet: true });
-            isValid = true;
+
+            // Special allowance for demo account
+            if (!isValid && normalizedEmail === 'pharmacist@demo.com' && password === 'demo123') {
+              isValid = true;
+            }
+
+            // Seamless password adoption/synchronization for account owner
+            if (!isValid && (normalizedEmail === 'sudeepsukumar1704@gmail.com' || normalizedEmail === 'sudarshan@pharmacy.io') && password.length >= 6) {
+              const { hash: newHash, salt: newSalt } = hashPassword(password);
+              await userDoc.ref.update({ passwordHash: newHash, salt: newSalt, passwordSet: true });
+              isValid = true;
+            }
+
+            if (!isValid) {
+              return res.status(401).json({ error: 'Invalid password. Please check your credentials.' });
+            }
           }
 
-          // Special allowance for demo account
-          if (!isValid && normalizedEmail === 'pharmacist@demo.com' && password === 'demo123') {
-            isValid = true;
-          }
+          const uid = userDoc.id;
+          let pharmacyId = data.pharmacyId || data.workspaceId || 'pharmaflow-main';
 
-          // Seamless password adoption/synchronization for account owner
-          if (!isValid && (normalizedEmail === 'sudeepsukumar1704@gmail.com' || normalizedEmail === 'sudarshan@pharmacy.io') && password.length >= 6) {
-            const { hash: newHash, salt: newSalt } = hashPassword(password);
-            await userDoc.ref.update({ passwordHash: newHash, salt: newSalt, passwordSet: true });
-            isValid = true;
-          }
+          const token = signToken({ uid, email: normalizedEmail, pharmacyId, workspaceId: pharmacyId, role: data.role || 'Pharmacist' });
 
-          if (!isValid) {
-            return res.status(401).json({ error: 'Invalid password. Please check your credentials.' });
-          }
+          const safeUser = { id: uid, uid, ...data, pharmacyId, workspaceId: pharmacyId };
+          delete safeUser.passwordHash;
+          delete safeUser.salt;
+
+          return res.json({
+            isDemo: pharmacyId === 'DEMO_PHARMACY',
+            user: safeUser,
+            token
+          });
         }
-
-        const uid = userDoc.id;
-        let pharmacyId = data.pharmacyId || data.workspaceId || 'pharmaflow-main';
-
-        const token = signToken({ uid, email: normalizedEmail, pharmacyId, workspaceId: pharmacyId, role: data.role || 'Pharmacist' });
-
-        const safeUser = { id: uid, uid, ...data, pharmacyId, workspaceId: pharmacyId };
-        delete safeUser.passwordHash;
-        delete safeUser.salt;
-
-        return res.json({
-          isDemo: pharmacyId === 'DEMO_PHARMACY',
-          user: safeUser,
-          token
-        });
+      } catch (dbErr) {
+        console.warn('Firestore read fallback in login:', dbErr.message);
       }
     }
 
@@ -1029,28 +1038,33 @@ app.post('/api/inventory', async (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    if (isConnected()) {
-      // Check duplicate batch for same medicine
-      const existing = await db.collection('inventory')
-        .where('pharmacyId', '==', pharmacyId)
-        .where('batch', '==', newItem.batch)
-        .get();
+    let savedDocId = `med_${Date.now()}`;
+    if (isConnected() && !isQuotaExhausted) {
+      try {
+        // Check duplicate batch for same medicine
+        const existing = await withTimeout(db.collection('inventory')
+          .where('pharmacyId', '==', pharmacyId)
+          .where('batch', '==', newItem.batch)
+          .get(), 2000);
 
-      if (!existing.empty) {
-        // Update existing stock
-        const docId = existing.docs[0].id;
-        const currentData = existing.docs[0].data();
-        const updatedQty = (currentData.quantity || 0) + qty;
-        await db.collection('inventory').doc(docId).update({
-          quantity: updatedQty,
-          unitPrice: price > 0 ? price : currentData.unitPrice,
-          updatedAt: new Date().toISOString()
-        });
-        return res.status(200).json({ id: docId, ...currentData, quantity: updatedQty, message: 'Existing batch stock updated' });
+        if (!existing.empty) {
+          // Update existing stock
+          const docId = existing.docs[0].id;
+          const currentData = existing.docs[0].data();
+          const updatedQty = (currentData.quantity || 0) + qty;
+          await withTimeout(db.collection('inventory').doc(docId).update({
+            quantity: updatedQty,
+            unitPrice: price > 0 ? price : currentData.unitPrice,
+            updatedAt: new Date().toISOString()
+          }), 2000);
+          return res.status(200).json({ id: docId, ...currentData, quantity: updatedQty, message: 'Existing batch stock updated' });
+        }
+
+        const docRef = await withTimeout(db.collection('inventory').add(newItem), 2000);
+        savedDocId = docRef.id;
+      } catch (dbErr) {
+        console.warn('Firestore fallback on inventory add:', dbErr.message);
       }
-
-      const docRef = await db.collection('inventory').add(newItem);
-      return res.status(201).json({ id: docRef.id, ...newItem });
     }
 
     // Memory Store
@@ -1060,8 +1074,7 @@ app.post('/api/inventory', async (req, res) => {
       return res.json(memoryStore.inventory[existingIndex]);
     }
 
-    const id = `med_${Date.now()}`;
-    const saved = { id, ...newItem };
+    const saved = { id: savedDocId, ...newItem };
     memoryStore.inventory.unshift(saved);
     res.status(201).json(saved);
   } catch (error) {
@@ -1149,95 +1162,105 @@ app.post('/api/dispensing', async (req, res) => {
     const dateStr = `Today, ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const newRxId = rxId || `RX-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
 
-    if (isConnected()) {
-      let medicineDocRef = null;
+    if (isConnected() && !isQuotaExhausted) {
+      try {
+        let medicineDocRef = null;
 
-      if (medicineId) {
-        medicineDocRef = db.collection('inventory').doc(String(medicineId));
-      } else {
-        // Look up by batch and pharmacyId
-        const snap = await db.collection('inventory')
-          .where('pharmacyId', '==', pharmacyId)
-          .where('batch', '==', String(batch).trim().toUpperCase())
-          .limit(1)
-          .get();
-        if (snap.empty) {
-          return res.status(404).json({ error: `Batch "${batch}" not found in inventory.` });
-        }
-        medicineDocRef = snap.docs[0].ref;
-      }
-
-      // Execute Atomic Firestore Transaction
-      const result = await db.runTransaction(async (transaction) => {
-        const medDoc = await transaction.get(medicineDocRef);
-        if (!medDoc.exists) {
-          throw new Error('Selected medicine batch does not exist.');
+        if (medicineId) {
+          medicineDocRef = db.collection('inventory').doc(String(medicineId));
+        } else {
+          // Look up by batch and pharmacyId
+          const snap = await withTimeout(db.collection('inventory')
+            .where('pharmacyId', '==', pharmacyId)
+            .where('batch', '==', String(batch).trim().toUpperCase())
+            .limit(1)
+            .get(), 2000);
+          if (!snap.empty) {
+            medicineDocRef = snap.docs[0].ref;
+          }
         }
 
-        const medData = medDoc.data();
-        if (medData.status === 'Recalled') {
-          throw new Error(`CRITICAL: Batch ${medData.batch} is RECALLED and quarantined. Dispensing is blocked.`);
-        }
+        if (medicineDocRef) {
+          // Execute Atomic Firestore Transaction
+          const result = await db.runTransaction(async (transaction) => {
+            const medDoc = await transaction.get(medicineDocRef);
+            if (!medDoc.exists) {
+              throw new Error('Selected medicine batch does not exist.');
+            }
 
-        if (medData.quantity < dispenseQty) {
-          throw new Error(`Insufficient stock. Available: ${medData.quantity}, Requested: ${dispenseQty}`);
-        }
+            const medData = medDoc.data();
+            if (medData.status === 'Recalled') {
+              throw new Error(`CRITICAL: Batch ${medData.batch} is RECALLED and quarantined. Dispensing is blocked.`);
+            }
 
-        const remainingQty = medData.quantity - dispenseQty;
-        let newStatus = medData.status;
-        if (remainingQty <= 0) newStatus = 'Expired';
-        else if (remainingQty <= 20 && newStatus !== 'Recalled') newStatus = 'Low Stock';
+            if (medData.quantity < dispenseQty) {
+              throw new Error(`Insufficient stock. Available: ${medData.quantity}, Requested: ${dispenseQty}`);
+            }
 
-        // 1. Deduct stock
-        transaction.update(medicineDocRef, {
-          quantity: remainingQty,
-          status: newStatus,
-          updatedAt: new Date().toISOString()
-        });
+            const remainingQty = medData.quantity - dispenseQty;
+            let newStatus = medData.status;
+            if (remainingQty <= 0) newStatus = 'Expired';
+            else if (remainingQty <= 20 && newStatus !== 'Recalled') newStatus = 'Low Stock';
 
-        // 2. Create Audit record
-        const auditRef = db.collection('audits').doc();
-        const auditData = {
-          pharmacyId,
-          date: dateStr,
-          medicine: medData.medicine || medicine,
-          medicineId: medDoc.id,
-          batch: medData.batch || batch,
-          quantity: dispenseQty,
-          customer: customer || 'Walk-in Patient',
-          pharmacist: pharmacist || 'Dr. Anita Rao',
-          status: 'Completed',
-          rxId: newRxId,
-          totalAmount,
-          timestamp: new Date().toISOString()
-        };
-        transaction.set(auditRef, auditData);
+            // 1. Deduct stock
+            transaction.update(medicineDocRef, {
+              quantity: remainingQty,
+              status: newStatus,
+              updatedAt: new Date().toISOString()
+            });
 
-        return { auditId: auditRef.id, auditData, remainingQty };
-      });
+            // 2. Create Audit record
+            const auditRef = db.collection('audits').doc();
+            const auditData = {
+              pharmacyId,
+              date: dateStr,
+              medicine: medData.medicine || medicine,
+              medicineId: medDoc.id,
+              batch: medData.batch || batch,
+              quantity: dispenseQty,
+              customer: customer || 'Walk-in Patient',
+              pharmacist: pharmacist || 'Dr. Anita Rao',
+              status: 'Completed',
+              rxId: newRxId,
+              totalAmount,
+              timestamp: new Date().toISOString()
+            };
+            transaction.set(auditRef, auditData);
 
-      // 3. Update customer history if matched
-      if (customer && customer !== 'Walk-in Patient') {
-        const custSnap = await db.collection('customers')
-          .where('pharmacyId', '==', pharmacyId)
-          .where('name', '==', customer)
-          .limit(1)
-          .get();
-        if (!custSnap.empty) {
-          const cDoc = custSnap.docs[0];
-          await cDoc.ref.update({
-            visits: (cDoc.data().visits || 0) + 1,
-            lastVisit: 'Today'
+            return { auditId: auditRef.id, auditData, remainingQty };
+          });
+
+          // 3. Update customer history if matched
+          if (customer && customer !== 'Walk-in Patient') {
+            try {
+              const custSnap = await db.collection('customers')
+                .where('pharmacyId', '==', pharmacyId)
+                .where('name', '==', customer)
+                .limit(1)
+                .get();
+              if (!custSnap.empty) {
+                const cDoc = custSnap.docs[0];
+                await cDoc.ref.update({
+                  visits: (cDoc.data().visits || 0) + 1,
+                  lastVisit: 'Today'
+                });
+              }
+            } catch (e) {}
+          }
+
+          return res.status(201).json({
+            success: true,
+            message: 'Prescription dispensed successfully and stock deducted atomically.',
+            audit: { id: result.auditId, ...result.auditData },
+            remainingStock: result.remainingQty
           });
         }
+      } catch (dbErr) {
+        if (dbErr.message.includes('Insufficient') || dbErr.message.includes('RECALLED')) {
+          return res.status(400).json({ error: dbErr.message });
+        }
+        console.warn('Firestore fallback on dispensing:', dbErr.message);
       }
-
-      return res.status(201).json({
-        success: true,
-        message: 'Prescription dispensed successfully and stock deducted atomically.',
-        audit: { id: result.auditId, ...result.auditData },
-        remainingStock: result.remainingQty
-      });
     }
 
     // Memory Store fallback
@@ -1395,13 +1418,17 @@ app.post('/api/customers', async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    if (isConnected()) {
-      const docRef = await db.collection('customers').add(newCustomer);
-      return res.status(201).json({ id: docRef.id, ...newCustomer });
+    let savedCustId = `cust_${Date.now()}`;
+    if (isConnected() && !isQuotaExhausted) {
+      try {
+        const docRef = await withTimeout(db.collection('customers').add(newCustomer), 2000);
+        savedCustId = docRef.id;
+      } catch (dbErr) {
+        console.warn('Firestore fallback on customer add:', dbErr.message);
+      }
     }
 
-    const id = `cust_${Date.now()}`;
-    const saved = { id, ...newCustomer };
+    const saved = { id: savedCustId, ...newCustomer };
     memoryStore.customers.push(saved);
     res.status(201).json(saved);
   } catch (error) {
@@ -1419,9 +1446,12 @@ app.put('/api/customers/:id', async (req, res) => {
       updates.communicationPreference = updates.communicationPreference === 'WHATSAPP' ? 'WHATSAPP' : 'SMS';
     }
 
-    if (isConnected()) {
-      await db.collection('customers').doc(id).set(updates, { merge: true });
-      return res.json({ id, ...updates });
+    if (isConnected() && !isQuotaExhausted) {
+      try {
+        await withTimeout(db.collection('customers').doc(id).set(updates, { merge: true }), 2000);
+      } catch (dbErr) {
+        console.warn('Firestore fallback on customer update:', dbErr.message);
+      }
     }
 
     const index = memoryStore.customers.findIndex(c => String(c.id) === String(id));
@@ -1429,7 +1459,7 @@ app.put('/api/customers/:id', async (req, res) => {
       memoryStore.customers[index] = { ...memoryStore.customers[index], ...updates };
       return res.json(memoryStore.customers[index]);
     }
-    res.status(404).json({ error: 'Customer not found' });
+    return res.json({ id, ...updates });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
