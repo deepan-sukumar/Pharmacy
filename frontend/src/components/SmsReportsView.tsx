@@ -543,11 +543,11 @@ export default function SmsReportsView({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: 14,
         }}
       >
-        {/* Metric 1: Customers Requiring Safety Communication (Action Due: <= 10 Days & Recalls ONLY) */}
+        {/* Metric 1: Action Due (<= 10 Days & Recalls) */}
         <div
           className="card"
           onClick={() => setActiveTab('communication_queue')}
@@ -559,17 +559,17 @@ export default function SmsReportsView({
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--danger)', textTransform: 'uppercase' }}>
-            Customers Requiring Safety Comm
+            Action Due
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--danger)', marginTop: 4 }}>
             {actionDuePatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Action Due (≤10d & Recalls)
+            Expiring ≤10d or active recall
           </div>
         </div>
 
-        {/* Metric 2: Near-Expiry Monitored Patients (11-30 Days Monitoring Only) */}
+        {/* Metric 2: Near-Expiry Monitoring (11-30 Days) */}
         <div
           className="card"
           onClick={() => setActiveTab('monitoring_queue')}
@@ -581,54 +581,37 @@ export default function SmsReportsView({
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', textTransform: 'uppercase' }}>
-            Near-Expiry Monitoring (11–30d)
+            Monitoring
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--warning)', marginTop: 4 }}>
             {nearExpiryMonitoringOnlyPatients.length}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            FEFO Active Watch (&gt;10d)
+            11–30d expiry watch
           </div>
         </div>
 
-        {/* Metric 3: Recall Patients */}
-        <div
-          className="card"
-          onClick={() => { setActiveTab('communication_queue'); setQueueSubFilter('recall'); }}
-          style={{ padding: 16, borderLeft: '4px solid var(--danger)', cursor: 'pointer' }}
-        >
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--danger)', textTransform: 'uppercase' }}>
-            Recall Customers
-          </span>
-          <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--danger)', marginTop: 4 }}>
-            {recallPatients.length}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Quarantined Batch Holds
-          </div>
-        </div>
-
-        {/* Metric 4: Messages Initiated */}
+        {/* Metric 3: Messages Initiated */}
         <div
           className="card"
           onClick={() => setActiveTab('activity')}
           style={{ padding: 16, borderLeft: '4px solid var(--success)', cursor: 'pointer' }}
         >
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>
-            Messages Initiated
+            Messages Sent
           </span>
           <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--success)', marginTop: 4 }}>
             {messagesInitiatedCount}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Pharmacist Outreach Logs
+            Pharmacist outreach logs
           </div>
         </div>
 
-        {/* Metric 5: Patient Channel Preferences */}
+        {/* Metric 4: Patient Channel Preferences */}
         <div className="card" style={{ padding: 16, borderLeft: '4px solid #3B82F6' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', textTransform: 'uppercase' }}>
-            Preferred Channels
+            Channel Preference
           </span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
             <span style={{ fontSize: 20, fontWeight: 900, color: '#16A34A' }}>{whatsAppPrefCount} WhatsApp</span>
@@ -636,7 +619,7 @@ export default function SmsReportsView({
             <span style={{ fontSize: 17, fontWeight: 800, color: '#2563EB' }}>{smsPrefCount} SMS</span>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            Saved Patient Preferences
+            Registered patient preference
           </div>
         </div>
       </div>
@@ -648,28 +631,28 @@ export default function SmsReportsView({
           className={`btn ${activeTab === 'communication_queue' ? 'btn-teal' : 'btn-ghost'}`}
           style={{ fontSize: 13, fontWeight: 800 }}
         >
-          <BellRing size={15} /> Customers Requiring Safety Communication ({actionDuePatients.length})
+          <BellRing size={15} /> Action Due ({actionDuePatients.length})
         </button>
         <button
           onClick={() => setActiveTab('monitoring_queue')}
           className={`btn ${activeTab === 'monitoring_queue' ? 'btn-teal' : 'btn-ghost'}`}
           style={{ fontSize: 13, fontWeight: 700 }}
         >
-          <Clock size={15} /> Near-Expiry Monitoring (11–30d) ({nearExpiryMonitoringOnlyPatients.length})
+          <Clock size={15} /> Monitoring ({nearExpiryMonitoringOnlyPatients.length})
         </button>
         <button
           onClick={() => setActiveTab('all_monitored')}
           className={`btn ${activeTab === 'all_monitored' ? 'btn-teal' : 'btn-ghost'}`}
           style={{ fontSize: 13, fontWeight: 700 }}
         >
-          <Users size={15} /> All Monitored Patients ({affectedPatients.length})
+          <Users size={15} /> All Patients ({affectedPatients.length})
         </button>
         <button
           onClick={() => setActiveTab('activity')}
           className={`btn ${activeTab === 'activity' ? 'btn-teal' : 'btn-ghost'}`}
           style={{ fontSize: 13, fontWeight: 700 }}
         >
-          <Activity size={15} /> Communication Activity & History ({logs.length})
+          <Activity size={15} /> Activity History ({logs.length})
         </button>
       </div>
 

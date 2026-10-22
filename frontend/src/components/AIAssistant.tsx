@@ -500,16 +500,10 @@ export default function AIAssistant({
       from: 'ai',
       badge: 'PHARMACY INTELLIGENCE',
       title: 'AI Pharmacy Assistant',
-      summary: 'Connected to live stock, expiry, supplier returns and dispensing audits.',
       priority: 'normal',
       dataType: 'actual',
-      text: 'Ask questions about reorders, near-expiry batches, supplier returns or dispensing audits.',
-      recommendedActions: [
-        'Ask: "Which medicines do I need to buy sooner?" for procurement recommendations.',
-        'Ask: "Which medicines expire within 30 days?" for expiry exposure tracking.',
-        'Use What-If Simulator to model prospective purchase batch orders.'
-      ],
-      sourceTransparency: 'Connected to live Firestore workspace.',
+      text: 'Ask operational questions about reorders, near-expiry batches, supplier returns, or dispensing audits.',
+      sourceTransparency: 'Connected to live pharmacy workspace.',
       time: 'Just now',
     },
   ]);
@@ -585,16 +579,11 @@ export default function AIAssistant({
         id: 'm-init',
         from: 'ai',
         badge: 'PHARMACY INTELLIGENCE',
-        title: 'OPERATIONAL DECISION COPILOT',
-        summary: 'Connected directly to live inventory, batch tracking, expiry runways, supplier returns, and dispensing audit trails.',
+        title: 'AI Pharmacy Assistant',
         priority: 'normal',
         dataType: 'actual',
-        text: 'Conversation history reset. Ready for new pharmacy operational queries.',
-        recommendedActions: [
-          'Select categorized prompt chips below for instant analytics.',
-          'Model prospective orders with the What-If Simulator.'
-        ],
-        sourceTransparency: 'Connected to live Firestore workspace state.',
+        text: 'History cleared. Ready for new pharmacy operational queries.',
+        sourceTransparency: 'Connected to live pharmacy workspace.',
         time: 'Just now',
       }
     ]);
@@ -852,7 +841,7 @@ export default function AIAssistant({
                   </h3>
                 )}
 
-                {m.summary && (
+                {m.summary && m.summary !== m.text && (
                   <div style={{ fontSize: 13, fontWeight: 700, color: m.priority === 'high' ? 'var(--danger)' : 'var(--text-2)', marginBottom: 8 }}>
                     {m.summary}
                   </div>
@@ -930,7 +919,7 @@ export default function AIAssistant({
               }}
             >
               <RefreshCw size={14} className="animate-spin" />
-              Gemini 3.5 Flash querying controlled pharmacy records...
+              Analyzing pharmacy records...
             </div>
           </div>
         )}

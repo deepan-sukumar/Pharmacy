@@ -1282,23 +1282,76 @@ function Dashboard({ onNavigate, inventory, currentUser }: { onNavigate: (p: str
         </Panel>
       </div>
 
-      {/* FEFO Priority Timeline */}
+      {/* Priority Batches for FEFO Dispensing */}
       <Panel
-        title="FEFO Batch Expiry Timeline (Priority Batches)"
+        title="Priority Near-Expiry Batches (FEFO)"
         action={
           <button
             style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
             onClick={() => onNavigate('expiry')}
           >
-            View All Batches in Batches & Expiry →
+            Full Expiry Timeline →
           </button>
         }
       >
-        <div style={{ padding: '8px 16px' }}>
-          <ExpiryTimeline
-            inventory={inventory}
-            onNavigateExpiryTable={() => onNavigate('expiry')}
-          />
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-alt)' }}>
+                {['Medicine', 'Batch', 'Expiry Date', 'Stock', 'Days Remaining', 'Status', 'Action'].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                const priorityBatches = [...inventory]
+                  .sort((a, b) => {
+                    const daysA = a.daysRemaining !== undefined ? a.daysRemaining : parseDaysRemaining(a.expiry);
+                    const daysB = b.daysRemaining !== undefined ? b.daysRemaining : parseDaysRemaining(b.expiry);
+                    return daysA - daysB;
+                  })
+                  .slice(0, 5);
+
+                if (priorityBatches.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-3)' }}>
+                        No inventory batches recorded yet.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return priorityBatches.map(m => {
+                  const days = m.daysRemaining !== undefined ? m.daysRemaining : parseDaysRemaining(m.expiry);
+                  const isExp = days < 0 || m.status === 'Expired';
+                  const isCrit = !isExp && days <= 30;
+
+                  return (
+                    <tr key={m.batch + m.medicine} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text)' }}>{m.medicine}</td>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: 'var(--text-2)' }}>{m.batch}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-2)' }}>{m.expiry}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{m.quantity} units</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: isExp ? 'var(--danger)' : isCrit ? 'var(--warning-dark)' : 'var(--text)' }}>
+                        {isExp ? 'Expired' : `${days}d left`}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}><Badge status={m.status} /></td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <button
+                          onClick={() => onNavigate('dispensing')}
+                          style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          Dispense →
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
         </div>
       </Panel>
 
@@ -1856,27 +1909,6 @@ function Expiry({
           </div>
         }
       />
-      <div className="responsive-stats-grid">
-        <Stat label="Total Batches" value={String(inventory.length || 0)} icon={Boxes} tone="sage" />
-        <Stat
-          label="Expiring in 30d"
-          value={String(inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining >= 0 && i.daysRemaining <= 30) || i.status === 'Near Expiry').length)}
-          icon={Clock3}
-          tone="amber"
-        />
-        <Stat
-          label="Expiring in 90d"
-          value={String(inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining > 30 && i.daysRemaining <= 90)).length)}
-          icon={CalendarDays}
-          tone="teal"
-        />
-        <Stat
-          label="Expired / Recalled"
-          value={String(inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining < 0) || i.status === 'Expired' || i.status === 'Recalled').length)}
-          icon={AlertCircle}
-          tone="red"
-        />
-      </div>
       {/* Dynamic Collision-Free FEFO Expiry Timeline Component with Live Grounding */}
       <div style={{ marginBottom: 20 }}>
         <ExpiryTimeline
@@ -1894,76 +1926,6 @@ function Expiry({
         />
       </div>
 
-      <div className="responsive-dashboard-grid">
-        <Panel title="Expiry Risk Distribution Breakdown">
-          {(() => {
-            const total = inventory.length || 1;
-            const expRec = inventory.filter(i => (i.daysRemaining !== undefined && i.daysRemaining < 0) || i.status === 'Expired' || i.status === 'Recalled').length;
-            const crit = inventory.filter(i => i.daysRemaining !== undefined && i.daysRemaining >= 0 && i.daysRemaining <= 30).length;
-            const watch = inventory.filter(i => i.daysRemaining !== undefined && i.daysRemaining > 30 && i.daysRemaining <= 90).length;
-            const safe = Math.max(0, total - expRec - crit - watch);
-            const expPct = Math.round((expRec / total) * 100);
-            const critPct = expPct + Math.round((crit / total) * 100);
-            const watchPct = critPct + Math.round((watch / total) * 100);
-
-            return (
-              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-                <div style={{ width: 140, height: 140, borderRadius: '50%', background: `conic-gradient(var(--danger) 0 ${expPct}%, var(--warning) ${expPct}% ${critPct}%, var(--primary) ${critPct}% ${watchPct}%, var(--border-strong) ${watchPct}% 100%)`, position: 'relative' }}>
-                  <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', background: 'var(--surface-raised)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)' }}>{inventory.length}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>batches</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-                  {[
-                    ['Expired / Recalled', String(expRec), 'var(--danger)'],
-                    ['Critical (<30d)', String(crit), 'var(--warning)'],
-                    ['Watch (<90d)', String(watch), 'var(--primary)'],
-                    ['Safe (>90d)', String(safe), 'var(--text-muted)']
-                  ].map(([n, v, c]) => (
-                    <div key={n} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center', color: 'var(--text-2)' }}>
-                      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block' }}/>{n}</span>
-                      <b style={{ color: 'var(--text)' }}>{v}</b>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-        </Panel>
-
-        <Panel title="Regulatory Compliance & FEFO Protocol">
-          <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--success-light)', border: '1px solid var(--success-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <CheckCircle2 size={18} color="var(--success)" />
-              </div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>First-Expiry, First-Out (FEFO) Strict Enforcement</p>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>System automatically sorts stock batches by earliest expiry to minimize expired inventory write-offs.</p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--danger-light)', border: '1px solid var(--danger-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <AlertCircle size={18} color="var(--danger)" />
-              </div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Automated Quarantine Barrier</p>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Batches marked as Expired or Recalled are electronically hard-locked and cannot be selected during dispensing.</p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--warning-light)', border: '1px solid var(--warning-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Clock3 size={18} color="var(--warning)" />
-              </div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Supplier Return Window</p>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Medicines reaching 60 days before expiry generate return-to-vendor credit claim notices automatically.</p>
-              </div>
-            </div>
-          </div>
-        </Panel>
-      </div>
       <div id="fefo-batch-priority-table">
         <Panel title="Priority Batches for FEFO Dispensing">
           {/* Desktop Table View */}
@@ -2396,11 +2358,13 @@ function Dispensing({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="card" style={{ padding: 18 }}>
-            <p style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500 }}>Dispensed today</p>
-            <p style={{ fontSize: 32, fontWeight: 800, color: 'var(--text)', marginTop: 2 }}>{42 + audits.length - 3}</p>
-            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>records completed</p>
-            <div className="progress-bar" style={{ marginTop: 12 }}><div className="progress-fill" style={{ width: '78%', background: 'var(--primary)' }}/></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginTop: 6 }}><span style={{ color: 'var(--text-3)' }}>Daily target</span><b style={{ color: 'var(--text)' }}>78%</b></div>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500 }}>Dispensing Activity</p>
+            <p style={{ fontSize: 32, fontWeight: 800, color: 'var(--text)', marginTop: 2 }}>{audits.length}</p>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>total audited prescriptions</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              <span className="chip badge-teal" style={{ fontSize: 10.5 }}>FEFO Enforced</span>
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>100% Traceable</span>
+            </div>
           </div>
           <Panel title="Recent records">
             <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -3726,15 +3690,8 @@ function Suppliers({
       </div>
 
       {activeTab === 'suppliers' ? (
-        <>
-          <div className="responsive-stats-grid">
-            <Stat label="Active Suppliers" value={String(suppliersList.length)} icon={Truck} tone="sage" />
-            <Stat label="Pending Returns" value={String(pendingReturnsCount)} icon={RotateCcw} tone="amber" />
-            <Stat label="Total Purchases" value="128 Orders" icon={CreditCard} tone="teal" />
-          </div>
-
-          <Panel title="Suppliers Directory">
-            <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
+        <Panel title="Suppliers Directory">
+          <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
               <div className="search-input" style={{ maxWidth: 300 }}>
                 <Search size={15} color="var(--text-3)"/>
                 <input placeholder="Search suppliers..." value={q} onChange={e => setQ(e.target.value)}/>
@@ -3808,23 +3765,8 @@ function Suppliers({
               ))}
             </div>
           </Panel>
-        </>
       ) : (
-        <>
-          <div className="responsive-stats-grid">
-            <Stat label="Total Return Claims" value={String(returnsList.length)} icon={RotateCcw} tone="teal" />
-            <Stat label="Pending Approval" value={String(pendingReturnsCount)} icon={Clock3} tone="amber" />
-            <Stat label="Credit Issued" value={String(returnsList.filter(r => r.status === 'Credit Issued' || r.status === 'Approved').length)} icon={CheckCircle2} tone="sage" />
-          </div>
-
-          <Panel
-            title="Return Claims & Credits"
-            action={
-              <button className="btn btn-teal" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => setModal(true)}>
-                <Plus size={14} /> New Return Claim
-              </button>
-            }
-          >
+        <Panel title="Return Claims & Credits">
             <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
               <div className="search-input" style={{ maxWidth: 300 }}>
                 <Search size={15} color="var(--text-3)"/>
@@ -3882,7 +3824,6 @@ function Suppliers({
               </table>
             </div>
           </Panel>
-        </>
       )}
 
       {/* Create Return Modal */}
@@ -4064,44 +4005,9 @@ function Recall({
         title="Batch Recall & Quarantine"
         description="Quarantine recalled batches, trace exposed customers and dispatch safety alerts."
         action={
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-secondary" onClick={() => onNavigate?.('audit')}>
-              <ClipboardCheck size={15} /> Audit Logs
-            </button>
-            <button className="btn btn-teal" onClick={() => setCreateRecallModal(true)}>
-              <Plus size={14} /> Issue Recall
-            </button>
-            <button
-              className="btn btn-danger"
-              onClick={() => {
-                if (impactedPatients.length > 0 && onOpenSafetyCommunication) {
-                  const target = impactedPatients[0];
-                  onOpenSafetyCommunication(
-                    {
-                      name: target.name,
-                      phone: target.phone,
-                      preferredLang: target.preferredLang,
-                      communicationPreference: target.communicationPreference,
-                      rxId: target.rxId,
-                      qty: target.qty,
-                      date: target.date,
-                    },
-                    'RECALL',
-                    {
-                      medicineName: activeBatchMed?.medicine || 'Amoxicillin 500mg',
-                      batchNumber: activeBatchCode,
-                      recallReason: newRecallReason,
-                    }
-                  );
-                } else {
-                  showToast(impactedPatients.length === 0 ? 'No exposed patients found in audit history for this batch.' : 'Opening Patient Safety Communication...');
-                }
-              }}
-              disabled={recalledMedicines.length === 0 && !safeInventory.some(m => m.batch === 'DEMO-EXP-001')}
-            >
-              <Send size={14} /> Notify Affected Patients
-            </button>
-          </div>
+          <button className="btn btn-teal" onClick={() => setCreateRecallModal(true)}>
+            <Plus size={14} /> Issue Recall
+          </button>
         }
       />
 
@@ -4145,6 +4051,10 @@ function Recall({
       ) : (
         recalledMedicines.map(rec => {
           const isSelected = rec.batch === activeBatchCode;
+          const batchAudits = audits.filter(a => a.batch === rec.batch);
+          const exposedCount = batchAudits.length;
+          const unitsDispensed = batchAudits.reduce((acc, a) => acc + (Number(a.quantity) || 0), 0);
+
           return (
             <div
               key={rec.batch}
@@ -4190,10 +4100,10 @@ function Recall({
                         {rec.medicine} · Batch {rec.batch}
                       </h3>
                       <span className="chip badge-red">MANDATORY RECALL</span>
-                      {isSelected && <span className="chip badge-blue">ACTIVE SELECTION</span>}
+                      {isSelected && <span className="chip badge-blue">SELECTED</span>}
                     </div>
                     <p style={{ fontSize: 12.5, color: 'var(--danger)', marginTop: 2 }}>
-                      Manufacturer/Distributor {rec.supplier} bulletin: Packaging seal defect. Immediate patient isolation mandatory.
+                      Supplier: {rec.supplier} · Dispensing locked in POS.
                     </p>
                   </div>
                 </div>
@@ -4201,18 +4111,18 @@ function Recall({
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={(e) => { e.stopPropagation(); blockBatch(rec.batch); }}
-                    className="btn btn-danger"
+                    className="btn btn-secondary"
                     style={{ fontSize: 12 }}
                   >
-                    <Ban size={14} /> Batch Hard-Locked
+                    <Ban size={14} /> Locked
                   </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedBatchForInspection(rec.batch);
-                      const batchAudits = audits.filter(a => a.batch === rec.batch && a.customer && a.customer !== 'Walk-in Patient');
-                      if (batchAudits.length > 0 && onOpenSafetyCommunication) {
-                        const firstAudit = batchAudits[0];
+                      const targetAudits = audits.filter(a => a.batch === rec.batch && a.customer && a.customer !== 'Walk-in Patient');
+                      if (targetAudits.length > 0 && onOpenSafetyCommunication) {
+                        const firstAudit = targetAudits[0];
                         const cust = (customersList || []).find(c => c.name.toLowerCase() === firstAudit.customer.toLowerCase());
                         onOpenSafetyCommunication(
                           {
@@ -4232,58 +4142,40 @@ function Recall({
                           }
                         );
                       } else {
-                        showToast(`Batch ${rec.batch} selected. ${batchAudits.length} exposed patient(s) found in audit trail.`);
+                        showToast(`Batch ${rec.batch}: ${targetAudits.length} exposed patient(s) found in audit trail.`);
                       }
                     }}
-                    className="btn btn-teal"
+                    className="btn btn-danger"
                     style={{ fontSize: 12 }}
                   >
-                    <Send size={14} /> Notify Affected Patients
+                    <Send size={14} /> Notify Patients ({exposedCount})
                   </button>
                 </div>
               </div>
 
-              {/* 4 Recall KPI Metrics */}
+              {/* 3 Core Recall Metrics */}
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                   gap: 14,
-                  padding: '18px 20px',
+                  padding: '14px 20px',
                   backgroundColor: 'var(--surface)',
                 }}
               >
                 {[
-                  { label: 'Units Remaining in Stock', val: String(rec.quantity || 0), sub: 'Quarantined in storage', tone: 'red' },
-                  { label: 'Patients Exposed', val: String(audits.filter(a => a.batch === rec.batch).length), sub: 'Identified via Audit Trail', tone: 'amber' },
-                  { label: 'Units Dispensed to Date', val: String(audits.filter(a => a.batch === rec.batch).reduce((acc, a) => acc + (Number(a.quantity) || 0), 0)), sub: `Across ${audits.filter(a => a.batch === rec.batch).length} prescriptions`, tone: 'blue' },
-                  { label: 'Recall Safety Status', val: '100% Enforced', sub: 'POS dispensing blocked', tone: 'green' },
+                  { label: 'Units Quarantined in Stock', val: String(rec.quantity || 0), sub: 'Blocked from sale', tone: 'red' },
+                  { label: 'Patients Exposed', val: String(exposedCount), sub: 'From dispensing audit', tone: 'amber' },
+                  { label: 'Units Dispensed to Date', val: String(unitsDispensed), sub: `Across ${exposedCount} prescriptions`, tone: 'blue' },
                 ].map(stat => (
                   <div key={stat.label} style={{ padding: '12px 14px', borderRadius: 10, backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' }}>{stat.label}</p>
-                    <p style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>{stat.val}</p>
-                    <p style={{ fontSize: 11, color: stat.tone === 'red' ? 'var(--danger)' : stat.tone === 'amber' ? 'var(--warning)' : 'var(--success)', marginTop: 2, fontWeight: 600 }}>
+                    <p style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', marginTop: 2 }}>{stat.val}</p>
+                    <p style={{ fontSize: 11, color: stat.tone === 'red' ? 'var(--danger)' : stat.tone === 'amber' ? 'var(--warning)' : 'var(--primary)', marginTop: 2, fontWeight: 600 }}>
                       {stat.sub}
                     </p>
                   </div>
                 ))}
-              </div>
-
-              {/* Containment Protocol Action Checklist */}
-              <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg-subtle)', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>ACTIONS ENFORCED:</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
-                  <CheckCircle2 size={15} /> 1. Dispensing Locked
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
-                  <CheckCircle2 size={15} /> 2. Audit Trail Queried ({audits.filter(a => a.batch === rec.batch).length} Patients)
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
-                  <MessageSquare size={15} /> 3. Patient Safety Advisory Ready
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--warning)', fontWeight: 600 }}>
-                  <Clock3 size={15} /> 4. Supplier Return Claim Pending
-                </span>
               </div>
             </div>
           );

@@ -389,6 +389,29 @@ export default function Sidebar({
             );
           }
 
+          if (group.items.length === 1) {
+            const singleItem = group.items[0];
+            const isSingleActive = page === singleItem.id;
+            return (
+              <button
+                key={group.id}
+                onClick={() => onNavigate(singleItem.id)}
+                className={`sidebar-subitem ${isSingleActive ? 'active' : ''}`}
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: isSingleActive ? 700 : 600,
+                  color: isSingleActive ? 'var(--primary)' : 'var(--text-2)',
+                  padding: '10px 14px',
+                  borderRadius: isSingleActive ? '0 10px 10px 0' : '10px',
+                  marginBottom: 4,
+                }}
+              >
+                <GroupIcon size={17} strokeWidth={isSingleActive ? 2.2 : 1.8} color={isSingleActive ? 'var(--primary)' : 'var(--text-3)'} />
+                <span>{group.label}</span>
+              </button>
+            );
+          }
+
           return (
             <div key={group.id} style={{ marginBottom: 4 }}>
               {/* Group Header with Expand/Collapse toggle */}
@@ -886,26 +909,55 @@ export function MobileSidebarDrawer({
           </button>
 
           {/* Grouped sections */}
-          {navGroups.map(group => (
-            <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 10px',
-                  fontSize: 10.5,
-                  fontWeight: 800,
-                  letterSpacing: '0.06em',
-                  color: 'var(--text-4)',
-                  textTransform: 'uppercase',
-                }}
-              >
-                <group.icon size={13} color="var(--text-4)" />
-                <span>{group.label}</span>
-              </div>
+          {navGroups.map(group => {
+            if (group.items.length === 1) {
+              const singleItem = group.items[0];
+              const active = page === singleItem.id;
+              const Icon = singleItem.icon;
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => {
+                    onNavigate(singleItem.id);
+                    onClose();
+                  }}
+                  className={`sidebar-subitem ${active ? 'active' : ''}`}
+                  style={{
+                    padding: '10px 14px',
+                    fontSize: 13.5,
+                    fontWeight: active ? 700 : 600,
+                    borderRadius: 8,
+                    borderLeft: active ? '3px solid var(--primary)' : 'none',
+                    background: active ? 'var(--primary-light)' : 'transparent',
+                    color: active ? 'var(--primary)' : 'var(--text-2)',
+                  }}
+                >
+                  <Icon size={17} strokeWidth={active ? 2.2 : 1.8} color={active ? 'var(--primary)' : 'var(--text-3)'} />
+                  <span>{singleItem.label}</span>
+                </button>
+              );
+            }
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 6 }}>
+            return (
+              <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 10px',
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    color: 'var(--text-4)',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  <group.icon size={13} color="var(--text-4)" />
+                  <span>{group.label}</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 6 }}>
                 {group.items.map(item => {
                   const active = page === item.id || (page === 'add-stock' && item.id === 'inventory');
                   const Icon = item.icon;
@@ -938,7 +990,8 @@ export function MobileSidebarDrawer({
                 })}
               </div>
             </div>
-          ))}
+          );
+        })}
 
           {/* Settings Section */}
           <div style={{ paddingTop: 10, borderTop: '1px solid var(--border)', marginTop: 4 }}>
