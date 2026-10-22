@@ -28,11 +28,11 @@ async function getWorkspaceDocs(collectionName, pharmacyId) {
   const target = String(pharmacyId || 'pharmaflow-main').trim();
   if (isConnected() && !isQuotaExhausted) {
     try {
-      const snap1 = await withTimeout(db.collection(collectionName).where('workspaceId', '==', target).get(), 1500);
+      const snap1 = await withTimeout(db.collection(collectionName).where('workspaceId', '==', target).get(), 4000);
       if (!snap1.empty) {
         return snap1.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       }
-      const snap2 = await withTimeout(db.collection(collectionName).where('pharmacyId', '==', target).get(), 1500);
+      const snap2 = await withTimeout(db.collection(collectionName).where('pharmacyId', '==', target).get(), 4000);
       if (!snap2.empty) {
         return snap2.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       }
@@ -44,7 +44,7 @@ async function getWorkspaceDocs(collectionName, pharmacyId) {
     }
   }
   if (masterDataset && Array.isArray(masterDataset[collectionName])) {
-    return masterDataset[collectionName].filter(i => (i.workspaceId === target || i.pharmacyId === target || target === 'pharmaflow-main'));
+    return masterDataset[collectionName].filter(i => (i.workspaceId === target || i.pharmacyId === target || target === 'DEMO_PHARMACY' || target === 'pharmaflow-main'));
   }
   if (memoryStoreRef && memoryStoreRef[collectionName]) {
     return memoryStoreRef[collectionName].filter(i => (i.workspaceId === target || i.pharmacyId === target || target === 'DEMO_PHARMACY' || target === 'pharmaflow-main'));

@@ -42,7 +42,7 @@ export interface MedicineItem {
   expiry: string;
   quantity: number;
   supplier: string;
-  status: 'Available' | 'Near Expiry' | 'Recalled' | 'Low Stock' | 'Expired';
+  status: 'Available' | 'Near Expiry' | 'Recalled' | 'Low Stock' | 'Expired' | 'RECALLED' | 'EXPIRED';
   unitPrice?: number;
   barcode?: string;
 }

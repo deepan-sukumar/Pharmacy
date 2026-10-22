@@ -1,8 +1,41 @@
 export type Role = 'Pharmacist';
 export type Page = 'dashboard'|'inventory'|'add-stock'|'expiry'|'dispensing'|'audit'|'customers'|'alerts'|'suppliers'|'recall'|'ai'|'simulator'|'reports'|'settings'|'sms-reports';
-export type Status = 'Available'|'Near Expiry'|'Recalled'|'Low Stock'|'Expired';
-export type Medicine = { id: number | string; medicine: string; batch: string; expiry: string; quantity: number; supplier: string; status: Status; unitPrice?: number };
-export type Audit = { id: number | string; date: string; medicine: string; batch: string; quantity: number; customer: string; pharmacist: string; status: string; rxId?: string; totalAmount?: number };
+export type Status = 'Available'|'Near Expiry'|'Recalled'|'Low Stock'|'Expired'|'RECALLED'|'EXPIRED';
+export type Medicine = {
+  id: number | string;
+  medicine: string;
+  batch: string;
+  expiry: string;
+  quantity: number;
+  supplier: string;
+  status: Status;
+  unitPrice?: number;
+  daysRemaining?: number;
+  batchNumber?: string;
+  medicineName?: string;
+  expiryDate?: string;
+  expiryDisplay?: string;
+  supplierName?: string;
+  availableQuantity?: number;
+  barcode?: string;
+  genericName?: string;
+};
+export type Audit = {
+  id: number | string;
+  date: string;
+  medicine: string;
+  batch: string;
+  quantity: number;
+  customer: string;
+  pharmacist: string;
+  status: string;
+  rxId?: string;
+  totalAmount?: number;
+  timestamp?: string;
+  auditTimestamp?: string;
+  action?: string;
+  reason?: string;
+};
 
 export type CommunicationPreference = 'WHATSAPP' | 'SMS';
 

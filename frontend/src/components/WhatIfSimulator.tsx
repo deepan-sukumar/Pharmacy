@@ -781,7 +781,7 @@ export default function WhatIfSimulator({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>
-                What-If Expiry & Inventory Risk Simulator
+                What-If Simulator
               </span>
               <span
                 style={{
@@ -794,11 +794,11 @@ export default function WhatIfSimulator({
                   border: '1px solid var(--primary-border)',
                 }}
               >
-                PROJECTION SANDBOX · DETERMINISTIC · READ-ONLY
+                PROJECTION SANDBOX · DETERMINISTIC
               </span>
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '3px 0 0' }}>
-              Predicts whether medicine batches will be consumed before expiry and tests hypothetical demand shifts, supplier delays, or reorders without altering live inventory.
+              Model order quantities, demand shifts and expiry risks before ordering.
             </p>
           </div>
         </div>

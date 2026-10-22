@@ -499,17 +499,17 @@ export default function AIAssistant({
       id: 'm-init',
       from: 'ai',
       badge: 'PHARMACY INTELLIGENCE',
-      title: 'OPERATIONAL DECISION COPILOT',
-      summary: 'Connected directly to live inventory, batch tracking, expiry runways, supplier returns, and dispensing audit trails.',
+      title: 'AI Pharmacy Assistant',
+      summary: 'Connected to live stock, expiry, supplier returns and dispensing audits.',
       priority: 'normal',
       dataType: 'actual',
-      text: 'Good day. I am your operational Pharmacy Intelligence Assistant. Ask me anything about stock reorders, near-expiry batches, supplier return eligibility, or dispensing audits.',
+      text: 'Ask questions about reorders, near-expiry batches, supplier returns or dispensing audits.',
       recommendedActions: [
         'Ask: "Which medicines do I need to buy sooner?" for procurement recommendations.',
         'Ask: "Which medicines expire within 30 days?" for expiry exposure tracking.',
         'Use What-If Simulator to model prospective purchase batch orders.'
       ],
-      sourceTransparency: 'Connected to live Firestore workspace state.',
+      sourceTransparency: 'Connected to live Firestore workspace.',
       time: 'Just now',
     },
   ]);
@@ -634,15 +634,15 @@ export default function AIAssistant({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
-                PharmaFlow Operational AI Assistant
+                AI Pharmacy Assistant
               </span>
               <span className="chip badge-teal" style={{ fontSize: 10, padding: '2px 8px' }}>
-                Gemini 3.5 Flash Synced
+                Gemini AI
               </span>
             </div>
             <p style={{ fontSize: 11.5, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4, margin: '2px 0 0' }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'var(--success)', display: 'inline-block' }} />
-              Live Firestore Controlled Tools & Audit Trail Active
+              Live Workspace Tools Active
             </p>
           </div>
         </div>

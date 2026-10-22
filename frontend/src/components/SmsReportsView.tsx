@@ -500,13 +500,13 @@ export default function SmsReportsView({
       >
         <div>
           <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            SAFETY & CLINICAL OUTREACH
+            SAFETY & RECALLS
           </span>
           <h1 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', margin: '4px 0 2px' }}>
             Patient Safety Communication
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Pharmacist-controlled expiry and recall notifications · 10-day safety action threshold
+            Send batch recall and expiry safety alerts to affected customers.
           </p>
         </div>
 

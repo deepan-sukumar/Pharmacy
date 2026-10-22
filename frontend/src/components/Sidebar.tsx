@@ -3,7 +3,7 @@ import {
   Gauge, Boxes, CalendarDays, Truck, CreditCard, ClipboardList,
   Users, Bell, ShieldAlert, BrainCircuit, SlidersHorizontal, BarChart3,
   Settings as SettingsIcon, Stethoscope, ChevronDown, ChevronRight,
-  LogOut, PanelLeftClose, PanelLeft, X, Sparkles, MessageSquare
+  LogOut, PanelLeftClose, PanelLeft, X, Sparkles, MessageSquare, PackagePlus
 } from 'lucide-react';
 import type { Page } from '../data';
 
@@ -26,40 +26,48 @@ interface NavGroup {
 const navGroups: NavGroup[] = [
   {
     id: 'inventory',
-    label: 'Inventory',
+    label: 'Inventory & Stock',
     icon: Boxes,
     defaultPage: 'inventory',
     items: [
       { id: 'inventory', label: 'Medicines & Stock', icon: Boxes },
+      { id: 'add-stock', label: 'Add Stock', icon: PackagePlus },
       { id: 'expiry', label: 'Batches & Expiry', icon: CalendarDays },
-      { id: 'suppliers', label: 'Suppliers & Returns', icon: Truck },
     ],
   },
   {
     id: 'dispensing',
-    label: 'Dispensing',
+    label: 'Dispensing & Patients',
     icon: CreditCard,
     defaultPage: 'dispensing',
     items: [
-      { id: 'dispensing', label: 'New Dispensing', icon: CreditCard },
+      { id: 'dispensing', label: 'Dispense Medicine', icon: CreditCard },
       { id: 'audit', label: 'Dispensing Audit', icon: ClipboardList },
       { id: 'customers', label: 'Customers', icon: Users },
     ],
   },
   {
     id: 'safety',
-    label: 'Safety & Alerts',
+    label: 'Safety & Recalls',
     icon: ShieldAlert,
-    defaultPage: 'alerts',
+    defaultPage: 'recall',
     items: [
-      { id: 'alerts', label: 'Alerts', icon: Bell, count: 3, countTone: 'amber' },
-      { id: 'recall', label: 'Batch Recall', icon: ShieldAlert, count: 1, countTone: 'red' },
+      { id: 'recall', label: 'Batch Recall & Quarantine', icon: ShieldAlert, count: 1, countTone: 'red' },
       { id: 'sms-reports', label: 'Patient Safety Communication', icon: MessageSquare },
     ],
   },
   {
+    id: 'suppliers',
+    label: 'Suppliers & Returns',
+    icon: Truck,
+    defaultPage: 'suppliers',
+    items: [
+      { id: 'suppliers', label: 'Suppliers & Returns', icon: Truck },
+    ],
+  },
+  {
     id: 'ai',
-    label: 'AI & Insights',
+    label: 'Intelligence & Reports',
     icon: BrainCircuit,
     defaultPage: 'ai',
     items: [
@@ -644,9 +652,9 @@ export function MobileBottomNav({
   onOpenMenu: () => void;
   alertCount?: number;
 }) {
-  const isInventoryActive = ['inventory', 'add-stock', 'expiry', 'suppliers'].includes(page);
+  const isInventoryActive = ['inventory', 'add-stock', 'expiry'].includes(page);
   const isDispenseActive = ['dispensing', 'audit', 'customers'].includes(page);
-  const isAlertsActive = ['alerts', 'recall'].includes(page);
+  const isAlertsActive = ['recall', 'sms-reports', 'alerts'].includes(page);
 
   return (
     <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
@@ -694,9 +702,9 @@ export function MobileBottomNav({
       </button>
 
       <button
-        onClick={() => onNavigate('alerts')}
+        onClick={() => onNavigate('recall')}
         className={`mobile-nav-tab ${isAlertsActive ? 'active' : ''}`}
-        title="Alerts & Recalls"
+        title="Safety & Recalls"
       >
         <div style={{ position: 'relative' }}>
           <Bell size={20} strokeWidth={isAlertsActive ? 2.5 : 1.8} />

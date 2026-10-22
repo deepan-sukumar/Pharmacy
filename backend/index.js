@@ -1301,33 +1301,8 @@ app.post('/api/dispensing', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// DISPENSING AUDIT TRAIL
+// DISPENSING AUDIT TRAIL (Creation & Logging)
 // -------------------------------------------------------------
-app.get('/api/audits', async (req, res) => {
-  try {
-    const pharmacyId = getPharmacyId(req);
-    if (!pharmacyId) {
-      return res.json([]);
-    }
-    if (isConnected()) {
-      const snapshot = await db.collection('audits')
-        .where('pharmacyId', '==', pharmacyId)
-        .get();
-
-      if (snapshot.empty && pharmacyId === 'DEMO_PHARMACY') {
-        return res.json(memoryStore.audits);
-      }
-
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      items.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-      return res.json(items);
-    }
-    const filtered = memoryStore.audits.filter(a => a.pharmacyId === pharmacyId);
-    res.json(filtered);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.post('/api/audits', async (req, res) => {
   try {
@@ -1353,47 +1328,8 @@ app.post('/api/audits', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// CUSTOMERS DIRECTORY
+// CUSTOMERS DIRECTORY (Creation & Modification)
 // -------------------------------------------------------------
-app.get('/api/customers', async (req, res) => {
-  try {
-    const pharmacyId = getPharmacyId(req);
-    if (!pharmacyId) {
-      return res.json([]);
-    }
-    if (isConnected()) {
-      const snapshot = await db.collection('customers')
-        .where('pharmacyId', '==', pharmacyId)
-        .get();
-
-      if (snapshot.empty && pharmacyId === 'DEMO_PHARMACY') {
-        return res.json(memoryStore.customers);
-      }
-
-      const items = snapshot.docs.map(doc => {
-        const data = doc.data();
-        let commPref = data.communicationPreference;
-        if (!commPref) {
-          const nameLower = (data.name || '').toLowerCase();
-          commPref = (nameLower.includes('deepak') || nameLower.includes('manish') || nameLower.includes('deeps')) ? 'WHATSAPP' : 'SMS';
-        }
-        return { id: doc.id, ...data, communicationPreference: commPref };
-      });
-      return res.json(items);
-    }
-    const filtered = memoryStore.customers.filter(c => c.pharmacyId === pharmacyId).map(c => {
-      let commPref = c.communicationPreference;
-      if (!commPref) {
-        const nameLower = (c.name || '').toLowerCase();
-        commPref = (nameLower.includes('deepak') || nameLower.includes('manish') || nameLower.includes('deeps')) ? 'WHATSAPP' : 'SMS';
-      }
-      return { ...c, communicationPreference: commPref };
-    });
-    res.json(filtered);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.post('/api/customers', async (req, res) => {
   try {
@@ -1466,32 +1402,8 @@ app.put('/api/customers/:id', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// SUPPLIERS & RETURNS
+// SUPPLIERS & RETURNS (Creation)
 // -------------------------------------------------------------
-app.get('/api/suppliers', async (req, res) => {
-  try {
-    const pharmacyId = getPharmacyId(req);
-    if (!pharmacyId) {
-      return res.json([]);
-    }
-    if (isConnected()) {
-      const snapshot = await db.collection('suppliers')
-        .where('pharmacyId', '==', pharmacyId)
-        .get();
-
-      if (snapshot.empty && pharmacyId === 'DEMO_PHARMACY') {
-        return res.json(memoryStore.suppliers);
-      }
-
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(items);
-    }
-    const filtered = memoryStore.suppliers.filter(s => s.pharmacyId === pharmacyId);
-    res.json(filtered);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.post('/api/suppliers', async (req, res) => {
   try {
@@ -1512,30 +1424,7 @@ app.post('/api/suppliers', async (req, res) => {
   }
 });
 
-app.get('/api/returns', async (req, res) => {
-  try {
-    const pharmacyId = getPharmacyId(req);
-    if (!pharmacyId) {
-      return res.json([]);
-    }
-    if (isConnected()) {
-      const snapshot = await db.collection('returns')
-        .where('pharmacyId', '==', pharmacyId)
-        .get();
 
-      if (snapshot.empty && pharmacyId === 'DEMO_PHARMACY') {
-        return res.json(memoryStore.returns);
-      }
-
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(items);
-    }
-    const filtered = memoryStore.returns.filter(r => r.pharmacyId === pharmacyId);
-    res.json(filtered);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.post('/api/returns', async (req, res) => {
   try {
@@ -1563,32 +1452,8 @@ app.post('/api/returns', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// BATCH RECALL & QUARANTINE (With Affected Patient Query)
+// BATCH RECALL & QUARANTINE (Creation & Management)
 // -------------------------------------------------------------
-app.get('/api/recalls', async (req, res) => {
-  try {
-    const pharmacyId = getPharmacyId(req);
-    if (!pharmacyId) {
-      return res.json([]);
-    }
-    if (isConnected()) {
-      const snapshot = await db.collection('recalls')
-        .where('pharmacyId', '==', pharmacyId)
-        .get();
-
-      if (snapshot.empty && pharmacyId === 'DEMO_PHARMACY') {
-        return res.json(memoryStore.recalls);
-      }
-
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(items);
-    }
-    const filtered = memoryStore.recalls.filter(r => r.pharmacyId === pharmacyId);
-    res.json(filtered);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.post('/api/recalls', async (req, res) => {
   try {
@@ -2620,16 +2485,7 @@ app.get('/api/customers/:identifier/details-traceability', async (req, res) => {
   }
 });
 
-app.post('/api/sms/recall-broadcast', async (req, res) => {
-  try {
-    const pharmacyId = getPharmacyId(req);
-    const { batch, batchId, reason } = req.body;
-    const result = await sendRecallNotificationToAffectedCustomers(pharmacyId, batchId || batch, reason);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+
 
 app.get('/api/sms/templates', (req, res) => {
   const { type, language, variables } = req.query;

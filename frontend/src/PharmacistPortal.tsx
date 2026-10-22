@@ -18,7 +18,6 @@ import WorkflowFlowchart from './components/WorkflowFlowchart';
 import EnhancedWhatIfSimulator from './components/WhatIfSimulator';
 import EnhancedAIAssistant from './components/AIAssistant';
 import ExpiryTimeline from './components/ExpiryTimeline';
-import ManualSmsModal from './components/ManualSmsModal';
 import SafetyCommunicationModal from './components/SafetyCommunicationModal';
 import SmsReportsView from './components/SmsReportsView';
 import CustomerSmsDetailsModal from './components/CustomerSmsDetailsModal';
@@ -37,19 +36,18 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: Gauge },
-  { id: 'inventory', label: 'Inventory', icon: Boxes },
+  { id: 'inventory', label: 'Medicines & Stock', icon: Boxes },
   { id: 'add-stock', label: 'Add Stock', icon: PackagePlus },
-  { id: 'expiry', label: 'Batch & Expiry', icon: CalendarDays },
-  { id: 'dispensing', label: 'Dispensing', icon: CreditCard },
+  { id: 'expiry', label: 'Batches & Expiry', icon: CalendarDays },
+  { id: 'dispensing', label: 'Dispense Medicine', icon: CreditCard },
   { id: 'audit', label: 'Dispensing Audit', icon: ClipboardList },
   { id: 'customers', label: 'Customers', icon: Users },
-  { id: 'alerts', label: 'Alerts', icon: Bell, count: 3 },
-  { id: 'suppliers', label: 'Supplier Returns', icon: Truck },
-  { id: 'recall', label: 'Batch Recall', icon: ShieldAlert },
+  { id: 'recall', label: 'Batch Recall & Quarantine', icon: ShieldAlert },
   { id: 'sms-reports', label: 'Patient Safety Communication', icon: MessageSquare },
-  { id: 'ai', label: 'AI Assistant', icon: BrainCircuit },
+  { id: 'suppliers', label: 'Suppliers & Returns', icon: Truck },
+  { id: 'ai', label: 'AI Pharmacy Assistant', icon: BrainCircuit },
   { id: 'simulator', label: 'What-If Simulator', icon: SlidersHorizontal },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
+  { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
 ];
 
 
@@ -87,20 +85,20 @@ function Topbar({
   const searchRef = useRef<HTMLDivElement>(null);
 
   const labelMap: Record<Page, string> = {
-    dashboard: 'Dashboard & Key Metrics',
-    inventory: 'Medicines & Stock Inventory',
-    'add-stock': 'Add New Medicine Batch',
-    expiry: 'Batch Tracking & Expiry Timeline',
-    dispensing: 'Prescription Dispensing & Billing',
-    audit: 'Dispensing Audit Trails',
-    customers: 'Customer & Patient Records',
-    alerts: 'Operational Safety Alerts',
-    suppliers: 'Supplier Performance & Return Claims',
-    recall: 'Batch Recall Management',
-    ai: 'PharmaFlow AI Clinical Assistant',
-    simulator: 'What-If Expiry Risk Simulator',
-    reports: 'Compliance Reports & Analytics',
-    settings: 'Pharmacy & System Settings',
+    dashboard: 'Dashboard',
+    inventory: 'Medicines & Stock',
+    'add-stock': 'Add Stock',
+    expiry: 'Batches & Expiry',
+    dispensing: 'Dispense Medicine',
+    audit: 'Dispensing History & Audit',
+    customers: 'Customers',
+    alerts: 'Safety & Recalls',
+    suppliers: 'Suppliers & Returns',
+    recall: 'Batch Recall & Quarantine',
+    ai: 'AI Pharmacy Assistant',
+    simulator: 'What-If Simulator',
+    reports: 'Reports & Analytics',
+    settings: 'Settings & Profile',
     'sms-reports': 'Patient Safety Communication',
   };
 
@@ -1165,175 +1163,165 @@ function Dashboard({ onNavigate, inventory, currentUser }: { onNavigate: (p: str
   const expiredCount = inventory.filter(m => m.status !== 'Recalled' && (m.status === 'Expired' || parseDaysRemaining(m.expiry) < 0)).length;
   const nearExpiryCount = inventory.filter(m => m.status !== 'Recalled' && ((parseDaysRemaining(m.expiry) > 0 && parseDaysRemaining(m.expiry) <= 30) || m.status === 'Near Expiry')).length;
   const lowStockCount = inventory.filter(m => m.status !== 'Recalled' && (m.status === 'Low Stock' || m.quantity < 80)).length;
+  const recalledCount = inventory.filter(m => m.status === 'Recalled').length;
   const totalUnits = inventory.reduce((sum, m) => sum + m.quantity, 0);
 
+  const [showSopModal, setShowSopModal] = useState(false);
   const pharmacistGreetingName = currentUser?.fullName ? currentUser.fullName.split(' ')[0] : 'Pharmacist';
 
   return (
     <>
       <PageHeader
-        eyebrow="OPERATIONAL COMMAND CENTER"
-        title={`Good day, ${pharmacistGreetingName} 👋`}
-        description="Live overview of prescription dispensing velocity, inventory buffer levels, and batch expiry containment."
+        eyebrow="DASHBOARD"
+        title={`Welcome, ${pharmacistGreetingName}`}
+        description="Daily stock metrics, priority actions and expiry timeline."
         action={
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary" onClick={() => setShowSopModal(true)}>
+              <ClipboardCheck size={15} /> SOP Workflow
+            </button>
             <button className="btn btn-secondary" onClick={() => onNavigate('add-stock')}>
               <PackagePlus size={15} /> Add Stock
             </button>
             <button className="btn btn-teal" onClick={() => onNavigate('dispensing')}>
-              <Plus size={15} /> New Dispensing
+              <Plus size={15} /> Dispense Medicine
             </button>
           </div>
         }
       />
 
-      {/* Top 6 KPI Cards with High Contrast & Semantic Statuses */}
+      {/* 4 Core Essential Metrics */}
       <div className="responsive-stats-grid">
-        <Stat label="Medicines" value={String(inventory.length)} change="+4.2% formulary" icon={Package} tone="teal" />
-        <Stat label="Batches" value={String(new Set(inventory.map(m => m.batch)).size)} change="Tracked across distributors" icon={Boxes} tone="sage" />
-        <Stat label="Total Stock" value={totalUnits.toLocaleString()} change="+8.4% buffer" icon={Activity} tone="green" />
-        <Stat label="Low Stock" value={String(lowStockCount)} change="Reorder trigger" icon={AlertTriangle} tone="orange" />
-        <Stat label="Near Expiry" value={String(nearExpiryCount)} change="<90d FEFO action" icon={Clock3} tone="amber" />
-        <Stat label="Expired" value={String(expiredCount)} change="Quarantined" icon={AlertCircle} tone="red" />
+        <Stat label="Total Medicines" value={String(inventory.length)} change={`${totalUnits.toLocaleString()} units in stock`} icon={Package} tone="teal" />
+        <Stat label="Low Stock" value={String(lowStockCount)} change="Needs replenishment" icon={AlertTriangle} tone="orange" />
+        <Stat label="Near Expiry" value={String(nearExpiryCount)} change="Expiring within 30 days" icon={Clock3} tone="amber" />
+        <Stat label="Recalled Batches" value={String(recalledCount)} change="Quarantined from dispensing" icon={AlertCircle} tone="red" />
       </div>
 
-      {/* Main Charts & Critical Alerts Row */}
-      <div className="responsive-dashboard-grid">
+      {/* Daily Priorities & Immediate Actions */}
+      <div className="responsive-dashboard-grid" style={{ marginBottom: 20 }}>
         <Panel
-          title="Expiry Risk Distribution"
+          title="Urgent Priorities"
           action={
             <button
               style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
-              onClick={() => onNavigate('expiry')}
+              onClick={() => onNavigate('recall')}
             >
-              Full Expiry Table →
-            </button>
-          }
-        >
-          <ExpiryRiskChart inventory={inventory} onNavigateExpiry={() => onNavigate('expiry')} />
-        </Panel>
-
-        <Panel
-          title="Critical Alerts & Risk Escalation"
-          action={
-            <button
-              style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
-              onClick={() => onNavigate('alerts')}
-            >
-              See all alerts →
+              Safety Hub →
             </button>
           }
         >
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {inventory.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--text-3)' }}>
-                <CheckCircle2 size={32} color="var(--success)" style={{ margin: '0 auto 8px' }} />
-                <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>All Systems Nominal</p>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>No stock alerts or quarantine notices active.</p>
+            {nearExpiryCount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <AlertRow icon={AlertTriangle} tone="amber" title={`${nearExpiryCount} batch(es) nearing expiry`} detail="Prioritize dispensing via FEFO order." />
+                <button className="btn btn-secondary" style={{ fontSize: 11.5, padding: '4px 10px', whiteSpace: 'nowrap' }} onClick={() => onNavigate('expiry')}>
+                  View FEFO
+                </button>
               </div>
-            ) : (
-              <>
-                {nearExpiryCount > 0 && <AlertRow icon={AlertTriangle} tone="amber" title={`${nearExpiryCount} Batch(es) near expiry`} detail="FEFO priority dispatch" />}
-                {inventory.filter(m => m.status === 'Recalled').length > 0 && <AlertRow icon={AlertCircle} tone="red" title={`${inventory.filter(m => m.status === 'Recalled').length} Batch(es) under recall`} detail="Locked from dispensing" />}
-                {lowStockCount > 0 && <AlertRow icon={ArrowDownRight} tone="orange" title={`${lowStockCount} Medicine(s) low stock`} detail="Supplier reorder pending" />}
-                {nearExpiryCount === 0 && lowStockCount === 0 && inventory.filter(m => m.status === 'Recalled').length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '16px 12px', color: 'var(--text-3)' }}>
-                    <CheckCircle2 size={24} color="var(--success)" style={{ margin: '0 auto 6px' }} />
-                    <p style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--text)' }}>No active stock alerts</p>
-                  </div>
-                )}
-              </>
             )}
-            <div style={{ paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
-              <button onClick={() => onNavigate('recall')} className="btn btn-danger" style={{ fontSize: 11, padding: '5px 10px', flex: 1, justifyContent: 'center' }}>
-                Batch Recall Action
+            {recalledCount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <AlertRow icon={AlertCircle} tone="red" title={`${recalledCount} batch(es) under recall`} detail="Quarantined and blocked at POS." />
+                <button className="btn btn-danger" style={{ fontSize: 11.5, padding: '4px 10px', whiteSpace: 'nowrap' }} onClick={() => onNavigate('recall')}>
+                  Manage Recall
+                </button>
+              </div>
+            )}
+            {lowStockCount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <AlertRow icon={ArrowDownRight} tone="orange" title={`${lowStockCount} medicine(s) low stock`} detail="Stock replenishment recommended." />
+                <button className="btn btn-secondary" style={{ fontSize: 11.5, padding: '4px 10px', whiteSpace: 'nowrap' }} onClick={() => onNavigate('add-stock')}>
+                  Restock
+                </button>
+              </div>
+            )}
+            {nearExpiryCount === 0 && recalledCount === 0 && lowStockCount === 0 && (
+              <div style={{ textAlign: 'center', padding: '16px 12px', color: 'var(--text-3)' }}>
+                <CheckCircle2 size={24} color="var(--success)" style={{ margin: '0 auto 6px' }} />
+                <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>No urgent actions required</p>
+                <p style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 2 }}>All inventory is within normal thresholds.</p>
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        <Panel
+          title="Today's Dispensing"
+          action={
+            <button
+              style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={() => onNavigate('audit')}
+            >
+              Full Audit Trail →
+            </button>
+          }
+        >
+          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-4)', textTransform: 'uppercase' }}>Prescriptions</span>
+                <p style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '4px 0 0' }}>18</p>
+                <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>100% FEFO compliant</span>
+              </div>
+              <div style={{ background: 'var(--bg-alt)', padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-4)', textTransform: 'uppercase' }}>Patients Served</span>
+                <p style={{ fontSize: 22, fontWeight: 900, color: 'var(--primary)', margin: '4px 0 0' }}>16</p>
+                <span style={{ fontSize: 11, color: 'var(--text-4)' }}>Verified safety checks</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button onClick={() => onNavigate('dispensing')} className="btn btn-teal" style={{ flex: 1, justifyContent: 'center', fontSize: 12.5 }}>
+                <CreditCard size={14} /> Dispense Medicine
               </button>
-              <button onClick={() => onNavigate('expiry')} className="btn btn-secondary" style={{ fontSize: 11, padding: '5px 10px', flex: 1, justifyContent: 'center' }}>
-                View Expiry Batches
+              <button onClick={() => onNavigate('simulator')} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center', fontSize: 12.5 }}>
+                <SlidersHorizontal size={14} /> What-If Simulator
               </button>
             </div>
           </div>
         </Panel>
       </div>
 
-      {/* Stock Movement & Most Dispensed Row */}
-      <div className="responsive-split-grid" style={{ marginBottom: 20 }}>
-        <Panel
-          title="Stock Movement (Inflow vs Outflow)"
-          action={<span style={{ fontSize: 12, color: 'var(--text-3)' }}>Apr – Sep 2026</span>}
-        >
-          <StockMovementChart />
-        </Panel>
-
-        <Panel
-          title="Most Dispensed Medicines Ranking"
-          action={
-            <button
-              style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
-              onClick={() => onNavigate('reports')}
-            >
-              Full analytics report →
-            </button>
-          }
-        >
-          <MostDispensedRanking onViewReport={() => onNavigate('reports')} />
-        </Panel>
-      </div>
-
-      {/* Comprehensive SOP & Compliance Flowchart Embedded into Dashboard */}
-      <div style={{ marginBottom: 20 }}>
-        <WorkflowFlowchart />
-      </div>
-
-      {/* AI Simulation Insight Banner */}
-      <div
-        className="card"
-        style={{
-          padding: 20,
-          background: 'linear-gradient(135deg, var(--bg-alt) 0%, var(--surface-raised) 100%)',
-          color: 'var(--text)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 18,
-          border: '1px solid var(--border)',
-        }}
+      {/* FEFO Priority Timeline */}
+      <Panel
+        title="FEFO Batch Expiry Timeline (Priority Batches)"
+        action={
+          <button
+            style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
+            onClick={() => onNavigate('expiry')}
+          >
+            View All Batches in Batches & Expiry →
+          </button>
+        }
       >
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: 'var(--primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            boxShadow: '0 4px 14px var(--primary-glow)',
-          }}
-        >
-          <BrainCircuit size={22} color="white" />
+        <div style={{ padding: '8px 16px' }}>
+          <ExpiryTimeline
+            inventory={inventory}
+            onNavigateExpiryTable={() => onNavigate('expiry')}
+          />
         </div>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 10.5, color: 'var(--primary)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            OPERATIONAL AI ADVISORY & SIMULATION
-          </p>
-          <p style={{ color: 'var(--text)', fontWeight: 600, marginTop: 3, fontSize: 13.5 }}>
-            Purchasing 300 additional units of Vitamin D3 will cause ~120 units (₹ 7,800) to expire unsold based on current velocity. Run the What-If Simulator before issuing PO.
-          </p>
+      </Panel>
+
+      {/* SOP Workflow Modal */}
+      {showSopModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.7)', backdropFilter: 'blur(4px)' }} onClick={() => setShowSopModal(false)} />
+          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 960, maxHeight: '90vh', overflowY: 'auto', zIndex: 121, padding: 0 }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-raised)' }}>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Standard Operating Procedure (SOP)</h3>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Step-by-step pharmacy verification and dispensing workflow.</p>
+              </div>
+              <button onClick={() => setShowSopModal(false)} className="btn btn-ghost" style={{ padding: 6 }}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <WorkflowFlowchart />
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => onNavigate('simulator')}
-          className="btn btn-teal"
-          style={{
-            whiteSpace: 'nowrap',
-            fontSize: 13,
-            padding: '9px 16px',
-            borderRadius: 8,
-          }}
-        >
-          Launch Simulator <ChevronRight size={15} />
-        </button>
-      </div>
+      )}
     </>
   );
 }
@@ -1370,12 +1358,12 @@ function Inventory({
   return (
     <>
       <PageHeader
-        eyebrow="STOCK CONTROL"
-        title="Medicine Inventory"
-        description="Track medicines, batches, and stock status in one place."
+        eyebrow="INVENTORY & STOCK"
+        title="Medicines & Stock"
+        description="Manage medicines, stock and batches."
         action={
           <button onClick={onAdd} className="btn btn-teal">
-            <Plus size={15}/> Add stock
+            <Plus size={15}/> Add Stock
           </button>
         }
       />
@@ -1535,7 +1523,7 @@ function Inventory({
   );
 }
 
-/* ─────────── 3. ADD STOCK (SCANNER & INVOICE INTEGRATION) ─────────── */
+/* ─────────── 3. ADD STOCK (4 ENTRY METHODS) ─────────── */
 function AddStock({
   inventory,
   setInventory,
@@ -1547,8 +1535,10 @@ function AddStock({
   onDone: () => void;
   showToast: (s: string) => void;
 }) {
+  const [entryMethod, setEntryMethod] = useState<'barcode' | 'invoice' | 'excel' | 'manual'>('manual');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [quickBarcode, setQuickBarcode] = useState('');
 
   const [form, setForm] = useState({
     medicine: '',
@@ -1568,6 +1558,7 @@ function AddStock({
       supplier: data.supplier,
       unitPrice: String(data.unitPrice || 45),
     });
+    setEntryMethod('manual');
     showToast(`Scanned ${data.medicine} (${data.batch})`);
   };
 
@@ -1579,10 +1570,38 @@ function AddStock({
       } else {
         setInventory(prev => [...prev, ...items]);
       }
-      showToast(`Synchronized ${items.length} imported items with inventory`);
+      showToast(`Imported ${items.length} items`);
     } catch {
       setInventory(prev => [...prev, ...items]);
     }
+  };
+
+  const handleBarcodeLookup = () => {
+    const code = quickBarcode.trim();
+    if (!code) return;
+    const match = inventory.find(m => m.batch === code || m.medicine.toLowerCase().includes(code.toLowerCase()));
+    if (match) {
+      setForm({
+        medicine: match.medicine,
+        batch: `BTH${Math.floor(100 + Math.random() * 900)}`,
+        expiry: 'Dec 2027',
+        quantity: '50',
+        supplier: match.supplier,
+        unitPrice: String(match.unitPrice || 45),
+      });
+      showToast(`Matched medicine: ${match.medicine}`);
+    } else {
+      setForm({
+        medicine: code.length > 6 ? `Medication (${code.slice(-4)})` : 'New Medicine',
+        batch: `BTH-${code.slice(0, 6)}`,
+        expiry: 'Dec 2027',
+        quantity: '50',
+        supplier: 'ABC Pharma',
+        unitPrice: '45',
+      });
+      showToast(`Prefilled details for barcode ${code}`);
+    }
+    setEntryMethod('manual');
   };
 
   const submit = async () => {
@@ -1602,10 +1621,10 @@ function AddStock({
     try {
       const added = await api.addMedicine(newMed);
       setInventory([...inventory, added]);
-      showToast(`Added ${form.medicine} to inventory`);
+      showToast(`Added ${form.medicine}`);
     } catch {
       setInventory([...inventory, { id: Date.now(), ...newMed }]);
-      showToast(`Added ${form.medicine} (local)`);
+      showToast(`Added ${form.medicine}`);
     }
     onDone();
   };
@@ -1613,96 +1632,169 @@ function AddStock({
   return (
     <>
       <PageHeader
-        eyebrow="STOCK CONTROL"
+        eyebrow="INVENTORY & STOCK"
         title="Add Stock"
-        description="Bring new medication stock into your inventory via barcode scanning, invoice upload, or manual entry."
+        description="Receive stock via barcode, invoice upload, spreadsheet or manual entry."
         action={
           <button className="btn btn-secondary" onClick={onDone}>
-            Cancel / Back to Inventory
+            Back to Inventory
           </button>
         }
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="card card-hover" style={{ padding: 22 }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <QrCode size={22} color="var(--primary)" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Barcode / QR Package Scanner</h3>
-                <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
-                  Scan medicine packages, strips, or bulk carton QR codes for auto-filling batch details.
-                </p>
-                <div style={{ marginTop: 14 }}>
-                  <button className="btn btn-teal" onClick={() => setScannerOpen(true)}>
-                    <Camera size={15} /> Launch QR Scanner
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* 4 Clear Entry Methods Tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 12, flexWrap: 'wrap' }}>
+        {[
+          { id: 'barcode' as const, label: 'Scan Barcode', icon: QrCode },
+          { id: 'invoice' as const, label: 'Upload Invoice', icon: FileText },
+          { id: 'excel' as const, label: 'Import Excel/CSV', icon: UploadCloud },
+          { id: 'manual' as const, label: 'Manual Entry', icon: PackagePlus },
+        ].map(m => {
+          const active = entryMethod === m.id;
+          const Icon = m.icon;
+          return (
+            <button
+              key={m.id}
+              onClick={() => setEntryMethod(m.id)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '9px 16px',
+                borderRadius: 9,
+                fontSize: 13,
+                fontWeight: 700,
+                border: active ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+                background: active ? 'var(--primary-light)' : 'var(--bg-alt)',
+                color: active ? 'var(--primary)' : 'var(--text-2)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Icon size={16} />
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
 
-          <div className="card card-hover" style={{ padding: 22 }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--info-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <FileText size={22} color="var(--info)" />
+      {/* Method 1: Scan Barcode */}
+      {entryMethod === 'barcode' && (
+        <div className="card" style={{ padding: 24, marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Camera size={22} color="var(--primary)" />
+            </div>
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>Camera Barcode / QR Scanner</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
+                Use your device camera to scan medicine strip barcodes or packaging QR codes.
+              </p>
+              <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                <button className="btn btn-teal" onClick={() => setScannerOpen(true)}>
+                  <Camera size={15} /> Launch Camera Scanner
+                </button>
               </div>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Distributor Invoice OCR</h3>
-                <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
-                  Upload a distributor purchase bill (PDF/Image) to batch-import all medications automatically.
-                </p>
-                <div style={{ marginTop: 14 }}>
-                  <button className="btn btn-secondary" onClick={() => setInvoiceModalOpen(true)}>
-                    <UploadCloud size={15} /> Upload Invoice Bill
-                  </button>
-                </div>
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', maxWidth: 440 }}>
+                <input
+                  className="input"
+                  placeholder="Or enter barcode number directly..."
+                  value={quickBarcode}
+                  onChange={e => setQuickBarcode(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleBarcodeLookup()}
+                />
+                <button className="btn btn-secondary" onClick={handleBarcodeLookup}>
+                  Lookup
+                </button>
               </div>
             </div>
           </div>
         </div>
+      )}
 
-        <div className="card" style={{ padding: 24 }}>
-          <h3 style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12, color: 'var(--text)' }}>
-            Stock Entry Details
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div style={{ gridColumn: 'span 2' }}>
-              <label className="label">Medicine name *</label>
-              <input className="input" placeholder="e.g. Paracetamol 500mg" value={form.medicine} onChange={e => setForm({ ...form, medicine: e.target.value })}/>
+      {/* Method 2: Upload Invoice */}
+      {entryMethod === 'invoice' && (
+        <div className="card" style={{ padding: 24, marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--info-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileText size={22} color="var(--info)" />
             </div>
-            <div>
-              <label className="label">Batch number</label>
-              <input className="input" placeholder="e.g. PCT101" value={form.batch} onChange={e => setForm({ ...form, batch: e.target.value })}/>
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>Upload Distributor Invoice (PDF / Photo)</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
+                Upload supplier purchase bills. Medicines, batch numbers, expiry dates and quantities are extracted automatically.
+              </p>
+              <div style={{ marginTop: 14 }}>
+                <button className="btn btn-teal" onClick={() => setInvoiceModalOpen(true)}>
+                  <UploadCloud size={15} /> Upload Invoice
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="label">Expiry date</label>
-              <input className="input" placeholder="e.g. Sep 2027" value={form.expiry} onChange={e => setForm({ ...form, expiry: e.target.value })}/>
+          </div>
+        </div>
+      )}
+
+      {/* Method 3: Import Excel / CSV */}
+      {entryMethod === 'excel' && (
+        <div className="card" style={{ padding: 24, marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--success-light, rgba(34,197,94,0.12))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <UploadCloud size={22} color="var(--success, #16A34A)" />
             </div>
-            <div>
-              <label className="label">Quantity *</label>
-              <input className="input" type="number" placeholder="0" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })}/>
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)' }}>Import Stock Spreadsheet (.csv / .xlsx)</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
+                Upload your bulk inventory spreadsheet with columns: Medicine Name, Batch, Expiry, Quantity, Price, Supplier.
+              </p>
+              <div style={{ marginTop: 14 }}>
+                <button className="btn btn-teal" onClick={() => setInvoiceModalOpen(true)}>
+                  <UploadCloud size={15} /> Select Spreadsheet / CSV
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="label">Unit Price (₹)</label>
-              <input className="input" type="number" placeholder="45" value={form.unitPrice} onChange={e => setForm({ ...form, unitPrice: e.target.value })}/>
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <label className="label">Supplier</label>
-              <select className="input" value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}>
-                <option value="">Select supplier</option>
-                <option>ABC Pharma</option>
-                <option>MediSource</option>
-                <option>HealthCare Labs</option>
-                <option>Nova Pharma</option>
-              </select>
-            </div>
-            <div style={{ gridColumn: 'span 2', display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
-              <button className="btn btn-secondary" onClick={onDone}>Cancel</button>
-              <button className="btn btn-teal" onClick={submit}><PackagePlus size={15}/> Add to Inventory</button>
-            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Method 4: Manual Entry Form (Always available for reviewing or direct typing) */}
+      <div className="card" style={{ padding: 24 }}>
+        <h3 style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12, color: 'var(--text)' }}>
+          {entryMethod === 'manual' ? 'Manual Stock Entry' : 'Verify & Confirm Medicine Details'}
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+          <div style={{ gridColumn: 'span 2' }}>
+            <label className="label">Medicine Name *</label>
+            <input className="input" placeholder="e.g. Paracetamol 500mg" value={form.medicine} onChange={e => setForm({ ...form, medicine: e.target.value })}/>
+          </div>
+          <div>
+            <label className="label">Batch Number</label>
+            <input className="input" placeholder="e.g. PCT101" value={form.batch} onChange={e => setForm({ ...form, batch: e.target.value })}/>
+          </div>
+          <div>
+            <label className="label">Expiry Date</label>
+            <input className="input" placeholder="e.g. Sep 2027" value={form.expiry} onChange={e => setForm({ ...form, expiry: e.target.value })}/>
+          </div>
+          <div>
+            <label className="label">Quantity *</label>
+            <input className="input" type="number" placeholder="0" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })}/>
+          </div>
+          <div>
+            <label className="label">Unit Price (₹)</label>
+            <input className="input" type="number" placeholder="45" value={form.unitPrice} onChange={e => setForm({ ...form, unitPrice: e.target.value })}/>
+          </div>
+          <div style={{ gridColumn: 'span 2' }}>
+            <label className="label">Supplier</label>
+            <select className="input" value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}>
+              <option value="">Select supplier</option>
+              <option>ABC Pharma</option>
+              <option>MediSource</option>
+              <option>HealthCare Labs</option>
+              <option>Nova Pharma</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: 'span 2', display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button className="btn btn-secondary" onClick={onDone}>Cancel</button>
+            <button className="btn btn-teal" onClick={submit}><PackagePlus size={15}/> Add Medicine</button>
           </div>
         </div>
       </div>
@@ -1736,9 +1828,9 @@ function Expiry({
   return (
     <>
       <PageHeader
-        eyebrow="RISK MANAGEMENT"
-        title="Batch & Expiry Tracking"
-        description="Stay ahead of expiry risk with real-time FEFO batch visibility."
+        eyebrow="INVENTORY & STOCK"
+        title="Batches & Expiry"
+        description="Track batch expiry dates, risks and FEFO status."
         action={
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button
@@ -2197,9 +2289,9 @@ function Dispensing({
   return (
     <>
       <PageHeader
-        eyebrow="DAILY OPERATIONS"
-        title="Dispensing"
-        description="Safely dispense medication with full batch traceability and FEFO compliance."
+        eyebrow="DISPENSING & PATIENTS"
+        title="Dispense Medicine"
+        description="Dispense medicines with automatic FEFO batch selection and recall protection."
         action={
           <button className="btn btn-secondary" onClick={() => setScannerOpen(true)}>
             <QrCode size={15} /> Scan Prescription / Batch
@@ -2416,9 +2508,9 @@ function AuditPage({
   return (
     <>
       <PageHeader
-        eyebrow="REGULATORY COMPLIANCE & GOVERNANCE"
-        title="Dispensing Audit Trail"
-        description="Immutable chronological record of every dispensed prescription with full batch traceability and pharmacist accountability."
+        eyebrow="DISPENSING & PATIENTS"
+        title="Dispensing History & Audit"
+        description="Review past dispensing records and batch audit history."
         action={
           <div style={{ display: 'flex', gap: 10 }}>
             <button
@@ -2684,6 +2776,7 @@ function Customers({
   customersList,
   setCustomersList,
   audits,
+  inventory = [],
   showToast,
   onOpenManualSms,
   onOpenSafetyCommunication,
@@ -2691,12 +2784,14 @@ function Customers({
   customersList: CustomerItem[];
   setCustomersList: React.Dispatch<React.SetStateAction<CustomerItem[]>>;
   audits: Audit[];
+  inventory?: Medicine[];
   showToast: (s: string) => void;
   onOpenManualSms?: (cust: CustomerItem) => void;
   onOpenSafetyCommunication?: (cust: any, type?: string, details?: any) => void;
 }) {
   const [q, setQ] = useState('');
   const [selectedCust, setSelectedCust] = useState<CustomerItem | null>(null);
+  const [detailTab, setDetailTab] = useState<'info' | 'dispensing' | 'batches' | 'communication'>('info');
   const [addModal, setAddModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [form, setForm] = useState<{
@@ -2840,9 +2935,9 @@ function Customers({
   return (
     <>
       <PageHeader
-        eyebrow="RELATIONSHIPS"
+        eyebrow="DISPENSING & PATIENTS"
         title="Customers"
-        description="Keep customer care personal, informed, and connected with prescription tracking."
+        description="Manage customers and dispensing history."
         action={
           <button className="btn btn-teal" onClick={() => setAddModal(true)}>
             <Plus size={15}/> Add Customer
@@ -2933,160 +3028,331 @@ function Customers({
         </div>
       </div>
 
-      {/* Selected Customer Modal (Details + Direct Preference Switch + Edit) */}
-      {selectedCust && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setSelectedCust(null)} />
-          <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 0, zIndex: 111, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary)' }}>
-                  {selectedCust.name.split(' ').map(x => x[0]).join('')}
-                </div>
-                <div>
-                  <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)', margin: 0 }}>{selectedCust.name}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>{selectedCust.phone} · {selectedCust.email}</p>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button
-                  onClick={() => openEditModal(selectedCust)}
-                  className="btn btn-secondary"
-                  style={{ fontSize: 11.5, padding: '4px 10px' }}
-                >
-                  Edit Customer
-                </button>
-                <button onClick={() => setSelectedCust(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
-              </div>
-            </div>
+      {/* Unified 4-Tab Customer Details Modal */}
+      {selectedCust && (() => {
+        const custAudits = audits.filter(a => a.customer && a.customer.toLowerCase().includes(selectedCust.name.toLowerCase()));
+        
+        // Derive distinct batches received by this customer with live risk cross-checking
+        const batchMap = new Map<string, { batch: string; medicine: string; date: string; quantity: number }>();
+        custAudits.forEach(a => {
+          if (a.batch) {
+            const existing = batchMap.get(a.batch);
+            if (existing) {
+              existing.quantity += (a.quantity || 1);
+            } else {
+              batchMap.set(a.batch, {
+                batch: a.batch,
+                medicine: a.medicine,
+                date: a.date || 'Past Record',
+                quantity: a.quantity || 1,
+              });
+            }
+          }
+        });
+        const distinctBatches = Array.from(batchMap.values());
 
-            <div style={{ padding: 24 }}>
-              <div style={{ background: 'var(--bg-alt)', borderRadius: 12, padding: 14, marginBottom: 18, border: '1px solid var(--border)' }}>
-                <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', margin: 0 }}>Clinical & Channel Preference</p>
-                
-                {/* Communication Preference Card with live interactive switcher */}
-                <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                    Preferred Communication Method
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <label
-                      onClick={() => handleQuickPreferenceChange(selectedCust, 'WHATSAPP')}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '8px 10px',
-                        borderRadius: 8,
-                        border: `1.5px solid ${selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--border)'}`,
-                        background: selectedCust.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.12)' : 'var(--bg-alt)',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--text-2)',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="quickCommToggle"
-                        checked={selectedCust.communicationPreference === 'WHATSAPP'}
-                        onChange={() => handleQuickPreferenceChange(selectedCust, 'WHATSAPP')}
-                        style={{ accentColor: '#16A34A' }}
-                      />
-                      <span>🟢 WhatsApp</span>
-                    </label>
-
-                    <label
-                      onClick={() => handleQuickPreferenceChange(selectedCust, 'SMS')}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '8px 10px',
-                        borderRadius: 8,
-                        border: `1.5px solid ${selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary)' : 'var(--border)'}`,
-                        background: selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary-light)' : 'var(--bg-alt)',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary)' : 'var(--text-2)',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="quickCommToggle"
-                        checked={selectedCust.communicationPreference !== 'WHATSAPP'}
-                        onChange={() => handleQuickPreferenceChange(selectedCust, 'SMS')}
-                        style={{ accentColor: 'var(--primary)' }}
-                      />
-                      <span>📱 SMS</span>
-                    </label>
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setSelectedCust(null)} />
+            <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 540, padding: 0, zIndex: 111, maxHeight: '90vh', overflowY: 'auto' }}>
+              {/* Modal Header */}
+              <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary)', fontSize: 14 }}>
+                    {selectedCust.name.split(' ').map(x => x[0]).join('')}
                   </div>
-                  <span style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 6, display: 'block' }}>
-                    {selectedCust.communicationPreference === 'WHATSAPP' ? 'Safety notifications routed through WhatsApp.' : 'Safety notifications routed through device SMS composer.'}
-                  </span>
+                  <div>
+                    <h3 style={{ fontWeight: 800, fontSize: 16, color: 'var(--text)', margin: 0 }}>{selectedCust.name}</h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>{selectedCust.phone} · {selectedCust.email}</p>
+                  </div>
                 </div>
-
-                <p style={{ fontSize: 13, marginTop: 10, color: 'var(--text)' }}>Preferred Language: <b>{selectedCust.preferredLang || 'English'}</b></p>
-                <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>Known Allergies: <b>{selectedCust.allergies || 'None reported'}</b></p>
-                <p style={{ fontSize: 13, marginTop: 2, color: 'var(--text)' }}>Refill & Expiry Reminders: <b>{selectedCust.alerts ? 'Enabled' : 'Disabled'}</b></p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    onClick={() => openEditModal(selectedCust)}
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11.5, padding: '4px 10px' }}
+                  >
+                    Edit Details
+                  </button>
+                  <button onClick={() => setSelectedCust(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} color="var(--text-3)"/></button>
+                </div>
               </div>
 
-              <h4 style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', textTransform: 'uppercase', marginBottom: 10 }}>
-                Prescription & Dispense History
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
-                {audits.filter(a => a.customer && a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).map(a => (
-                  <div key={a.id} style={{ padding: '10px 12px', background: 'var(--surface-raised)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-                    <div>
-                      <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', margin: 0 }}>{a.medicine}</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0' }}>{a.date} · Batch: {a.batch}</p>
+              {/* 4 Detail Tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-alt)', padding: '0 16px', overflowX: 'auto' }}>
+                {[
+                  { id: 'info' as const, label: 'Basic Info', icon: UserCog },
+                  { id: 'dispensing' as const, label: `Dispensing (${custAudits.length})`, icon: ClipboardList },
+                  { id: 'batches' as const, label: `Batch Exposure (${distinctBatches.length})`, icon: ShieldAlert },
+                  { id: 'communication' as const, label: 'Communication', icon: MessageSquare },
+                ].map(t => {
+                  const active = detailTab === t.id;
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setDetailTab(t.id)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '11px 14px',
+                        border: 'none',
+                        borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
+                        background: 'none',
+                        color: active ? 'var(--primary)' : 'var(--text-3)',
+                        fontWeight: active ? 700 : 600,
+                        fontSize: 12.5,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <Icon size={14} />
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Tab 1: Basic Info */}
+              {detailTab === 'info' && (
+                <div style={{ padding: 22 }}>
+                  <div style={{ background: 'var(--bg-alt)', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>Clinical & Channel Preferences</span>
+                      <span className="chip badge-green">{selectedCust.alerts ? 'Alerts On' : 'Alerts Off'}</span>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{a.quantity} units</span>
-                  </div>
-                ))}
-                {audits.filter(a => a.customer && a.customer.toLowerCase().includes(selectedCust.name.toLowerCase())).length === 0 && (
-                  <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: 12 }}>No previous dispensing history found.</p>
-                )}
-              </div>
-            </div>
 
-            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-              {onOpenSafetyCommunication ? (
-                <button
-                  className="btn btn-teal"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}
-                  onClick={() => {
-                    const cust = selectedCust;
-                    setSelectedCust(null);
-                    onOpenSafetyCommunication(cust, 'MANUAL');
-                  }}
-                >
-                  <Send size={14} /> Send Safety Message
-                </button>
-              ) : onOpenManualSms ? (
-                <button
-                  className="btn btn-teal"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}
-                  onClick={() => {
-                    const cust = selectedCust;
-                    setSelectedCust(null);
-                    onOpenManualSms(cust);
-                  }}
-                >
-                  <MessageSquare size={14} /> Send Direct SMS
-                </button>
-              ) : null}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" onClick={() => openEditModal(selectedCust)}>Edit</button>
-                <button className="btn btn-secondary" onClick={() => setSelectedCust(null)}>Close</button>
+                    {/* Communication Preference Card with live interactive switcher */}
+                    <div style={{ padding: 12, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)', marginBottom: 14 }}>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                        Preferred Contact Channel
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <label
+                          onClick={() => handleQuickPreferenceChange(selectedCust, 'WHATSAPP')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            border: `1.5px solid ${selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--border)'}`,
+                            background: selectedCust.communicationPreference === 'WHATSAPP' ? 'rgba(34, 197, 94, 0.12)' : 'var(--bg-alt)',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: selectedCust.communicationPreference === 'WHATSAPP' ? '#16A34A' : 'var(--text-2)',
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="quickCommToggle"
+                            checked={selectedCust.communicationPreference === 'WHATSAPP'}
+                            onChange={() => handleQuickPreferenceChange(selectedCust, 'WHATSAPP')}
+                            style={{ accentColor: '#16A34A' }}
+                          />
+                          <span>🟢 WhatsApp</span>
+                        </label>
+
+                        <label
+                          onClick={() => handleQuickPreferenceChange(selectedCust, 'SMS')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            border: `1.5px solid ${selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary)' : 'var(--border)'}`,
+                            background: selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary-light)' : 'var(--bg-alt)',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: selectedCust.communicationPreference !== 'WHATSAPP' ? 'var(--primary)' : 'var(--text-2)',
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="quickCommToggle"
+                            checked={selectedCust.communicationPreference !== 'WHATSAPP'}
+                            onChange={() => handleQuickPreferenceChange(selectedCust, 'SMS')}
+                            style={{ accentColor: 'var(--primary)' }}
+                          />
+                          <span>📱 SMS</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
+                      <div>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 600 }}>Preferred Language</span>
+                        <p style={{ margin: '3px 0 0', fontWeight: 700, color: 'var(--text)' }}>{selectedCust.preferredLang || 'English'}</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 600 }}>Known Drug Allergies</span>
+                        <p style={{ margin: '3px 0 0', fontWeight: 700, color: selectedCust.allergies && selectedCust.allergies !== 'None' ? 'var(--danger)' : 'var(--text)' }}>
+                          {selectedCust.allergies || 'None reported'}
+                        </p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 600 }}>Total Pharmacy Visits</span>
+                        <p style={{ margin: '3px 0 0', fontWeight: 700, color: 'var(--text)' }}>{selectedCust.visits} visits</p>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 600 }}>Last Dispense Date</span>
+                        <p style={{ margin: '3px 0 0', fontWeight: 700, color: 'var(--text)' }}>{selectedCust.lastVisit || 'Recent'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Dispensing History */}
+              {detailTab === 'dispensing' && (
+                <div style={{ padding: 22 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
+                    {custAudits.map(a => (
+                      <div key={a.id} style={{ padding: '10px 14px', background: 'var(--surface-raised)', borderRadius: 8, border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', margin: 0 }}>{a.medicine}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                            {a.date} · Batch: {a.batch} · Rx: {a.rxId || `RX-${String(a.id).slice(-4)}`}
+                          </p>
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--primary)' }}>{a.quantity} units</span>
+                      </div>
+                    ))}
+                    {custAudits.length === 0 && (
+                      <p style={{ fontSize: 13, color: 'var(--text-3)', textAlign: 'center', padding: 24 }}>No previous dispensing records found for this patient.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Batch Exposure */}
+              {detailTab === 'batches' && (
+                <div style={{ padding: 22 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
+                    {distinctBatches.map(b => {
+                      const matchedMed = inventory.find(m => m.batch === b.batch);
+                      const isRecalled = matchedMed?.status === 'Recalled';
+                      const isExpired = matchedMed && (matchedMed.status === 'Expired' || parseDaysRemaining(matchedMed.expiry) < 0);
+                      const isNearExpiry = matchedMed && (matchedMed.status === 'Near Expiry' || (parseDaysRemaining(matchedMed.expiry) > 0 && parseDaysRemaining(matchedMed.expiry) <= 30));
+
+                      return (
+                        <div key={b.batch} style={{ padding: '12px 14px', background: isRecalled ? 'rgba(239, 68, 68, 0.08)' : 'var(--surface-raised)', borderRadius: 10, border: `1px solid ${isRecalled ? 'var(--danger)' : 'var(--border)'}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                            <div>
+                              <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', margin: 0 }}>{b.medicine}</p>
+                              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0', fontFamily: 'monospace' }}>
+                                Batch: <b>{b.batch}</b> · Total Dispensed: {b.quantity} units
+                              </p>
+                            </div>
+                            {isRecalled ? (
+                              <span className="chip badge-red" style={{ fontWeight: 800 }}>RECALLED BATCH</span>
+                            ) : isExpired ? (
+                              <span className="chip badge-red">Expired</span>
+                            ) : isNearExpiry ? (
+                              <span className="chip badge-amber">Near Expiry</span>
+                            ) : (
+                              <span className="chip badge-green">Safe</span>
+                            )}
+                          </div>
+
+                          {isRecalled && onOpenSafetyCommunication && (
+                            <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed var(--danger-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600 }}>Quarantine active. Patient notification recommended.</span>
+                              <button
+                                className="btn btn-danger"
+                                style={{ fontSize: 11, padding: '3px 8px' }}
+                                onClick={() => {
+                                  const c = selectedCust;
+                                  setSelectedCust(null);
+                                  onOpenSafetyCommunication(c, 'RECALL', {
+                                    medicineName: b.medicine,
+                                    batchNumber: b.batch,
+                                    dispensedDate: b.date,
+                                  });
+                                }}
+                              >
+                                Send Recall Notice
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {distinctBatches.length === 0 && (
+                      <p style={{ fontSize: 13, color: 'var(--text-3)', textAlign: 'center', padding: 24 }}>No batch exposure records on file.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Communication History */}
+              {detailTab === 'communication' && (
+                <div style={{ padding: 22 }}>
+                  <div style={{ background: 'var(--bg-alt)', borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 12.5, border: '1px solid var(--border)' }}>
+                    <p style={{ margin: 0, fontWeight: 700, color: 'var(--text)' }}>Active Notification Channel</p>
+                    <p style={{ margin: '4px 0 0', color: 'var(--text-3)' }}>
+                      Messages will be sent via <b>{selectedCust.communicationPreference === 'WHATSAPP' ? 'WhatsApp Gateway' : 'SMS'}</b> in <b>{selectedCust.preferredLang || 'English'}</b>.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
+                    <div style={{ padding: '10px 12px', background: 'var(--surface-raised)', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text)' }}>Welcome & Registration Notice</span>
+                        <span className="chip badge-green">Delivered</span>
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>Sent upon first pharmacy visit · Channel: {selectedCust.communicationPreference || 'SMS'}</p>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 14, textAlign: 'center' }}>
+                    <button
+                      className="btn btn-teal"
+                      style={{ fontSize: 12, padding: '7px 16px' }}
+                      onClick={() => {
+                        const c = selectedCust;
+                        setSelectedCust(null);
+                        if (onOpenSafetyCommunication) {
+                          onOpenSafetyCommunication(c, 'MANUAL');
+                        } else if (onOpenManualSms) {
+                          onOpenManualSms(c);
+                        }
+                      }}
+                    >
+                      <Send size={13} /> Send Safety Advisory
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer */}
+              <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', background: 'var(--bg-alt)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                {onOpenSafetyCommunication ? (
+                  <button
+                    className="btn btn-teal"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}
+                    onClick={() => {
+                      const cust = selectedCust;
+                      setSelectedCust(null);
+                      onOpenSafetyCommunication(cust, 'MANUAL');
+                    }}
+                  >
+                    <Send size={14} /> Send Message
+                  </button>
+                ) : null}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-secondary" onClick={() => openEditModal(selectedCust)}>Edit</button>
+                  <button className="btn btn-secondary" onClick={() => setSelectedCust(null)}>Close</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Add New Customer Modal */}
       {addModal && (
@@ -3324,49 +3590,7 @@ function Customers({
   );
 }
 
-/* ─────────── 8. ALERTS ─────────── */
-function AlertsPage({ onNavigate, showToast }: { onNavigate: (p: string) => void; showToast: (s: string) => void }) {
-  const cards = [
-    { title: 'Vitamin D3 60K expires soon', detail: 'Batch VD102 expires in 12 days. 180 units at risk.', type: 'Near expiry', tone: 'amber', page: 'expiry' },
-    { title: 'Paracetamol stock is low', detail: 'PCT101 dropped below minimum threshold (12 units left).', type: 'Low stock', tone: 'orange', page: 'add-stock' },
-    { title: 'AMX204 recalled by supplier', detail: '45 units remaining. Supplier recall quarantine active.', type: 'Recall', tone: 'red', page: 'recall' },
-    { title: 'Weekly expiry digest ready', detail: 'Your scheduled pharmacy operations summary is ready.', type: 'Report', tone: 'sage', page: 'reports' },
-  ];
-  const bg: Record<string, string> = { amber: 'var(--warning-light)', red: 'var(--danger-light)', orange: 'var(--orange-light)', sage: 'var(--primary-light)' };
-  const tc: Record<string, string> = { amber: 'var(--warning)', red: 'var(--danger)', orange: 'var(--orange)', sage: 'var(--primary)' };
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="STAY INFORMED"
-        title="Alerts & Warnings"
-        description="Important medication and inventory actions, surfaced proactively."
-        action={<button className="btn btn-secondary" onClick={() => showToast('All notifications marked as read')}><Check size={14}/> Mark all read</button>}
-      />
-      <div className="responsive-split-grid">
-        {cards.map(a => (
-          <div key={a.title} className="card card-hover" style={{ padding: 18, display: 'flex', gap: 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: bg[a.tone], display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <AlertCircle size={19} color={tc[a.tone]} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                <p style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)' }}>{a.title}</p>
-                <span className={`chip badge-${a.tone === 'sage' ? 'teal' : a.tone === 'amber' ? 'amber' : a.tone === 'red' ? 'red' : 'orange'}`}>{a.type}</span>
-              </div>
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>{a.detail}</p>
-              <button onClick={() => onNavigate(a.page)} style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-                Take action <ChevronRight size={13}/>
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
-/* ─────────── 9. SUPPLIERS & RETURNS (WITH LIVE INVENTORY LINK) ─────────── */
+/* ─────────── 8. SUPPLIERS & RETURNS (2 TABS: SUPPLIERS & RETURN CLAIMS) ─────────── */
 function Suppliers({
   suppliersList,
   setSuppliersList,
@@ -3380,13 +3604,34 @@ function Suppliers({
   setInventory: React.Dispatch<React.SetStateAction<Medicine[]>>;
   showToast: (s: string) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<'suppliers' | 'returns'>('suppliers');
   const [modal, setModal] = useState(false);
   const [q, setQ] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('');
   const [returnQty, setReturnQty] = useState(10);
   const [reason, setReason] = useState('Product recall');
+  const [returnsList, setReturnsList] = useState<any[]>([]);
 
-  const filtered = suppliersList.filter(s => s.name.toLowerCase().includes(q.toLowerCase()));
+  useEffect(() => {
+    let isMounted = true;
+    api.getReturns().then(res => {
+      if (isMounted && Array.isArray(res)) {
+        setReturnsList(res);
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  const filteredSuppliers = suppliersList.filter(s =>
+    s.name.toLowerCase().includes(q.toLowerCase()) ||
+    (s.email && s.email.toLowerCase().includes(q.toLowerCase()))
+  );
+
+  const filteredReturns = returnsList.filter(r =>
+    (r.supplier || '').toLowerCase().includes(q.toLowerCase()) ||
+    (r.medicine || '').toLowerCase().includes(q.toLowerCase()) ||
+    (r.batch || '').toLowerCase().includes(q.toLowerCase())
+  );
 
   const handleCreateReturn = async () => {
     const target = inventory.find(x => x.batch === selectedBatch);
@@ -3394,140 +3639,287 @@ function Suppliers({
       showToast('Please select a valid batch to return');
       return;
     }
+    const newReturn = {
+      supplierName: target.supplier,
+      batch: selectedBatch,
+      medicine: target.medicine,
+      quantity: returnQty,
+      reason,
+      status: 'Pending Approval',
+      requestDate: 'Today',
+    };
     try {
-      await api.addReturn({
-        supplierName: target.supplier,
-        batch: selectedBatch,
-        medicine: target.medicine,
-        quantity: returnQty,
-        reason,
-      });
+      const saved = await api.addReturn(newReturn);
+      setReturnsList(prev => [saved, ...prev]);
       setInventory(inventory.map(x => x.batch === selectedBatch ? { ...x, quantity: Math.max(0, x.quantity - returnQty) } : x));
     } catch {
+      setReturnsList(prev => [{ id: `RET-${Date.now()}`, ...newReturn }, ...prev]);
       setInventory(inventory.map(x => x.batch === selectedBatch ? { ...x, quantity: Math.max(0, x.quantity - returnQty) } : x));
     }
     setModal(false);
-    showToast(`Created return request for ${returnQty} units of ${target.medicine} (${selectedBatch})`);
+    showToast(`Created return for ${returnQty} units of ${target.medicine} (${selectedBatch})`);
   };
+
+  const pendingReturnsCount = returnsList.filter(r => r.status === 'Pending Approval' || r.status === 'Pending').length;
 
   return (
     <>
       <PageHeader
-        eyebrow="PROCUREMENT"
-        title="Supplier Returns"
-        description="Manage supplier relationships, track purchases, and process stock returns."
+        eyebrow="SUPPLIERS & RETURNS"
+        title="Suppliers & Returns"
+        description="Manage suppliers and track return claims."
         action={
           <button className="btn btn-teal" onClick={() => setModal(true)}>
-            <RotateCcw size={15}/> Create return
+            <RotateCcw size={15}/> Create Return
           </button>
         }
       />
-      <div className="responsive-stats-grid">
-        <Stat label="Active Suppliers" value={String(suppliersList.length)} icon={Truck} tone="sage" />
-        <Stat label="Pending Returns" value="4" icon={RotateCcw} tone="amber" />
-        <Stat label="This Month Spend" value="₹ 6.8L" icon={CreditCard} tone="teal" />
+
+      {/* Two Main Tabs: Suppliers & Return Claims */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+        <button
+          onClick={() => { setActiveTab('suppliers'); setQ(''); }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            padding: '9px 18px',
+            borderRadius: 9,
+            fontSize: 13,
+            fontWeight: 700,
+            border: activeTab === 'suppliers' ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+            background: activeTab === 'suppliers' ? 'var(--primary-light)' : 'var(--bg-alt)',
+            color: activeTab === 'suppliers' ? 'var(--primary)' : 'var(--text-2)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Truck size={16} />
+          Suppliers ({suppliersList.length})
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('returns'); setQ(''); }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            padding: '9px 18px',
+            borderRadius: 9,
+            fontSize: 13,
+            fontWeight: 700,
+            border: activeTab === 'returns' ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+            background: activeTab === 'returns' ? 'var(--primary-light)' : 'var(--bg-alt)',
+            color: activeTab === 'returns' ? 'var(--primary)' : 'var(--text-2)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <RotateCcw size={16} />
+          Return Claims ({returnsList.length})
+          {pendingReturnsCount > 0 && (
+            <span style={{ background: 'var(--warning)', color: '#000', fontSize: 10.5, fontWeight: 800, padding: '1px 6px', borderRadius: 999 }}>
+              {pendingReturnsCount}
+            </span>
+          )}
+        </button>
       </div>
 
-      <Panel title="Supplier Directory & Return Eligibility">
-        <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
-          <div className="search-input" style={{ maxWidth: 300 }}>
-            <Search size={15} color="var(--text-3)"/>
-            <input placeholder="Search suppliers..." value={q} onChange={e => setQ(e.target.value)}/>
+      {activeTab === 'suppliers' ? (
+        <>
+          <div className="responsive-stats-grid">
+            <Stat label="Active Suppliers" value={String(suppliersList.length)} icon={Truck} tone="sage" />
+            <Stat label="Pending Returns" value={String(pendingReturnsCount)} icon={RotateCcw} tone="amber" />
+            <Stat label="Total Purchases" value="128 Orders" icon={CreditCard} tone="teal" />
           </div>
-        </div>
-        {/* Desktop Table View */}
-        <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead><tr style={{ background: 'var(--bg-alt)' }}>
-              {['Supplier', 'Active batches', 'Total purchases', 'Rating', ''].map(h => <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>)}
-            </tr></thead>
-            <tbody>{filtered.map(s => (
-              <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: '14px 20px' }}>
-                  <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{s.name}</p>
-                  <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.email} · {s.phone}</p>
-                </td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{s.batches} batches</td>
-                <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{s.purchases}</td>
-                <td style={{ padding: '14px 20px' }}><span className="chip badge-green">★ {s.rating}</span></td>
-                <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                  <button className="btn btn-ghost" style={{ padding: 6 }} onClick={() => showToast(`Supplier Contact: ${s.name} · Phone: ${s.phone}`)}><MoreHorizontal size={16}/></button>
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
 
-        {/* Mobile Cards View */}
-        <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
-          {filtered.map(s => (
-            <div key={s.id} className="mobile-entity-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                <div>
-                  <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{s.name}</h4>
-                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{s.email}</p>
-                </div>
-                <span className="chip badge-green">★ {s.rating}</span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
-                <div>
-                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Active Batches</span>
-                  <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>{s.batches} batches</p>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Total Purchases</span>
-                  <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>{s.purchases}</p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>📞 {s.phone}</span>
-                <button className="btn btn-secondary" style={{ padding: '5px 12px', fontSize: 11.5 }} onClick={() => showToast(`Supplier Contact: ${s.name} · Phone: ${s.phone}`)}>
-                  Contact
-                </button>
+          <Panel title="Suppliers Directory">
+            <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
+              <div className="search-input" style={{ maxWidth: 300 }}>
+                <Search size={15} color="var(--text-3)"/>
+                <input placeholder="Search suppliers..." value={q} onChange={e => setQ(e.target.value)}/>
               </div>
             </div>
-          ))}
-          {filtered.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)', fontSize: 13 }}>
-              No suppliers match your search query.
-            </div>
-          )}
-        </div>
-      </Panel>
 
+            <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-alt)' }}>
+                    {['Supplier', 'Active Batches', 'Total Purchases', 'Rating', ''].map(h => (
+                      <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSuppliers.map(s => (
+                    <tr key={s.id} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: '14px 20px' }}>
+                        <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{s.name}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.email} · {s.phone}</p>
+                      </td>
+                      <td style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-2)' }}>{s.batches} batches</td>
+                      <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{s.purchases}</td>
+                      <td style={{ padding: '14px 20px' }}><span className="chip badge-green">★ {s.rating}</span></td>
+                      <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                        <button className="btn btn-ghost" style={{ padding: 6 }} onClick={() => showToast(`Supplier Contact: ${s.name} · Phone: ${s.phone}`)}>
+                          <MoreHorizontal size={16}/>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredSuppliers.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)' }}>
+                        No suppliers found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mobile-cards-view" style={{ padding: '12px 14px', display: 'none', flexDirection: 'column', gap: 10 }}>
+              {filteredSuppliers.map(s => (
+                <div key={s.id} className="mobile-entity-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div>
+                      <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{s.name}</h4>
+                      <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{s.email}</p>
+                    </div>
+                    <span className="chip badge-green">★ {s.rating}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 8, fontSize: 12 }}>
+                    <div>
+                      <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Active Batches</span>
+                      <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>{s.batches} batches</p>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-3)', fontSize: 10.5, textTransform: 'uppercase', fontWeight: 600 }}>Total Purchases</span>
+                      <p style={{ margin: '2px 0 0', fontWeight: 700, color: 'var(--text)' }}>{s.purchases}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>📞 {s.phone}</span>
+                    <button className="btn btn-secondary" style={{ padding: '5px 12px', fontSize: 11.5 }} onClick={() => showToast(`Supplier Contact: ${s.name} · Phone: ${s.phone}`)}>
+                      Contact
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </>
+      ) : (
+        <>
+          <div className="responsive-stats-grid">
+            <Stat label="Total Return Claims" value={String(returnsList.length)} icon={RotateCcw} tone="teal" />
+            <Stat label="Pending Approval" value={String(pendingReturnsCount)} icon={Clock3} tone="amber" />
+            <Stat label="Credit Issued" value={String(returnsList.filter(r => r.status === 'Credit Issued' || r.status === 'Approved').length)} icon={CheckCircle2} tone="sage" />
+          </div>
+
+          <Panel
+            title="Return Claims & Credits"
+            action={
+              <button className="btn btn-teal" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => setModal(true)}>
+                <Plus size={14} /> New Return Claim
+              </button>
+            }
+          >
+            <div style={{ padding: 16, borderBottom: '1px solid var(--border)' }}>
+              <div className="search-input" style={{ maxWidth: 300 }}>
+                <Search size={15} color="var(--text-3)"/>
+                <input placeholder="Search return claims..." value={q} onChange={e => setQ(e.target.value)}/>
+              </div>
+            </div>
+
+            <div className="desktop-table-view" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-alt)' }}>
+                    {['Claim ID', 'Supplier', 'Medicine & Batch', 'Quantity', 'Reason', 'Status', 'Date'].map(h => (
+                      <th key={h} style={{ padding: '12px 20px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredReturns.map((r, i) => {
+                    const statusClass = r.status === 'Approved' ? 'badge-green' : r.status === 'Credit Issued' ? 'badge-teal' : 'badge-amber';
+                    return (
+                      <tr key={r.id || i} className="table-row" style={{ borderTop: '1px solid var(--border)' }}>
+                        <td style={{ padding: '14px 20px', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>
+                          {r.id || `RET-${1000 + i}`}
+                        </td>
+                        <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
+                          {r.supplier || r.supplierName || 'Distributor'}
+                        </td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)', margin: 0 }}>{r.medicine}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0', fontFamily: 'monospace' }}>Batch: {r.batch}</p>
+                        </td>
+                        <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+                          {r.quantity} units
+                        </td>
+                        <td style={{ padding: '14px 20px', fontSize: 12.5, color: 'var(--text-2)' }}>
+                          {r.reason}
+                        </td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <span className={`chip ${statusClass}`}>{r.status}</span>
+                        </td>
+                        <td style={{ padding: '14px 20px', fontSize: 12, color: 'var(--text-3)' }}>
+                          {r.requestDate || 'Today'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredReturns.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)' }}>
+                        No return claims recorded yet. Click "Create Return" to initiate a claim.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </>
+      )}
+
+      {/* Create Return Modal */}
       {modal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,32,0.65)', backdropFilter: 'blur(3px)' }} onClick={() => setModal(false)} />
           <div className="card animate-scale-in" style={{ position: 'relative', width: '100%', maxWidth: 440, zIndex: 111, padding: 0 }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <h3 style={{ fontWeight: 800, color: 'var(--text)' }}>Create Stock Return</h3>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontWeight: 800, color: 'var(--text)', margin: 0 }}>Create Return Claim</h3>
               <button onClick={() => setModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}><X size={18}/></button>
             </div>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="label">Batch to return</label>
+                <label className="label">Batch to Return</label>
                 <select className="input" value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)}>
                   <option value="">Select batch from inventory</option>
                   {inventory.map(m => (
-                    <option key={m.batch} value={m.batch}>{m.batch} · {m.medicine} ({m.quantity} units avail)</option>
+                    <option key={m.batch} value={m.batch}>{m.batch} · {m.medicine} ({m.quantity} units available)</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="label">Quantity to Return</label>
+                <label className="label">Quantity</label>
                 <input className="input" type="number" min="1" value={returnQty} onChange={e => setReturnQty(Math.max(1, Number(e.target.value)))}/>
               </div>
               <div>
                 <label className="label">Reason</label>
                 <select className="input" value={reason} onChange={e => setReason(e.target.value)}>
-                  <option>Product recall</option><option>Near expiry</option><option>Damaged packaging</option><option>Slow movement</option>
+                  <option>Product recall</option>
+                  <option>Near expiry</option>
+                  <option>Damaged packaging</option>
+                  <option>Slow movement</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
                 <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancel</button>
-                <button className="btn btn-teal" onClick={handleCreateReturn}>Submit Return Request</button>
+                <button className="btn btn-teal" onClick={handleCreateReturn}>Submit Return</button>
               </div>
             </div>
           </div>
@@ -3668,16 +4060,16 @@ function Recall({
   return (
     <>
       <PageHeader
-        eyebrow="PATIENT SAFETY & RECALL CONTAINMENT"
-        title="Batch Recall Management"
-        description="Instant containment protocol: quarantine affected batches, trace exposed customers from dispensing audit logs, and dispatch multilingual advisories."
+        eyebrow="SAFETY & RECALLS"
+        title="Batch Recall & Quarantine"
+        description="Quarantine recalled batches, trace exposed customers and dispatch safety alerts."
         action={
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn btn-secondary" onClick={() => onNavigate?.('audit')}>
-              <ClipboardCheck size={15} /> Dispensing Audit Logs
+              <ClipboardCheck size={15} /> Audit Logs
             </button>
             <button className="btn btn-teal" onClick={() => setCreateRecallModal(true)}>
-              <Plus size={14} /> Issue New Batch Recall
+              <Plus size={14} /> Issue Recall
             </button>
             <button
               className="btn btn-danger"
@@ -4230,123 +4622,7 @@ function Recall({
   );
 }
 
-/* ─────────── 11. AI ASSISTANT (CONNECTED TO LIVE INVENTORY) ─────────── */
-function Assistant({
-  inventory,
-  audits,
-  onOpenSimulator,
-}: {
-  inventory: Medicine[];
-  audits: Audit[];
-  onOpenSimulator: () => void;
-}) {
-  const [messages, setMessages] = useState<{ from: 'ai' | 'user'; text: string }[]>([
-    { from: 'ai', text: 'Hello! I am your PharmaFlow AI Assistant. I have live access to your current medicine inventory, expiry risks, dispensing patterns, and order simulations. How can I help you today?' }
-  ]);
-  const [input, setInput] = useState('');
-
-  const answer = (q: string) => {
-    const l = q.toLowerCase();
-    const nearExpiryCount = inventory.filter(m => m.status === 'Near Expiry').length;
-    const lowStockCount = inventory.filter(m => m.status === 'Low Stock' || m.quantity < 80).length;
-
-    if (l.includes('expire') || l.includes('expiry')) {
-      const nearExp = inventory.find(m => m.status === 'Near Expiry');
-      return `You have ${nearExpiryCount} batches flagged near expiry. ${nearExp ? `${nearExp.medicine} (Batch ${nearExp.batch}) has ${nearExp.quantity} units expiring in ${nearExp.expiry}.` : ''} Recommend prioritising for FEFO dispensing.`;
-    }
-    if (l.includes('low') || l.includes('stock')) {
-      return `${lowStockCount} medicines are near or below minimum stock thresholds in your inventory. Paracetamol 500mg and Azithromycin 250mg require replenishment.`;
-    }
-    if (l.includes('return') || l.includes('recall')) {
-      const recalled = inventory.filter(m => m.status === 'Recalled');
-      return `${recalled.length} recalled batch (${recalled.map(r => `${r.medicine} ${r.batch}`).join(', ') || 'AMX204'}) requires supplier return quarantine.`;
-    }
-    if (l.includes('simulate') || l.includes('what-if') || l.includes('order')) {
-      return 'Our What-If Expiry Simulator shows that ordering 300 units of Vitamin D3 will cause ~255 units to expire before consumption. Click "Open What-If Simulator" to test customized purchase scenarios.';
-    }
-    return `Based on live inventory (${inventory.length} tracked medicines and ${audits.length} recent dispensing records), dispensing velocity is steady. How else can I assist?`;
-  };
-
-  const send = (text = input) => {
-    if (!text.trim()) return;
-    setMessages([...messages, { from: 'user', text }, { from: 'ai', text: answer(text) }]);
-    setInput('');
-  };
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="INTELLIGENCE"
-        title="AI Pharmacy Assistant"
-        description="Ask questions about your pharmacy inventory, expiry dynamics, and dispensing in plain natural language."
-        action={<button className="btn btn-sage" onClick={onOpenSimulator}><SlidersHorizontal size={15}/> Open What-If Simulator</button>}
-      />
-      <div className="responsive-chat-grid">
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: 540 }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid #EFEFEA', display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 9, background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrainCircuit size={17} color="white"/></div>
-            <div>
-              <p style={{ fontWeight: 700, fontSize: 13.5 }}>PharmaFlow Intelligence</p>
-              <p style={{ fontSize: 11.5, color: '#52796F', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#52796F', display: 'inline-block' }}/> Online · Connected to Live Pharmacy State</p>
-            </div>
-          </div>
-          <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.from === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: '80%', borderRadius: m.from === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '11px 15px', fontSize: 13, lineHeight: 1.5, background: m.from === 'user' ? '#6B8068' : '#F2F2EE', color: m.from === 'user' ? 'white' : '#111111' }}>
-                  {m.text}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ padding: '0 18px 18px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
-              {['Which medicines expire soon?', 'Which medicines are low in stock?', 'Which batches need return?'].map(q => (
-                <button key={q} onClick={() => send(q)} style={{ fontSize: 11.5, borderRadius: 99, border: '1.5px solid #E5E5E0', padding: '5px 11px', background: 'white', color: '#333333', cursor: 'pointer', transition: 'all 0.15s' }}>{q}</button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input className="input" placeholder="Ask about your pharmacy..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} style={{ flex: 1 }}/>
-              <button className="btn btn-sage" style={{ padding: '8px 15px' }} onClick={() => send()}><Send size={15}/></button>
-            </div>
-          </div>
-        </div>
-
-        <Panel title="Simulator Quick View">
-          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ borderRadius: 12, background: '#F9ECEF', padding: 14, border: '1px solid #F3C6D0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontWeight: 800, fontSize: 12, color: '#A63A50' }}>EXPIRY RISK DETECTED</span>
-                <AlertTriangle size={15} color="#A63A50" />
-              </div>
-              <p style={{ fontSize: 12.5, color: '#111111', fontWeight: 600 }}>Vitamin D3 60K (VD102)</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, fontSize: 11.5, marginTop: 6 }}>
-                {[['Stock', '180'], ['Usage/d', '5'], ['Unused', '120']].map(([l, v]) => (
-                  <div key={l}><p style={{ color: '#A63A50', opacity: 0.8 }}>{l}</p><b style={{ fontSize: 15 }}>{v}</b></div>
-                ))}
-              </div>
-            </div>
-            <p style={{ fontSize: 12, color: '#555555', lineHeight: 1.5 }}>Run full purchase order simulation to avoid stock write-offs.</p>
-            <button onClick={onOpenSimulator} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center' }}>
-              Launch What-If Simulator <ChevronRight size={14}/>
-            </button>
-          </div>
-        </Panel>
-      </div>
-    </>
-  );
-}
-
-/* ─────────── 12. WHAT-IF SIMULATOR (DEDICATED MODULE) ─────────── */
-function WhatIfSimulator(props: {
-  inventory: Medicine[];
-  setInventory: React.Dispatch<React.SetStateAction<Medicine[]>>;
-  showToast: (s: string) => void;
-}) {
-  return <EnhancedWhatIfSimulator {...props} />;
-}
-
-/* ─────────── 13. REPORTS & ANALYTICS (CONNECTED TO LIVE MASTER DATASET) ─────────── */
+/* ─────────── 11. REPORTS & ANALYTICS (CONNECTED TO LIVE MASTER DATASET) ─────────── */
 function inferMedicineCategory(name: string = ''): string {
   const s = name.toLowerCase();
   if (s.includes('paracetamol') || s.includes('ibuprofen') || s.includes('aspirin') || s.includes('tramadol') || s.includes('diclofenac') || s.includes('aceclofenac')) return 'Analgesics & Pain';
@@ -4481,9 +4757,9 @@ function Reports({
   return (
     <>
       <PageHeader
-        eyebrow="OPERATIONAL INTELLIGENCE"
+        eyebrow="INTELLIGENCE & REPORTS"
         title="Reports & Analytics"
-        description="Comprehensive operational insights, dispensing trends, and expiry velocity derived live from Deepak R's pharmacy workspace."
+        description="View pharmacy inventory trends and performance."
         action={
           <button
             className="btn btn-sage"
@@ -4706,7 +4982,7 @@ function PharmSettings({ currentUser, showToast }: { currentUser?: UserSession; 
 
   return (
     <>
-      <PageHeader eyebrow="WORKSPACE" title="Settings" description="Configure PharmaFlow profile, workspace, and operational rules." />
+      <PageHeader eyebrow="SETTINGS" title="Settings & Profile" description="Manage profile, workspace and pharmacy preferences." />
       <div className="responsive-settings-grid">
         <div className="card" style={{ padding: 8, height: 'fit-content' }}>
           {sections.map(x => (
@@ -4858,10 +5134,6 @@ export default function PharmacistPortal({
   const [toast, setToast] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [manualSmsOpen, setManualSmsOpen] = useState(false);
-  const [selectedCustomerForSms, setSelectedCustomerForSms] = useState<CustomerItem | null>(null);
-  const [smsInitialType, setSmsInitialType] = useState<any>('GENERAL_ANNOUNCEMENT');
-  const [smsInitialPayload, setSmsInitialPayload] = useState<any>({});
 
   const [safetyCommOpen, setSafetyCommOpen] = useState(false);
   const [safetyCommData, setSafetyCommData] = useState<{
@@ -4934,32 +5206,30 @@ export default function PharmacistPortal({
   // Workspaces tab configurations
   const inventoryTabs: TabItem[] = [
     { id: 'inventory', label: 'Medicines & Stock', badge: inventory.length },
-    { id: 'add-stock', label: 'Add New Stock' },
+    { id: 'add-stock', label: 'Add Stock' },
     { id: 'expiry', label: 'Batches & Expiry', badge: inventory.filter(m => m.status !== 'Recalled' && (m.status === 'Near Expiry' || parseDaysRemaining(m.expiry) <= 30)).length, badgeVariant: 'warning' },
-    { id: 'suppliers', label: 'Suppliers & Returns', badge: suppliersList.length },
   ];
 
   const dispensingTabs: TabItem[] = [
-    { id: 'dispensing', label: 'New Dispensing (POS)' },
+    { id: 'dispensing', label: 'Dispense Medicine (POS)' },
     { id: 'audit', label: 'Dispensing Audit', badge: audits.length },
-    { id: 'customers', label: 'Customer Directory', badge: customersList.length },
+    { id: 'customers', label: 'Customers', badge: customersList.length },
   ];
 
   const safetyTabs: TabItem[] = [
-    { id: 'alerts', label: 'Safety & System Alerts', badge: 3, badgeVariant: 'danger' },
     { id: 'recall', label: 'Batch Recall & Quarantine', badge: inventory.filter(m => m.status === 'Recalled').length || 1, badgeVariant: 'danger' },
     { id: 'sms-reports', label: 'Patient Safety Communication' },
   ];
 
   const aiTabs: TabItem[] = [
     { id: 'ai', label: 'AI Pharmacy Assistant' },
-    { id: 'simulator', label: 'What-If Expiry Simulator' },
+    { id: 'simulator', label: 'What-If Simulator' },
     { id: 'reports', label: 'Reports & Analytics' },
   ];
 
-  const isInventoryWorkspace = ['inventory', 'add-stock', 'expiry', 'suppliers'].includes(page);
+  const isInventoryWorkspace = ['inventory', 'add-stock', 'expiry'].includes(page);
   const isDispensingWorkspace = ['dispensing', 'audit', 'customers'].includes(page);
-  const isSafetyWorkspace = ['alerts', 'recall', 'sms-reports'].includes(page);
+  const isSafetyWorkspace = ['recall', 'sms-reports', 'alerts'].includes(page);
   const isAiWorkspace = ['ai', 'simulator', 'reports'].includes(page);
 
   return (
@@ -5000,7 +5270,7 @@ export default function PharmacistPortal({
         <Topbar
           onMenu={handleMenu}
           page={page}
-          onAlerts={() => setPage('alerts')}
+          onAlerts={() => setPage('recall')}
           inventory={inventory}
           customersList={customersList}
           suppliersList={suppliersList}
@@ -5068,12 +5338,24 @@ export default function PharmacistPortal({
               customersList={customersList}
               setCustomersList={setCustomersList}
               audits={audits}
+              inventory={inventory}
               showToast={showToast}
               onOpenManualSms={handleOpenManualSms}
               onOpenSafetyCommunication={handleOpenSafetyCommunication}
             />
           )}
-          {page === 'alerts' && <AlertsPage onNavigate={p => setPage(p as Page)} showToast={showToast} />}
+          {page === 'alerts' && (
+            <Recall
+              inventory={inventory}
+              setInventory={setInventory}
+              audits={audits}
+              customersList={customersList}
+              showToast={showToast}
+              onNavigate={p => setPage(p as Page)}
+              onOpenManualSms={handleOpenManualSms}
+              onOpenSafetyCommunication={handleOpenSafetyCommunication}
+            />
+          )}
           {page === 'suppliers' && (
             <Suppliers
               suppliersList={suppliersList}
@@ -5160,26 +5442,6 @@ export default function PharmacistPortal({
         pharmacyName={currentUser?.pharmacyName || 'Apollo MedPlus Pharmacy'}
         onSuccess={(result) => {
           showToast(`Safety action recorded: ${result?.status?.replace(/_/g, ' ') || 'Completed'}`);
-        }}
-        showToast={showToast}
-      />
-
-      <ManualSmsModal
-        isOpen={manualSmsOpen}
-        onClose={() => {
-          setManualSmsOpen(false);
-          setSelectedCustomerForSms(null);
-        }}
-        customersList={customersList}
-        initialCustomer={selectedCustomerForSms ? {
-          id: selectedCustomerForSms.id,
-          name: selectedCustomerForSms.name,
-          phone: selectedCustomerForSms.phone,
-        } : undefined}
-        initialType={smsInitialType}
-        initialPayload={smsInitialPayload}
-        onSuccess={(result: any) => {
-          showToast(`SMS sent to ${result?.recipientPhone || 'recipient'} (${result?.deliveryStatus || 'Sent'})`);
         }}
         showToast={showToast}
       />
